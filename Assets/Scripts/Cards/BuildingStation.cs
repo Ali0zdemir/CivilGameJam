@@ -20,7 +20,7 @@ namespace CivilGameJam.Cards
         public float ResearchProgress { get; private set; }
         public bool AwaitingBlueprint { get; private set; }
         public int WorkerCount => (workers[0] != null ? 1 : 0) + (workers[1] != null ? 1 : 0);
-        public bool IsReceivingWorker => System.Array.Exists(indicators, slot => slot != null && slot.IsEntering);
+        public bool IsAnimatingWorkers => System.Array.Exists(indicators, slot => slot != null && slot.IsAnimating);
         public bool HasFolderPresentation => indicators[0] != null && indicators[0].Portrait != null;
         public DraggableCard Card => card;
         public DraggableCard GetWorker(int index) => workers[index];
@@ -30,15 +30,28 @@ namespace CivilGameJam.Cards
         {
             game = owner;
             card = building;
-            dropOutline.enabled = false;
+            // Resolve existing authored UI when a prefab reference has been cleared.
+            // Missing optional presentation must never interrupt education or research.
+            if (progressRoot == null) progressRoot = transform.Find("ProgressBar") as RectTransform;
+            if (progressFill == null && progressRoot != null)
+                progressFill = progressRoot.Find("BlueProgress")?.GetComponent<Image>();
+            if (dropOutline != null) dropOutline.enabled = false;
             RefreshView();
         }
 
         public bool CanAccept(DraggableCard worker)
         {
             return card.Kind != CardKind.House && worker != null && worker.IsPerson && worker.AssignedTo == null &&
-                   !AwaitingBlueprint && WorkerCount < Capacity &&
+                   !AwaitingBlueprint && AvailableSlot(worker) >= 0 &&
+                   (card.Kind != CardKind.ResearchCenter || game.HasUndiscoveredBlueprints) &&
                    (card.Kind != CardKind.School || worker.Kind == CardKind.Person);
+        }
+
+        private int AvailableSlot(DraggableCard worker)
+        {
+            for (int i = 0; i < Capacity; i++)
+                if (workers[i] == null && (!indicators[i].IsReturning || indicators[i].ReturningWorker == worker)) return i;
+            return -1;
         }
 
         public bool TryAssign(DraggableCard worker)
@@ -48,12 +61,12 @@ namespace CivilGameJam.Cards
             game.CloseInspection();
             worker.Rect.position = droppedPosition;
             game.Sidebar.RememberPosition(worker);
+            worker.StopFlight();
             for (int i = 0; i < Capacity; i++)
             {
-                if (workers[i] != null) continue;
+                if (workers[i] != null || indicators[i].IsReturning) continue;
                 workers[i] = worker;
                 educationProgress[i] = 0f;
-                worker.StopFlight();
                 var artwork = worker.transform.Find("Artwork") as RectTransform ?? worker.Rect;
                 Vector3 origin = artwork.position;
                 Vector3 worldScale = artwork.lossyScale;
@@ -79,8 +92,12 @@ namespace CivilGameJam.Cards
             var visual = indicators[index].VisibleWorkerRect;
             Vector3 origin = visual != null ? visual.position : card.Rect.position;
             float width = visual != null ? visual.rect.width * visual.lossyScale.x : 0f;
-            game.ReturnToTable(worker, origin, animate);
-            if (animate && width > 0f) worker.MatchArtworkWidth(width);
+            game.ReturnToTable(worker, origin, false);
+            if (animate && !indicators[index].AnimateExit(worker))
+            {
+                worker.FlyFrom(origin, worker.Rect.position);
+                if (width > 0f) worker.MatchArtworkWidth(width);
+            }
             RefreshView();
             return worker;
         }
@@ -100,10 +117,11 @@ namespace CivilGameJam.Cards
                     workers[i] = null;
                     educationProgress[i] = 0f;
                     student.AssignedTo = null;
-                    game.Graduate(student, card.Rect.position);
+                    var educated = game.Graduate(student, card.Rect.position, false);
+                    if (!indicators[i].AnimateExit(educated)) educated.FlyFrom(card.Rect.position, educated.Rect.position);
                 }
             }
-            else if (card.Kind == CardKind.ResearchCenter && WorkerCount > 0)
+            else if (card.Kind == CardKind.ResearchCenter && WorkerCount > 0 && game.HasUndiscoveredBlueprints)
             {
                 for (int i = 0; i < Capacity; i++)
                 {
@@ -132,6 +150,7 @@ namespace CivilGameJam.Cards
 
         public void PreviewAcceptance(DraggableCard worker)
         {
+            if (dropOutline == null) return;
             dropOutline.enabled = worker != null;
             if (worker != null) dropOutline.effectColor = CanAccept(worker)
                 ? new Color(0.2f, 0.9f, 0.45f) : new Color(0.95f, 0.25f, 0.2f);
@@ -147,10 +166,13 @@ namespace CivilGameJam.Cards
                 ? Mathf.Max(educationProgress[0], educationProgress[1]) : ResearchProgress;
             if (card.Kind != CardKind.Factory)
             {
-                progressRoot.gameObject.SetActive(WorkerCount > 0 || progress > 0);
-                CardUI.SetProgress(progressFill.rectTransform, progress);
+                if (progressRoot != null) progressRoot.gameObject.SetActive(WorkerCount > 0 || progress > 0);
+                if (progressFill != null) CardUI.SetProgress(progressFill.rectTransform, progress);
             }
+            if (status == null) return;
             if (AwaitingBlueprint) status.text = "Choose a blueprint";
+            else if (card.Kind == CardKind.ResearchCenter && !game.HasUndiscoveredBlueprints)
+                status.text = "All blueprints discovered";
             else if (card.Kind == CardKind.School && WorkerCount > 0)
                 status.text = "Educating";
             else if (card.Kind == CardKind.ResearchCenter && WorkerCount > 0)

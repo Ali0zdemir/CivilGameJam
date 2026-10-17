@@ -6,7 +6,10 @@ namespace CivilGameJam.Cards
 {
     public sealed class FactoryProduction : MonoBehaviour
     {
+        [Tooltip("Production duration with one normal worker. Worker contributions add together.")]
         [Min(0.1f)] [SerializeField] private float productionSeconds = 5f;
+        [Tooltip("An educated worker contributes this many normal workers of production effort.")]
+        [Min(1f)] [SerializeField] private float educatedWorkerMultiplier = 1.8f;
         [SerializeField] private BuildingStation station;
         [SerializeField] private TextMeshProUGUI productionStatus;
         [SerializeField] private TextMeshProUGUI blueprintLabel;
@@ -19,6 +22,21 @@ namespace CivilGameJam.Cards
         public DraggableCard PendingBlueprint { get; private set; }
         public float Progress { get; private set; }
         public float ProductionSeconds => Mathf.Max(0.1f, productionSeconds);
+        public float EducatedWorkerMultiplier => Mathf.Max(1f, educatedWorkerMultiplier);
+        public float WorkRate
+        {
+            get
+            {
+                if (station == null) return 0f;
+                float rate = 0f;
+                for (int i = 0; i < BuildingStation.Capacity; i++)
+                {
+                    var worker = station.GetWorker(i);
+                    if (worker != null) rate += worker.Kind == CardKind.EducatedPerson ? EducatedWorkerMultiplier : 1f;
+                }
+                return rate;
+            }
+        }
 
         public void Initialize(CardGameController owner, DraggableCard building)
         { game = owner; card = building; Refresh(); }
@@ -56,9 +74,10 @@ namespace CivilGameJam.Cards
         public void AdvanceWork(float seconds)
         {
             if (game == null) return;
-            if (seconds > 0f && PendingBlueprint != null && station.WorkerCount > 0 && !game.IsChoosingBlueprint)
+            float workRate = WorkRate;
+            if (seconds > 0f && PendingBlueprint != null && workRate > 0f && !game.IsChoosingBlueprint)
             {
-                Progress = Mathf.Min(1f, Progress + seconds / ProductionSeconds);
+                Progress = Mathf.Min(1f, Progress + seconds * workRate / ProductionSeconds);
                 if (Progress >= 1f)
                 {
                     var blueprint = PendingBlueprint;

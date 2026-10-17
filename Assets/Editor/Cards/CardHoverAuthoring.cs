@@ -39,7 +39,7 @@ namespace CivilGameJam.Cards.Editor
             EditorSceneManager.SaveScene(game.gameObject.scene);
             AssetDatabase.SaveAssets();
             CardSceneAuthoring.VerifySavedAssets();
-            Debug.Log("Saved people info panels at 0.52 display scale, adjusted for card size.");
+            Debug.Log("Saved people info panels at 0.7176 display scale, adjusted for card size.");
         }
 
         public static void TuneForBatch()
@@ -67,7 +67,7 @@ namespace CivilGameJam.Cards.Editor
             EditorSceneManager.SaveScene(game.gameObject.scene);
             AssetDatabase.SaveAssets();
             CardSceneAuthoring.VerifySavedAssets();
-            Debug.Log("Saved hover tuning: 1.325x cards, 0.24s smooth transition; info panels 0.52x people / 0.8x others.");
+            Debug.Log("Saved hover tuning: 1.21125x cards, 0.24s smooth transition; info panels 0.7176x people / 0.8x others.");
         }
 
         public static void BuildForBatch()
@@ -146,7 +146,7 @@ namespace CivilGameJam.Cards.Editor
         private static void ApplyDetailsScale(GameObject root)
         {
             var card = root.GetComponent<DraggableCard>();
-            float detailsScale = card.IsPerson ? 0.52f / card.Rect.localScale.x : 0.8f;
+            float detailsScale = card.IsPerson ? 0.7176f / card.Rect.localScale.x : 0.8f;
             root.transform.Find("HoverDetails").localScale = Vector3.one * detailsScale;
         }
 
@@ -213,8 +213,8 @@ namespace CivilGameJam.Cards.Editor
                     title = "Education"; body = "Turns people into\neducated people.";
                     extra = "Up to 2 students"; break;
                 case CardKind.Factory:
-                    title = "Fabrika"; body = "Çalışan kartlarını\nbu binaya bırakabilirsin.";
-                    extra = "En fazla 2 çalışan\nİnsanlar iş sonunda korunur."; break;
+                    title = "Production"; body = "Requires a blueprint\nand at least one worker.";
+                    extra = "Workers combine effort.\nEducated workers are faster.\nWorkers are kept."; break;
                 case CardKind.House:
                     title = "Ev"; body = "Kartı sürükleyerek\nboş bir hücreye taşı."; break;
                 case CardKind.Person:
@@ -222,7 +222,7 @@ namespace CivilGameJam.Cards.Editor
                     extra = "Can be educated at school."; break;
                 case CardKind.EducatedPerson:
                     title = "Educated Person"; body = "Assign to a factory\nor research center.";
-                    extra = "Completes research faster."; break;
+                    extra = "Works faster in research\nand factory production."; break;
                 default:
                     title = "Blueprint"; body = "Yeni bir yapının\nplan kartı."; break;
             }

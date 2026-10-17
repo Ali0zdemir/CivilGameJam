@@ -42,7 +42,7 @@ namespace CivilGameJam.Cards
             icon.color = Color.white;
             discovery.text = discovered ? "DISCOVERED" : string.Empty;
             discovery.color = discovered ? new Color(0.96f, 0.75f, 0.39f) : new Color(0.48f, 0.58f, 0.59f);
-            quantity.text = !discovered ? string.Empty : available > 0 ? available + (available == 1 ? " plan · drag" : " plans · drag") : "No plans";
+            quantity.text = !discovered ? string.Empty : available > 0 ? "Reusable · drag" : "In use";
         }
 
         public void OnPointerDown(PointerEventData data) { }

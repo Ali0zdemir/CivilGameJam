@@ -27,10 +27,16 @@ namespace CivilGameJam.Cards
         private DraggableCard draggedWorker;
         private DraggableCard currentWorker;
         private Coroutine entry;
+        private Coroutine exit;
+        private DraggableCard returningWorker;
+        private float entryProgress;
         public bool IsEntering => entry != null;
+        public bool IsReturning => exit != null;
+        public bool IsAnimating => IsEntering || IsReturning;
+        internal DraggableCard ReturningWorker => returningWorker;
         public Image Portrait => portrait;
         public Image EntryImage => entryImage;
-        public RectTransform VisibleWorkerRect => IsEntering ? entryImage.rectTransform : portrait != null ? portrait.rectTransform : null;
+        public RectTransform VisibleWorkerRect => IsAnimating ? entryImage.rectTransform : portrait != null ? portrait.rectTransform : null;
 
         public void Refresh(DraggableCard worker)
         {
@@ -40,7 +46,7 @@ namespace CivilGameJam.Cards
             {
                 background.color = Color.clear;
                 if (worker != null) portrait.sprite = worker.Kind == CardKind.Person ? normalPortrait : educatedPortrait;
-                portrait.gameObject.SetActive(worker != null && !IsEntering);
+                portrait.gameObject.SetActive(worker != null && !IsAnimating);
                 return;
             }
             background.color = worker == null ? emptyColor :
@@ -52,6 +58,7 @@ namespace CivilGameJam.Cards
         {
             if (portrait == null || entryImage == null || !isActiveAndEnabled) return;
             CancelEntry();
+            entryProgress = 0f;
             portrait.gameObject.SetActive(false);
             entryImage.sprite = portrait.sprite;
             entryImage.color = Color.white;
@@ -79,6 +86,7 @@ namespace CivilGameJam.Cards
             for (float elapsed = 0f; elapsed < entrySeconds; elapsed += Time.unscaledDeltaTime)
             {
                 float t = Mathf.Clamp01(elapsed / entrySeconds);
+                entryProgress = t;
                 Vector3 origin = space.TransformPoint(localOrigin);
                 Vector3 fromScale = Vector3.Scale(localScale, space.lossyScale);
                 Quaternion rotation = space.rotation * localRotation;
@@ -116,6 +124,98 @@ namespace CivilGameJam.Cards
             portrait.gameObject.SetActive(currentWorker != null);
         }
 
+        public bool AnimateExit(DraggableCard worker)
+        {
+            if (portrait == null || entryImage == null || !isActiveAndEnabled || IsReturning) return false;
+            var source = VisibleWorkerRect;
+            var rect = entryImage.rectTransform;
+            var space = station.Card.Rect;
+            Vector3 origin = source.position;
+            Vector3 scale = source.lossyScale;
+            scale.x *= source.rect.width / rect.rect.width;
+            scale.y *= source.rect.height / rect.rect.height;
+            Quaternion rotation = source.rotation;
+            float slideSeconds = (IsEntering ? Mathf.Max(0f, entryProgress - 0.62f) : 0.38f) * entrySeconds;
+            CancelEntry();
+            currentWorker = null;
+            returningWorker = worker;
+            portrait.gameObject.SetActive(false);
+            entryImage.sprite = worker.Kind == CardKind.Person ? normalPortrait : educatedPortrait;
+            entryImage.color = Color.white;
+            if (entryCanvas != null) entryCanvas.overrideSorting = slideSeconds <= 0f;
+            rect.SetParent(slideSeconds > 0f ? transform : space, false);
+            rect.position = origin;
+            rect.rotation = rotation;
+            SetWorldScale(rect, scale);
+            entryImage.gameObject.SetActive(true);
+            worker.BeginFolderReturn(this);
+            Vector3 localScale = new Vector3(scale.x / space.lossyScale.x,
+                scale.y / space.lossyScale.y, scale.z / space.lossyScale.z);
+            exit = StartCoroutine(ExitFolder(space, space.InverseTransformPoint(origin), localScale,
+                Quaternion.Inverse(space.rotation) * rotation, slideSeconds));
+            return true;
+        }
+
+        private IEnumerator ExitFolder(RectTransform space, Vector3 localOrigin, Vector3 localScale,
+            Quaternion localRotation, float slideSeconds)
+        {
+            var rect = entryImage.rectTransform;
+            var target = returningWorker.transform.Find("Artwork") as RectTransform ?? returningWorker.Rect;
+            // Reverse the entry: first slide out behind the flap, then fly above it.
+            for (float elapsed = 0f; elapsed < slideSeconds; elapsed += Time.unscaledDeltaTime)
+            {
+                float t = Smooth(Mathf.Clamp01(elapsed / slideSeconds));
+                rect.position = Vector3.Lerp(space.TransformPoint(localOrigin), MouthPosition(), t);
+                rect.rotation = Quaternion.Slerp(space.rotation * localRotation, portrait.rectTransform.rotation, t);
+                SetWorldScale(rect, Vector3.Scale(localScale, space.lossyScale));
+                entryImage.color = station.Card.Owner.IsChoosingBlueprint ? Color.clear : Color.white;
+                yield return null;
+            }
+            if (slideSeconds > 0f)
+            {
+                localOrigin = space.InverseTransformPoint(MouthPosition());
+                localRotation = Quaternion.Inverse(space.rotation) * portrait.rectTransform.rotation;
+            }
+            if (entryCanvas != null) entryCanvas.overrideSorting = true;
+            rect.SetParent(space, true);
+            float travelSeconds = entrySeconds * 0.62f;
+            for (float elapsed = 0f; elapsed < travelSeconds; elapsed += Time.unscaledDeltaTime)
+            {
+                float t = Smooth(Mathf.Clamp01(elapsed / travelSeconds));
+                Vector3 from = space.TransformPoint(localOrigin);
+                Vector3 destination = target.position;
+                Vector3 bend = Vector3.Lerp(from, destination, 0.5f) + space.up *
+                    (portrait.rectTransform.rect.height * portrait.rectTransform.lossyScale.y * 0.2f);
+                rect.position = Vector3.Lerp(Vector3.Lerp(from, bend, t), Vector3.Lerp(bend, destination, t), t);
+                rect.rotation = Quaternion.Slerp(space.rotation * localRotation, target.rotation, t);
+                Vector3 targetScale = target.lossyScale;
+                targetScale.x *= target.rect.width / rect.rect.width;
+                targetScale.y *= target.rect.height / rect.rect.height;
+                SetWorldScale(rect, Vector3.Lerp(Vector3.Scale(localScale, space.lossyScale), targetScale, t));
+                entryImage.color = station.Card.Owner.IsChoosingBlueprint ? Color.clear : Color.white;
+                yield return null;
+            }
+            var worker = returningWorker;
+            returningWorker = null;
+            exit = null;
+            ResetEntryImage();
+            if (worker != null) worker.EndFolderReturn(this);
+        }
+
+        private Vector3 MouthPosition() => entryMouth != null ? entryMouth.position :
+            portrait.rectTransform.position + portrait.rectTransform.up *
+            (portrait.rectTransform.rect.height * portrait.rectTransform.lossyScale.y * 1.05f);
+
+        internal void CancelExit(DraggableCard worker)
+        {
+            if (returningWorker != worker) return;
+            if (exit != null) StopCoroutine(exit);
+            exit = null;
+            returningWorker = null;
+            ResetEntryImage();
+            if (worker != null) worker.EndFolderReturn(this);
+        }
+
         private static float Smooth(float t) => t * t * t * (t * (t * 6f - 15f) + 10f);
 
         private static void SetWorldScale(RectTransform rect, Vector3 scale)
@@ -128,7 +228,7 @@ namespace CivilGameJam.Cards
         {
             if (entry != null) StopCoroutine(entry);
             entry = null;
-            ResetEntryImage();
+            if (exit == null) ResetEntryImage();
         }
 
         private void ResetEntryImage()
@@ -145,7 +245,11 @@ namespace CivilGameJam.Cards
             rect.localRotation = Quaternion.identity;
         }
 
-        private void OnDisable() => CancelEntry();
+        private void OnDisable()
+        {
+            CancelEntry();
+            CancelExit(returningWorker);
+        }
 
         // Consume slot presses so taking a worker does not lift its building as well.
         public void OnPointerDown(PointerEventData eventData) { }
@@ -163,10 +267,11 @@ namespace CivilGameJam.Cards
             if (eventData.button != PointerEventData.InputButton.Left) return;
             Vector3 origin = VisibleWorkerRect != null ? VisibleWorkerRect.position : transform.position;
             float width = VisibleWorkerRect != null ? VisibleWorkerRect.rect.width * VisibleWorkerRect.lossyScale.x : 0f;
+            Quaternion rotation = VisibleWorkerRect != null ? VisibleWorkerRect.rotation : Quaternion.identity;
             draggedWorker = station.ReleaseWorker(index, false);
             if (draggedWorker == null) return;
             draggedWorker.Rect.position = origin;
-            if (width > 0f) draggedWorker.MatchArtworkWidth(width);
+            if (width > 0f) draggedWorker.MatchArtworkWidth(width, rotation);
             draggedWorker.OnBeginDrag(eventData);
         }
 

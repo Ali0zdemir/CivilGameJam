@@ -719,6 +719,10 @@ MonoBehaviour:
   shadow: {fileID: 4359367298760714978}
   hoverScale: 1.21125
   hoverSeconds: 0.24
+  dragTiltDegrees: 4
+  tiltSmoothSeconds: 0.11
+  placementSquash: 0.035
+  placementSeconds: 0.34
 --- !u!114 &1489274951326093438
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -735,6 +739,7 @@ MonoBehaviour:
   vaultSlot: {fileID: 0}
   feedback: {fileID: 5805118836466927877}
   details: {fileID: 4924148786162831855}
+  hoverOutline: {fileID: 0}
 --- !u!1 &7590003052252661795
 GameObject:
   m_ObjectHideFlags: 0
@@ -992,7 +997,7 @@ RectTransform:
   m_GameObject: {fileID: 9098567367612600313}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 0.52, y: 0.52, z: 0.52}
+  m_LocalScale: {x: 0.7176, y: 0.7176, z: 0.7176}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 8615942354604775268}

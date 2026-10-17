@@ -64,7 +64,7 @@ namespace CivilGameJam.Cards
 
         public void TickPointer(Vector2 screenPosition, float deltaTime)
         {
-            bool locked = game.IsDraggingAnyCard || game.IsChoosingBlueprint || game.HasActiveWorkerEntry;
+            bool locked = game.IsDraggingAnyCard || game.IsChoosingBlueprint || game.HasActiveCardAnimation;
             SetExpanded(locked || ContainsPointer(screenPosition));
             elapsed += Mathf.Max(0f, deltaTime);
             float t = Mathf.Clamp01(elapsed / Mathf.Max(0.01f, slideSeconds));

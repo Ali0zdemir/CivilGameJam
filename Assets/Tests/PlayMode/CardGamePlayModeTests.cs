@@ -184,6 +184,7 @@ public sealed partial class CardGamePlayModeTests
         slots[1].OnPointerClick(new PointerEventData(EventSystem.current) { button = PointerEventData.InputButton.Left });
         Assert.That(slots[1].Portrait.gameObject.activeSelf, Is.False);
         Assert.That(house.WorkerCount, Is.Zero);
+        yield return new WaitForSecondsRealtime(0.6f);
         Drag(educated, research.Card.Rect.position);
         Assert.That(educated.AssignedTo, Is.SameAs(research));
         Assert.That(UIIds(game), Is.EqualTo(savedUI));
@@ -476,6 +477,8 @@ public sealed partial class CardGamePlayModeTests
 
     private DraggableCard ResearchPlan(int index)
     {
+        var existing = game.Cards.FirstOrDefault(c => c.Kind == CardKind.Blueprint && c.UpgradeType == (UpgradeKind)(index + 1));
+        if (existing != null) return existing;
         research.TryAssign(People().First(p => p.AssignedTo == null));
         research.AdvanceWork(25.01f);
         game.SelectBlueprint(index);
@@ -505,7 +508,8 @@ public sealed partial class CardGamePlayModeTests
         factory.AdvanceWork(4.9f);
         Assert.That(factory.PendingBlueprint, Is.SameAs(blueprint));
         factory.AdvanceWork(0.11f);
-        Assert.That(game.Cards.Contains(blueprint), Is.False);
+        Assert.That(game.Cards.Contains(blueprint), Is.True);
+        Assert.That(blueprint.StoredInVault, Is.SameAs(game.Vault));
         Assert.That(game.Cards.Count(c => c.Kind == CardKind.Upgrade), Is.EqualTo(2));
         var product = game.Cards.First(c => c.Kind == CardKind.Upgrade);
         Assert.That(product.UpgradeType, Is.EqualTo(UpgradeKind.Fire));
@@ -540,16 +544,16 @@ public sealed partial class CardGamePlayModeTests
             Assert.That(houses[0].TryInstall(products[1]), Is.False, "A house has one slot for each type.");
             Assert.That(houses[1].TryInstall(products[1]), Is.True);
             Assert.That(game.Vault.IsDiscovered((UpgradeKind)(i + 1)), Is.True);
-            Assert.That(game.Vault.AvailableCount((UpgradeKind)(i + 1)), Is.Zero);
+            Assert.That(game.Vault.AvailableCount((UpgradeKind)(i + 1)), Is.EqualTo(1));
         }
         Assert.That(houses[0].GetComponentsInChildren<HouseUpgradeSlot>().All(s => s.Filled), Is.True);
         Assert.That(game.NormalPeopleCount, Is.EqualTo(4));
         Assert.That(game.Cards.Count(c => c.Kind == CardKind.Upgrade), Is.EqualTo(6));
-        Assert.That(game.Cards.Count(c => c.Kind == CardKind.Blueprint), Is.Zero);
+        Assert.That(game.Cards.Count(c => c.Kind == CardKind.Blueprint), Is.EqualTo(3));
     }
 
     [Test]
-    public void VaultStacksPlansRetainsDiscoveriesAndBlocksWithdrawalsDuringChoices()
+    public void VaultRetainsReusableDiscoveriesAndBlocksWithdrawalsDuringChoices()
     {
         var vault = game.Vault;
         int[] SavedVaultUI() => vault.GetComponentsInChildren<Component>(true).Where(c => c.GetComponentInParent<DraggableCard>() == null)
@@ -557,25 +561,30 @@ public sealed partial class CardGamePlayModeTests
         int[] savedVaultUI = SavedVaultUI();
         Assert.That(vault.IsDiscovered(UpgradeKind.RailSystem), Is.False);
         var first = ResearchPlan(0);
-        var second = ResearchPlan(0);
-        Assert.That(vault.AvailableCount(UpgradeKind.RailSystem), Is.EqualTo(2));
+        var second = ResearchPlan(1);
+        Assert.That(vault.AvailableCount(UpgradeKind.RailSystem), Is.EqualTo(1));
         Assert.That(first.StoredInVault, Is.SameAs(vault));
         Assert.That(second.gameObject.activeSelf, Is.False);
         var factory = Station(CardKind.Factory).GetComponent<FactoryProduction>(); factory.enabled = false;
         Assert.That(factory.TryInsertBlueprint(first), Is.True);
         Assert.That(factory.TryInsertBlueprint(second), Is.False, "An occupied factory must not withdraw another plan.");
-        Assert.That(vault.AvailableCount(UpgradeKind.RailSystem), Is.EqualTo(1));
+        Assert.That(vault.AvailableCount(UpgradeKind.RailSystem), Is.Zero);
         Station(CardKind.Factory).TryAssign(People()[0]);
         factory.AdvanceWork(5.01f);
         Assert.That(vault.IsDiscovered(UpgradeKind.RailSystem), Is.True);
         Assert.That(game.Cards.Count(c => c.Kind == CardKind.Upgrade), Is.EqualTo(2));
         Drag(second, factory.transform.position);
         Assert.That(factory.PendingBlueprint, Is.SameAs(second));
-        Assert.That(vault.AvailableCount(UpgradeKind.RailSystem), Is.Zero);
+        Assert.That(vault.AvailableCount(UpgradeKind.Breakwater), Is.Zero);
         factory.ReleaseBlueprint(false);
         Assert.That(vault.AvailableCount(UpgradeKind.RailSystem), Is.EqualTo(1));
         research.TryAssign(People().First(p => p.AssignedTo == null));
         research.AdvanceWork(25.01f);
+        Assert.That(game.IsChoosingBlueprint, Is.True);
+        var knownButton = game.GetComponentsInChildren<Button>().Single(b => b.name == "BlueprintOption0");
+        Assert.That(knownButton.interactable, Is.False);
+        game.SelectBlueprint(0);
+        Assert.That(game.IsChoosingBlueprint, Is.True, "A discovered blueprint cannot consume another research reward.");
         var pointer = new PointerEventData(EventSystem.current) { button = PointerEventData.InputButton.Left, pointerId = -1 };
         ExecuteEvents.Execute(vault.SlotFor(UpgradeKind.RailSystem).gameObject, pointer, ExecuteEvents.beginDragHandler);
         Assert.That(game.IsDraggingAnyCard, Is.False);
@@ -1306,7 +1315,8 @@ public sealed partial class CardGamePlayModeTests
     }
 
     // ScreenCapture waits for a Game view repaint, which does not happen in batch mode.
-    private IEnumerator CaptureCanvas(string path, GameObject hoverTarget = null)
+    private IEnumerator CaptureCanvas(string path, GameObject hoverTarget = null, float settleSeconds = 0f,
+        System.Action<Camera> afterRender = null)
     {
         var canvas = game.GetComponentInParent<Canvas>();
         var oldMode = canvas.renderMode;
@@ -1331,6 +1341,7 @@ public sealed partial class CardGamePlayModeTests
         yield return null;
         Canvas.ForceUpdateCanvases();
         // Changing the capture viewport closes inspections; enter after the new layout has settled.
+        if (settleSeconds > 0f) yield return new WaitForSecondsRealtime(settleSeconds);
         if (hoverTarget != null)
         {
             Hover(hoverTarget, true);
@@ -1344,6 +1355,7 @@ public sealed partial class CardGamePlayModeTests
                 RectTransformUtility.WorldToScreenPoint(camera, person.Rect.position), camera), Is.False,
                 "Resizing must keep the people tray outside the grid: " + Path.GetFileName(path) + " / " + person.name + " / " + person.TablePosition);
         camera.Render();
+        afterRender?.Invoke(camera);
         var previous = RenderTexture.active;
         RenderTexture.active = target;
         var pixels = new Texture2D(target.width, target.height, TextureFormat.RGB24, false);

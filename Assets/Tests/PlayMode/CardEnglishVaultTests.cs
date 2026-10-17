@@ -114,11 +114,205 @@ public sealed partial class CardGamePlayModeTests
         var slot = research.GetComponentsInChildren<WorkerSlot>(true).Single(item => item.IsEntering);
         var corners = new Vector3[4]; slot.EntryImage.rectTransform.GetWorldCorners(corners);
         research.ReleaseWorker(0);
-        var actual = new Vector3[4]; ((RectTransform)entering.transform.Find("Artwork")).GetWorldCorners(actual);
+        var actual = new Vector3[4]; slot.EntryImage.rectTransform.GetWorldCorners(actual);
         for (int i = 0; i < 4; i++) Assert.That(Vector3.Distance(corners[i], actual[i]), Is.LessThan(0.01f));
         Assert.That(slot.IsEntering, Is.False);
+        Assert.That(slot.IsReturning, Is.True);
+        Assert.That(entering.GetComponent<CanvasGroup>().alpha, Is.Zero);
         yield return new WaitForSecondsRealtime(0.55f);
         AssertRectInside(entering.Rect, game.Sidebar.PeopleArea);
+    }
+
+    [UnityTest]
+    public IEnumerator BothPocketsReverseTheFolderEntryAndReturnToPeopleInEveryWorkplace()
+    {
+        var people = People().Take(2).ToArray();
+        var savedUI = UIIds(game);
+        foreach (var kind in new[] { CardKind.ResearchCenter, CardKind.Factory, CardKind.School })
+        {
+            var station = Station(kind);
+            var slots = station.GetComponentsInChildren<WorkerSlot>(true).OrderBy(slot => slot.name).ToArray();
+            var home = people.Select(person => person.Rect.localPosition).ToArray();
+            foreach (var person in people) Assert.That(station.TryAssign(person), Is.True);
+            yield return new WaitForSecondsRealtime(0.6f);
+            var corners = slots.Select(slot => WorldCorners(slot.Portrait.rectTransform)).ToArray();
+            var pointer = new PointerEventData(EventSystem.current) { button = PointerEventData.InputButton.Left };
+            for (int i = 0; i < 2; i++)
+            {
+                slots[i].OnPointerClick(pointer);
+                AssertSameCorners(corners[i], slots[i].EntryImage.rectTransform);
+                Assert.That(slots[i].IsReturning, Is.True);
+                Assert.That(slots[i].EntryImage.transform.parent, Is.SameAs(slots[i].transform));
+                Assert.That(slots[i].EntryImage.GetComponent<Canvas>().overrideSorting, Is.False);
+                Assert.That(people[i].IsFlying, Is.True);
+                Assert.That(people[i].GetComponent<CanvasGroup>().alpha, Is.Zero);
+                Assert.That(people[i].GetComponent<CanvasGroup>().blocksRaycasts, Is.False);
+                Assert.That(game.Sidebar.Owns(people[i]), Is.True, "Reserve the destination while its saved image performs the exit.");
+                slots[i].OnPointerClick(pointer);
+            }
+            Assert.That(station.WorkerCount, Is.Zero);
+            Assert.That(game.NormalPeopleCount, Is.EqualTo(4));
+            var dock = game.GetComponent<CardDock>();
+            dock.TickPointer(new Vector2(Screen.width - 1f, Screen.height - 1f), 0.4f);
+            Assert.That(dock.IsExpanded, Is.True, "Keep the folder visible until both people have returned.");
+            yield return new WaitForSecondsRealtime(0.08f);
+            foreach (var slot in slots)
+                Assert.That(station.Card.Rect.InverseTransformPoint(slot.EntryImage.rectTransform.position).y,
+                    Is.GreaterThan(station.Card.Rect.InverseTransformPoint(slot.Portrait.rectTransform.position).y));
+            Vector2 position = station.Card.Rect.anchoredPosition;
+            Vector3 scale = station.Card.LayoutScale;
+            var points = slots.Select(slot => station.Card.Rect.InverseTransformPoint(slot.EntryImage.rectTransform.position)).ToArray();
+            station.Card.Rect.anchoredPosition += new Vector2(50f, 75f);
+            station.Card.SetLayoutScale(scale * 1.08f);
+            for (int i = 0; i < 2; i++)
+                Assert.That(Vector3.Distance(station.Card.Rect.InverseTransformPoint(slots[i].EntryImage.rectTransform.position), points[i]), Is.LessThan(0.01f));
+            yield return new WaitForSecondsRealtime(0.17f);
+            foreach (var slot in slots)
+            {
+                Assert.That(slot.IsReturning, Is.True);
+                Assert.That(slot.EntryImage.transform.parent, Is.SameAs(station.Card.Rect));
+                Assert.That(slot.EntryImage.GetComponent<Canvas>().overrideSorting, Is.True, "The person must clear the folder flap before flying home.");
+            }
+            if (kind == CardKind.Factory)
+                yield return CaptureCanvas(Path.Combine(Application.dataPath, "../Library/CardGameTestResults/reverse-worker-exit.png"));
+            yield return new WaitForSecondsRealtime(0.4f);
+            for (int i = 0; i < 2; i++)
+            {
+                Assert.That(slots[i].IsAnimating, Is.False);
+                Assert.That(slots[i].EntryImage.gameObject.activeSelf, Is.False);
+                Assert.That(slots[i].Portrait.gameObject.activeSelf, Is.False);
+                Assert.That(people[i].IsFlying, Is.False);
+                Assert.That(people[i].CanShowHover, Is.True);
+                Assert.That(people[i].GetComponent<CanvasGroup>().alpha, Is.EqualTo(1f));
+                Assert.That(people[i].GetComponent<CanvasGroup>().blocksRaycasts, Is.True);
+                Assert.That(Vector3.Distance(people[i].Rect.localPosition, home[i]), Is.LessThan(0.01f));
+                Assert.That(people[i].Rect.localScale, Is.EqualTo(people[i].LayoutScale));
+                AssertRectInside(people[i].Rect, game.Sidebar.PeopleArea);
+            }
+            station.Card.SetLayoutScale(scale);
+            station.Card.Rect.anchoredPosition = position;
+            Assert.That(UIIds(game), Is.EqualTo(savedUI), "Both directions must reuse the editor-authored images.");
+        }
+    }
+
+    [UnityTest]
+    public IEnumerator ReversingDuringEitherEntryPhaseKeepsTheExactVisiblePersonPose()
+    {
+        var worker = People()[0];
+        var slot = school.GetComponentsInChildren<WorkerSlot>(true).OrderBy(item => item.name).First();
+        foreach (float delay in new[] { 0.07f, 0.4f })
+        {
+            Drag(worker, school.Card.Rect.position);
+            yield return new WaitForSecondsRealtime(delay);
+            Assert.That(slot.IsEntering, Is.True);
+            var corners = WorldCorners(slot.EntryImage.rectTransform);
+            school.ReleaseWorker(0);
+            AssertSameCorners(corners, slot.EntryImage.rectTransform);
+            Assert.That(slot.IsEntering, Is.False);
+            Assert.That(slot.IsReturning, Is.True);
+            yield return new WaitForSecondsRealtime(0.6f);
+            Assert.That(slot.IsAnimating, Is.False);
+            Assert.That(worker.IsReturningFromFolder, Is.False);
+            AssertRectInside(worker.Rect, game.Sidebar.PeopleArea);
+        }
+    }
+
+    [UnityTest]
+    public IEnumerator FolderReturnHandlesPauseCancellationAndSceneExitWithoutHiddenWorkers()
+    {
+        var factory = Station(CardKind.Factory);
+        var people = People().Take(2).ToArray();
+        var slots = factory.GetComponentsInChildren<WorkerSlot>(true).OrderBy(slot => slot.name).ToArray();
+        foreach (var person in people) factory.TryAssign(person);
+        yield return new WaitForSecondsRealtime(0.6f);
+        float timeScale = Time.timeScale;
+        try
+        {
+            Time.timeScale = 0f;
+            factory.ReleaseWorker(0); factory.ReleaseWorker(1);
+            yield return new WaitForSecondsRealtime(0.08f);
+            people[0].StopFlight();
+            Assert.That(slots[0].IsReturning, Is.False);
+            Assert.That(people[0].GetComponent<CanvasGroup>().alpha, Is.EqualTo(1f));
+            people[1].gameObject.SetActive(false);
+            Assert.That(slots[1].IsReturning, Is.False);
+            people[1].gameObject.SetActive(true);
+            Assert.That(people[1].GetComponent<CanvasGroup>().alpha, Is.EqualTo(1f));
+            factory.TryAssign(people[0]);
+            yield return new WaitForSecondsRealtime(0.6f);
+            factory.ReleaseWorker(0);
+            yield return new WaitForSecondsRealtime(0.6f);
+            Assert.That(people[0].IsReturningFromFolder, Is.False, "Return motion must use unscaled time.");
+            AssertRectInside(people[0].Rect, game.Sidebar.PeopleArea);
+        }
+        finally { Time.timeScale = timeScale; }
+        factory.TryAssign(people[0]);
+        yield return new WaitForSecondsRealtime(0.6f);
+        factory.ReleaseWorker(0);
+        factory.Card.gameObject.SetActive(false);
+        Assert.That(people[0].IsReturningFromFolder, Is.False);
+        Assert.That(people[0].GetComponent<CanvasGroup>().alpha, Is.EqualTo(1f));
+        factory.Card.gameObject.SetActive(true);
+        Assert.That(slots[0].EntryImage.gameObject.activeSelf, Is.False);
+        factory.TryAssign(people[0]);
+        factory.ReleaseWorker(0);
+        yield return UnityEngine.SceneManagement.SceneManager.LoadSceneAsync("2DCardScene");
+        yield return null;
+        var loaded = Object.FindFirstObjectByType<CardGameController>();
+        Assert.That(loaded.Cards.Count, Is.EqualTo(11));
+        Assert.That(loaded.Cards.Any(card => card.IsReturningFromFolder), Is.False);
+        Assert.That(loaded.Cards.Where(card => card.IsPerson).All(card => card.GetComponent<CanvasGroup>().alpha == 1f), Is.True);
+    }
+
+    [UnityTest]
+    public IEnumerator GraduatesAndEducatedResearchersLeaveThroughTheirOwnFolderPockets()
+    {
+        var people = People().Take(2).ToArray();
+        foreach (var person in people) school.TryAssign(person);
+        yield return new WaitForSecondsRealtime(0.6f);
+        var slots = school.GetComponentsInChildren<WorkerSlot>(true).OrderBy(slot => slot.name).ToArray();
+        var corners = slots.Select(slot => WorldCorners(slot.Portrait.rectTransform)).ToArray();
+        school.AdvanceWork(25.01f);
+        var educated = game.Cards.Where(card => card.Kind == CardKind.EducatedPerson).ToArray();
+        Assert.That(educated.Length, Is.EqualTo(2));
+        Assert.That(game.NormalPeopleCount, Is.EqualTo(2));
+        for (int i = 0; i < 2; i++)
+        {
+            AssertSameCorners(corners[i], slots[i].EntryImage.rectTransform);
+            Assert.That(slots[i].IsReturning, Is.True);
+            Assert.That(slots[i].EntryImage.sprite, Is.SameAs(educated[i].transform.Find("Artwork").GetComponent<UnityEngine.UI.Image>().sprite));
+        }
+        yield return new WaitForSecondsRealtime(0.6f);
+        foreach (var worker in educated)
+        {
+            Assert.That(worker.GetComponent<CanvasGroup>().alpha, Is.EqualTo(1f));
+            AssertRectInside(worker.Rect, game.Sidebar.PeopleArea);
+            research.TryAssign(worker);
+        }
+        yield return new WaitForSecondsRealtime(0.6f);
+        research.AdvanceWork(15.01f);
+        game.SelectBlueprint(0);
+        Assert.That(research.GetComponentsInChildren<WorkerSlot>(true).All(slot => slot.IsReturning), Is.True);
+        yield return new WaitForSecondsRealtime(0.6f);
+        Assert.That(game.EducatedPeopleCount, Is.EqualTo(2));
+        foreach (var worker in educated)
+        {
+            Assert.That(worker.IsReturningFromFolder, Is.False);
+            AssertRectInside(worker.Rect, game.Sidebar.PeopleArea);
+        }
+    }
+
+    private static Vector3[] WorldCorners(RectTransform rect)
+    {
+        var corners = new Vector3[4];
+        rect.GetWorldCorners(corners);
+        return corners;
+    }
+
+    private static void AssertSameCorners(Vector3[] expected, RectTransform actual)
+    {
+        var corners = WorldCorners(actual);
+        for (int i = 0; i < 4; i++) Assert.That(Vector3.Distance(expected[i], corners[i]), Is.LessThan(0.01f));
     }
 
     [UnityTest]

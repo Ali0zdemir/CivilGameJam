@@ -10,6 +10,8 @@ namespace CivilGameJam.Cards
         private readonly DraggableCard[] installed = new DraggableCard[3];
         private CardGameController game;
         private DraggableCard card;
+        public DraggableCard Card => card;
+        public bool IsInstalling => System.Array.Exists(slots, slot => slot.IsInstalling);
         public DraggableCard GetInstalled(UpgradeKind kind) => kind == UpgradeKind.None ? null : installed[(int)kind - 1];
         public void Initialize(CardGameController owner, DraggableCard building)
         {
@@ -26,8 +28,8 @@ namespace CivilGameJam.Cards
             upgrade.StopFlight();
             installed[index] = upgrade;
             upgrade.InstalledIn = this;
+            slots[index].AnimateInstall(upgrade);
             upgrade.gameObject.SetActive(false);
-            slots[index].ShowFilled(true);
             return true;
         }
         public DraggableCard Release(UpgradeKind kind, bool animate = true)
@@ -37,8 +39,13 @@ namespace CivilGameJam.Cards
             if (upgrade == null) return null;
             installed[(int)kind - 1] = null;
             upgrade.InstalledIn = null;
+            var visual = slots[(int)kind - 1].VisibleIcon;
+            Vector3 origin = visual.position;
+            float width = visual.rect.width * visual.lossyScale.x;
+            Quaternion rotation = visual.rotation;
             slots[(int)kind - 1].ShowFilled(false);
-            game.ReturnToTable(upgrade, card.Rect.position, animate);
+            game.ReturnToTable(upgrade, origin, animate);
+            if (animate) upgrade.MatchArtworkWidth(width, rotation);
             return upgrade;
         }
         public void Preview(DraggableCard upgrade)

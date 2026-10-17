@@ -347,6 +347,7 @@ MonoBehaviour:
   vaultSlot: {fileID: 33512619}
   feedback: {fileID: 33512624}
   details: {fileID: 1826786759}
+  hoverOutline: {fileID: 0}
 --- !u!114 &33512624
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -363,6 +364,10 @@ MonoBehaviour:
   shadow: {fileID: 74748305}
   hoverScale: 1.21125
   hoverSeconds: 0.24
+  dragTiltDegrees: 4
+  tiltSmoothSeconds: 0.11
+  placementSquash: 0.035
+  placementSeconds: 0.34
 --- !u!114 &33512625
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1912,15 +1917,15 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4924148786162831855, guid: a1f5b067c6e1a0b4abaae6a0214dcc6b, type: 3}
       propertyPath: m_LocalScale.x
-      value: 0.52
+      value: 0.7176
       objectReference: {fileID: 0}
     - target: {fileID: 4924148786162831855, guid: a1f5b067c6e1a0b4abaae6a0214dcc6b, type: 3}
       propertyPath: m_LocalScale.y
-      value: 0.52
+      value: 0.7176
       objectReference: {fileID: 0}
     - target: {fileID: 4924148786162831855, guid: a1f5b067c6e1a0b4abaae6a0214dcc6b, type: 3}
       propertyPath: m_LocalScale.z
-      value: 0.52
+      value: 0.7176
       objectReference: {fileID: 0}
     - target: {fileID: 6407626968765418652, guid: a1f5b067c6e1a0b4abaae6a0214dcc6b, type: 3}
       propertyPath: m_Name
@@ -2133,10 +2138,9 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: 'Install the items in the matching house slot.
+  m_text: 'Reusable from the Vault.
 
-    Your discovery stays
-    in the Vault.'
+    Each order makes 2 items.'
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
@@ -2620,6 +2624,7 @@ MonoBehaviour:
   vaultSlot: {fileID: 331467592}
   feedback: {fileID: 331467597}
   details: {fileID: 1791417449}
+  hoverOutline: {fileID: 0}
 --- !u!114 &331467597
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2636,6 +2641,10 @@ MonoBehaviour:
   shadow: {fileID: 1757121862}
   hoverScale: 1.21125
   hoverSeconds: 0.24
+  dragTiltDegrees: 4
+  tiltSmoothSeconds: 0.11
+  placementSquash: 0.035
+  placementSeconds: 0.34
 --- !u!114 &331467598
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -4415,15 +4424,15 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4924148786162831855, guid: a1f5b067c6e1a0b4abaae6a0214dcc6b, type: 3}
       propertyPath: m_LocalScale.x
-      value: 0.52
+      value: 0.7176
       objectReference: {fileID: 0}
     - target: {fileID: 4924148786162831855, guid: a1f5b067c6e1a0b4abaae6a0214dcc6b, type: 3}
       propertyPath: m_LocalScale.y
-      value: 0.52
+      value: 0.7176
       objectReference: {fileID: 0}
     - target: {fileID: 4924148786162831855, guid: a1f5b067c6e1a0b4abaae6a0214dcc6b, type: 3}
       propertyPath: m_LocalScale.z
-      value: 0.52
+      value: 0.7176
       objectReference: {fileID: 0}
     - target: {fileID: 6407626968765418652, guid: a1f5b067c6e1a0b4abaae6a0214dcc6b, type: 3}
       propertyPath: m_Name
@@ -4671,6 +4680,7 @@ MonoBehaviour:
   vaultSlot: {fileID: 531649748}
   feedback: {fileID: 531649753}
   details: {fileID: 540499456}
+  hoverOutline: {fileID: 0}
 --- !u!114 &531649753
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -4687,6 +4697,10 @@ MonoBehaviour:
   shadow: {fileID: 151394580}
   hoverScale: 1.21125
   hoverSeconds: 0.24
+  dragTiltDegrees: 4
+  tiltSmoothSeconds: 0.11
+  placementSquash: 0.035
+  placementSeconds: 0.34
 --- !u!114 &531649754
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -5221,7 +5235,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: Your discovery stays in the Vault after you use the plan.
+  m_text: Blueprints return to the Vault after production.
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
@@ -6135,22 +6149,6 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 1367033895}
     m_Modifications:
-    - target: {fileID: 300767775863634779, guid: 410e657582a1a1e4b88aea6989e72d52, type: 3}
-      propertyPath: m_AnchoredPosition.y
-      value: 163.50021
-      objectReference: {fileID: 0}
-    - target: {fileID: 661872980080791112, guid: 410e657582a1a1e4b88aea6989e72d52, type: 3}
-      propertyPath: m_fontSize
-      value: 30
-      objectReference: {fileID: 0}
-    - target: {fileID: 1098846400506148581, guid: 410e657582a1a1e4b88aea6989e72d52, type: 3}
-      propertyPath: m_AnchoredPosition.y
-      value: 163.50021
-      objectReference: {fileID: 0}
-    - target: {fileID: 1375479678110869034, guid: 410e657582a1a1e4b88aea6989e72d52, type: 3}
-      propertyPath: m_TextStyleHashCode
-      value: -1183493901
-      objectReference: {fileID: 0}
     - target: {fileID: 1510205013851205850, guid: 410e657582a1a1e4b88aea6989e72d52, type: 3}
       propertyPath: m_Pivot.x
       value: 0.5
@@ -6182,18 +6180,6 @@ PrefabInstance:
     - target: {fileID: 1510205013851205850, guid: 410e657582a1a1e4b88aea6989e72d52, type: 3}
       propertyPath: m_SizeDelta.y
       value: 400
-      objectReference: {fileID: 0}
-    - target: {fileID: 1510205013851205850, guid: 410e657582a1a1e4b88aea6989e72d52, type: 3}
-      propertyPath: m_LocalScale.x
-      value: 1.2460225
-      objectReference: {fileID: 0}
-    - target: {fileID: 1510205013851205850, guid: 410e657582a1a1e4b88aea6989e72d52, type: 3}
-      propertyPath: m_LocalScale.y
-      value: 1.2460225
-      objectReference: {fileID: 0}
-    - target: {fileID: 1510205013851205850, guid: 410e657582a1a1e4b88aea6989e72d52, type: 3}
-      propertyPath: m_LocalScale.z
-      value: 1.2460225
       objectReference: {fileID: 0}
     - target: {fileID: 1510205013851205850, guid: 410e657582a1a1e4b88aea6989e72d52, type: 3}
       propertyPath: m_LocalPosition.x
@@ -6243,33 +6229,9 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
-    - target: {fileID: 2379892150237706418, guid: 410e657582a1a1e4b88aea6989e72d52, type: 3}
-      propertyPath: initialGridCell
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 2883267190652279276, guid: 410e657582a1a1e4b88aea6989e72d52, type: 3}
-      propertyPath: m_fontColor32.rgba
-      value: 4282397478
-      objectReference: {fileID: 0}
-    - target: {fileID: 2883267190652279276, guid: 410e657582a1a1e4b88aea6989e72d52, type: 3}
-      propertyPath: m_TextStyleHashCode
-      value: -1183493901
-      objectReference: {fileID: 0}
     - target: {fileID: 4551122702813775966, guid: 410e657582a1a1e4b88aea6989e72d52, type: 3}
       propertyPath: m_Name
       value: ResearchCenterCard
-      objectReference: {fileID: 0}
-    - target: {fileID: 5506116702621144158, guid: 410e657582a1a1e4b88aea6989e72d52, type: 3}
-      propertyPath: m_AnchoredPosition.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 6095146885740877573, guid: 410e657582a1a1e4b88aea6989e72d52, type: 3}
-      propertyPath: m_TextStyleHashCode
-      value: -1183493901
-      objectReference: {fileID: 0}
-    - target: {fileID: 7968768271138415533, guid: 410e657582a1a1e4b88aea6989e72d52, type: 3}
-      propertyPath: m_AnchoredPosition.y
-      value: 0
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -8130,15 +8092,15 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4924148786162831855, guid: a1f5b067c6e1a0b4abaae6a0214dcc6b, type: 3}
       propertyPath: m_LocalScale.x
-      value: 0.52
+      value: 0.7176
       objectReference: {fileID: 0}
     - target: {fileID: 4924148786162831855, guid: a1f5b067c6e1a0b4abaae6a0214dcc6b, type: 3}
       propertyPath: m_LocalScale.y
-      value: 0.52
+      value: 0.7176
       objectReference: {fileID: 0}
     - target: {fileID: 4924148786162831855, guid: a1f5b067c6e1a0b4abaae6a0214dcc6b, type: 3}
       propertyPath: m_LocalScale.z
-      value: 0.52
+      value: 0.7176
       objectReference: {fileID: 0}
     - target: {fileID: 6407626968765418652, guid: a1f5b067c6e1a0b4abaae6a0214dcc6b, type: 3}
       propertyPath: m_Name
@@ -8215,10 +8177,9 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: 'Install the items in the matching house slot.
+  m_text: 'Reusable from the Vault.
 
-    Your discovery stays
-    in the Vault.'
+    Each order makes 2 items.'
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
@@ -8764,6 +8725,14 @@ PrefabInstance:
     - target: {fileID: 1896499438173120389, guid: 3d685353f789f1644a5c84f37c25e210, type: 3}
       propertyPath: m_Name
       value: CardPreview
+      objectReference: {fileID: 0}
+    - target: {fileID: 2876867616927659971, guid: 3d685353f789f1644a5c84f37c25e210, type: 3}
+      propertyPath: card
+      value:
+      objectReference: {fileID: 0}
+    - target: {fileID: 2876867616927659971, guid: 3d685353f789f1644a5c84f37c25e210, type: 3}
+      propertyPath: feedback
+      value:
       objectReference: {fileID: 0}
     - target: {fileID: 5225981612240441925, guid: 3d685353f789f1644a5c84f37c25e210, type: 3}
       propertyPath: m_RaycastTarget
@@ -9829,7 +9798,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "Your plan goes to the Vault \xB7 Produces 2 items at the factory"
+  m_text: "Discover once \xB7 Reuse from the Vault \xB7 Produces 2 items per order"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
@@ -10362,15 +10331,15 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4924148786162831855, guid: a1f5b067c6e1a0b4abaae6a0214dcc6b, type: 3}
       propertyPath: m_LocalScale.x
-      value: 0.52
+      value: 0.7176
       objectReference: {fileID: 0}
     - target: {fileID: 4924148786162831855, guid: a1f5b067c6e1a0b4abaae6a0214dcc6b, type: 3}
       propertyPath: m_LocalScale.y
-      value: 0.52
+      value: 0.7176
       objectReference: {fileID: 0}
     - target: {fileID: 4924148786162831855, guid: a1f5b067c6e1a0b4abaae6a0214dcc6b, type: 3}
       propertyPath: m_LocalScale.z
-      value: 0.52
+      value: 0.7176
       objectReference: {fileID: 0}
     - target: {fileID: 6407626968765418652, guid: a1f5b067c6e1a0b4abaae6a0214dcc6b, type: 3}
       propertyPath: m_Name
@@ -13849,10 +13818,9 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: 'Install the items in the matching house slot.
+  m_text: 'Reusable from the Vault.
 
-    Your discovery stays
-    in the Vault.'
+    Each order makes 2 items.'
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
@@ -15291,6 +15259,14 @@ PrefabInstance:
       propertyPath: m_RaycastTarget
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8627649580646213402, guid: 20fb41d2f9e68604e846f2fd32cc4e38, type: 3}
+      propertyPath: card
+      value:
+      objectReference: {fileID: 0}
+    - target: {fileID: 8627649580646213402, guid: 20fb41d2f9e68604e846f2fd32cc4e38, type: 3}
+      propertyPath: feedback
+      value:
+      objectReference: {fileID: 0}
     m_RemovedComponents:
     - {fileID: 7755796766515094561, guid: 20fb41d2f9e68604e846f2fd32cc4e38, type: 3}
     - {fileID: 8714446845794834843, guid: 20fb41d2f9e68604e846f2fd32cc4e38, type: 3}
@@ -15750,6 +15726,14 @@ PrefabInstance:
     - target: {fileID: 1318619294418235323, guid: b765f10352a34f24aa76cc415778f5b2, type: 3}
       propertyPath: m_RaycastTarget
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7909323773173703325, guid: b765f10352a34f24aa76cc415778f5b2, type: 3}
+      propertyPath: card
+      value:
+      objectReference: {fileID: 0}
+    - target: {fileID: 7909323773173703325, guid: b765f10352a34f24aa76cc415778f5b2, type: 3}
+      propertyPath: feedback
+      value:
       objectReference: {fileID: 0}
     m_RemovedComponents:
     - {fileID: 7755796766515094561, guid: b765f10352a34f24aa76cc415778f5b2, type: 3}

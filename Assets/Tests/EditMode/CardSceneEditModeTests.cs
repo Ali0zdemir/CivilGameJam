@@ -10,6 +10,14 @@ public sealed class CardSceneEditModeTests
 {
     private CardGameController game;
 
+    private static Sprite FindArtwork(string name)
+    {
+        string path = AssetDatabase.FindAssets("t:Sprite", new[] { "Assets/EfeArts" })
+            .Select(AssetDatabase.GUIDToAssetPath)
+            .Single(asset => System.IO.Path.GetFileNameWithoutExtension(asset) == name);
+        return AssetDatabase.LoadAssetAtPath<Sprite>(path);
+    }
+
     [SetUp]
     public void OpenSavedScene()
     {
@@ -119,10 +127,14 @@ public sealed class CardSceneEditModeTests
         var hover = prefab.GetComponent<CardHover>();
         Assert.That(hover, Is.Not.Null);
         Assert.That(hover.Details, Is.Not.Null);
-        Assert.That(hover.Details.localScale, Is.EqualTo(Vector3.one * (card.IsPerson ? 0.52f : 0.8f)));
-        Assert.That(hover.Details.GetComponentsInChildren<Image>(true).Length, Is.EqualTo(2));
-        Assert.That(hover.Details.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true).Length, Is.EqualTo(4));
+        bool product = card.Kind == CardKind.Upgrade;
+        Assert.That(hover.Details.localScale, Is.EqualTo(Vector3.one * (product ? 1f : card.IsPerson ? 0.7176f : 0.8f)));
+        Assert.That(hover.Details.GetComponentsInChildren<Image>(true).Length, Is.EqualTo(product ? 0 : 2));
+        Assert.That(hover.Details.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true).Length, Is.EqualTo(product ? 1 : 4));
         Assert.That(hover.Details.GetComponent<CanvasGroup>().blocksRaycasts, Is.False);
+        var motion = new SerializedObject(prefab.GetComponent<CardFeedback>());
+        Assert.That(motion.FindProperty("dragTiltDegrees").floatValue, Is.EqualTo(4f));
+        Assert.That(motion.FindProperty("tiltSmoothSeconds").floatValue, Is.GreaterThan(0f));
         foreach (var graphic in hover.Details.GetComponentsInChildren<Graphic>(true))
             Assert.That(graphic.raycastTarget, Is.False, name + ": info panels must not intercept dragging.");
         if (name == "HouseCard")
@@ -134,15 +146,41 @@ public sealed class CardSceneEditModeTests
             Assert.That(prefab.transform.Find("FolderArt/WorkerPockets"), Is.Null);
             Assert.That(prefab.GetComponentsInChildren<WorkerSlot>(true), Is.Empty);
             Assert.That(prefab.GetComponentsInChildren<HouseUpgradeSlot>(true).All(slot => !slot.Filled), Is.True);
+            foreach (var slot in prefab.GetComponentsInChildren<HouseUpgradeSlot>(true))
+            {
+                var presentation = new SerializedObject(slot);
+                foreach (string field in new[] { "installPreview", "installCanvas", "installGlow" })
+                    Assert.That(presentation.FindProperty(field).objectReferenceValue, Is.Not.Null);
+                Assert.That(slot.transform.Find("InstallPreview").gameObject.activeSelf, Is.False);
+                Assert.That(slot.transform.Find("InstallGlow").GetComponent<Image>().enabled, Is.False);
+            }
         }
         if (name == "FactoryCard")
         {
             Assert.That(prefab.GetComponent<FactoryProduction>(), Is.Not.Null);
+            var production = new SerializedObject(prefab.GetComponent<FactoryProduction>());
+            Assert.That(production.FindProperty("educatedWorkerMultiplier").floatValue, Is.EqualTo(1.8f));
             var folder = prefab.transform.Find("FolderArt");
             Assert.That(folder.Find("ProductionStatus"), Is.Not.Null);
             Assert.That(folder.Find("BlueprintInput"), Is.Not.Null);
             Assert.That(folder.Find("ProductionStatus").GetSiblingIndex(), Is.LessThan(folder.Find("WorkerPockets").GetSiblingIndex()));
             Assert.That(folder.Find("BlueprintInput").GetSiblingIndex(), Is.LessThan(folder.Find("WorkerPockets").GetSiblingIndex()));
+        }
+        if (card.Kind == CardKind.Factory || card.Kind == CardKind.ResearchCenter)
+        {
+            Assert.That(prefab.GetComponent<BuildingWorkEffects>(), Is.Not.Null);
+            Assert.That(prefab.transform.Find("WorkEffects").GetComponent<CanvasGroup>().alpha, Is.Zero);
+            Assert.That(prefab.transform.Find("WorkEffects").GetComponentsInChildren<CardSoftGraphic>(true).All(graphic => !graphic.raycastTarget), Is.True);
+        }
+        if (card.Kind == CardKind.Blueprint)
+        {
+            var effects = prefab.GetComponent<BlueprintDiscoveryEffects>();
+            Assert.That(effects, Is.Not.Null);
+            Assert.That(effects.Trail.gameObject.activeSelf, Is.False);
+            Assert.That(effects.Trail.GetComponent<CanvasRenderer>(), Is.Not.Null);
+            var presentation = new SerializedObject(effects);
+            foreach (string field in new[] { "card", "feedback", "revealArea", "flash", "rim", "shine", "trail", "flightCanvas", "flightRaycaster" })
+                Assert.That(presentation.FindProperty(field).objectReferenceValue, Is.Not.Null);
         }
         if (acceptsPeople)
         {
@@ -152,6 +190,11 @@ public sealed class CardSceneEditModeTests
             {
                 Assert.That(prefab.transform.Find("ProgressBar/BlueProgress"), Is.Not.Null);
                 Assert.That(prefab.transform.Find("WorkStatus"), Is.Not.Null);
+                var station = new SerializedObject(card.Station);
+                Assert.That(station.FindProperty("progressRoot").objectReferenceValue,
+                    Is.SameAs(prefab.transform.Find("ProgressBar")), name + ": progress root must be saved in the prefab.");
+                Assert.That(station.FindProperty("progressFill").objectReferenceValue,
+                    Is.SameAs(prefab.transform.Find("ProgressBar/BlueProgress").GetComponent<Image>()));
             }
             foreach (var slot in prefab.GetComponentsInChildren<WorkerSlot>(true))
             {
@@ -169,6 +212,17 @@ public sealed class CardSceneEditModeTests
         else Assert.That(card.Station, Is.Null);
         if (card.Kind == CardKind.Upgrade)
         {
+            var title = hover.Details.Find("ProductName").GetComponent<TMPro.TextMeshProUGUI>();
+            Assert.That(title.color, Is.EqualTo(Color.white));
+            Assert.That(title.fontSharedMaterial.GetFloat(TMPro.ShaderUtilities.ID_OutlineWidth), Is.GreaterThan(0f));
+            Assert.That(hover.Details.anchorMin, Is.EqualTo(new Vector2(0.5f, 1f)));
+            Assert.That(hover.Details.pivot, Is.EqualTo(new Vector2(0.5f, 0f)));
+            var whiteOutline = prefab.transform.Find("HoverOutline").GetComponent<Image>();
+            Assert.That(whiteOutline.enabled, Is.False);
+            Assert.That(whiteOutline.color, Is.EqualTo(Color.white));
+            Assert.That(whiteOutline.fillCenter, Is.False);
+            Assert.That(whiteOutline.raycastTarget, Is.False);
+            Assert.That(new SerializedObject(hover).FindProperty("hoverOutline").objectReferenceValue, Is.SameAs(whiteOutline));
             var outline = prefab.transform.Find("NewItemOutline").GetComponent<Image>();
             Assert.That(outline, Is.Not.Null);
             Assert.That(outline.enabled, Is.False);
@@ -180,19 +234,19 @@ public sealed class CardSceneEditModeTests
             var artwork = prefab.GetComponentInChildren<UpgradeIcon>(true).Artwork;
             string spriteName = card.UpgradeType == UpgradeKind.RailSystem ? "Siesmic Isolator logo" :
                 card.UpgradeType == UpgradeKind.Breakwater ? "Elevated Floor Logo" : "Fire Extingusiher Logo";
-            Assert.That(artwork, Is.SameAs(AssetDatabase.LoadAssetAtPath<Sprite>("Assets/EfeArts/" + spriteName + ".png")));
+            Assert.That(artwork, Is.SameAs(FindArtwork(spriteName)));
         }
         if (card.Kind == CardKind.Blueprint)
         {
             string art = new[] { "Seismic Big Card (1)", "Elevated Floor Big Card", "Detector Big Card" }[(int)card.UpgradeType - 1];
             Assert.That(prefab.GetComponentInChildren<UpgradeIcon>(true).Artwork,
-                Is.SameAs(AssetDatabase.LoadAssetAtPath<Sprite>("Assets/EfeArts/" + art + ".png")));
+                Is.SameAs(FindArtwork(art)));
             Assert.That(prefab.transform.Find("BlueprintTitle").GetComponent<TMPro.TextMeshProUGUI>().raycastTarget, Is.False);
         }
         if (card.IsPerson)
         {
             string artName = card.Kind == CardKind.Person ? "People Card Small" : "Educated People Card Small";
-            var sprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/EfeArts/" + artName + ".png");
+            var sprite = FindArtwork(artName);
             var artwork = prefab.transform.Find("Artwork").GetComponent<Image>();
             Assert.That(artwork.sprite, Is.SameAs(sprite));
             Assert.That(artwork.rectTransform.sizeDelta, Is.EqualTo(sprite.rect.size), "Use the supplied artwork at native size.");
@@ -247,7 +301,7 @@ public sealed class CardSceneEditModeTests
             var slot = game.Vault.SlotFor((UpgradeKind)(i + 1));
             Assert.That(slot, Is.Not.Null);
             string art = new[] { "Seismic Big Card (1)", "Elevated Floor Big Card", "Detector Big Card" }[i];
-            var sprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/EfeArts/" + art + ".png");
+            var sprite = FindArtwork(art);
             Assert.That(slot.CardRect.Find("CardSymbol").GetComponent<UpgradeIcon>().Artwork, Is.SameAs(sprite));
             Assert.That(choice.Find("BlueprintOption" + i + "/CardPreview/CardSymbol").GetComponent<UpgradeIcon>().Artwork, Is.SameAs(sprite));
             var data = new SerializedObject(slot);

@@ -48,6 +48,26 @@ public sealed partial class CardGamePlayModeTests
                 Assert.That(RectTransformUtility.WorldToScreenPoint(null, point).y, Is.GreaterThanOrEqualTo(0f));
         }
         dock.SetExpanded(true, true);
+        var savedUI = UIIds(game);
+        foreach (var product in products.GroupBy(card => card.UpgradeType).Select(group => group.First()))
+        {
+            Hover(product, true);
+            yield return new WaitForSecondsRealtime(0.32f);
+            var details = product.GetComponent<CardHover>().Details;
+            var name = details.Find("ProductName").GetComponent<TMPro.TextMeshProUGUI>();
+            Assert.That(details.gameObject.activeSelf, Is.True);
+            Assert.That(name.text, Is.EqualTo(game.RecipeFor(product.UpgradeType).title));
+            Assert.That(name.color, Is.EqualTo(Color.white));
+            Assert.That(product.transform.Find("HoverOutline").GetComponent<Image>().enabled, Is.True);
+            Assert.That(product.IsNewProduct, Is.True);
+            Assert.That(details.GetComponent<CanvasGroup>().blocksRaycasts, Is.False);
+            Assert.That(UIIds(game), Is.EqualTo(savedUI), "Hover must reuse the product's saved label and outline.");
+            if (product.UpgradeType == UpgradeKind.Fire)
+                yield return CaptureCanvas(Path.Combine(Application.dataPath, "../Library/CardGameTestResults/factory-product-name-hover.png"), product.gameObject);
+            Hover(product, false);
+            Assert.That(details.gameObject.activeSelf, Is.False);
+            Assert.That(product.transform.Find("HoverOutline").GetComponent<Image>().enabled, Is.False);
+        }
         var first = products[0];
         Hover(first, true);
         yield return new WaitForSecondsRealtime(0.32f);
@@ -65,6 +85,12 @@ public sealed partial class CardGamePlayModeTests
         Assert.That(first.IsNewProduct, Is.False);
         Assert.That(first.transform.Find("NewItemOutline").GetComponent<Image>().enabled, Is.False);
         first.OnPointerUp(pointer);
+        Hover(first, true);
+        yield return new WaitForSecondsRealtime(0.32f);
+        Assert.That(first.transform.Find("HoverOutline").GetComponent<Image>().enabled, Is.True,
+            "Previously acknowledged products still need their white hover outline.");
+        Assert.That(first.transform.Find("NewItemOutline").GetComponent<Image>().enabled, Is.False);
+        Hover(first, false);
         Assert.That(products.Skip(1).All(card => card.IsNewProduct), Is.True, "A click acknowledges only that product.");
         var house = game.Cards.First(card => card.Kind == CardKind.House).GetComponent<HouseUpgrades>();
         house.TryInstall(first);

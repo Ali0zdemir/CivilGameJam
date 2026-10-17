@@ -54,13 +54,23 @@ namespace CivilGameJam.Cards
         public BlueprintVault Vault => vault;
         public CardSidebar Sidebar => sidebar;
         public bool IsChoosingBlueprint => choosingStation != null;
-        public bool IsDraggingAnyCard => draggedCard != null;
-        public DraggableCard DraggedCard => draggedCard;
-        public bool HasActiveWorkerEntry
+        public bool HasUndiscoveredBlueprints
         {
             get
             {
-                foreach (var card in cards) if (card != null && card.Station != null && card.Station.IsReceivingWorker) return true;
+                foreach (var option in blueprints)
+                    if (!vault.IsDiscovered(option.prefab.GetComponent<DraggableCard>().UpgradeType)) return true;
+                return false;
+            }
+        }
+        public bool IsDraggingAnyCard => draggedCard != null;
+        public DraggableCard DraggedCard => draggedCard;
+        public bool HasActiveCardAnimation
+        {
+            get
+            {
+                foreach (var card in cards)
+                    if (card != null && ((card.Station != null && card.Station.IsAnimatingWorkers) || card.IsInstallingUpgrade)) return true;
                 return false;
             }
         }
@@ -153,8 +163,9 @@ namespace CivilGameJam.Cards
         {
             var recipe = RecipeFor(blueprint.UpgradeType);
             if (recipe == null) return;
-            cards.Remove(blueprint);
-            Destroy(blueprint.gameObject);
+            // A discovery is permanent. The same authored plan returns to the
+            // Vault after each production order and can be used again.
+            ReturnToTable(blueprint, origin);
             for (int i = 0; i < Mathf.Max(1, recipe.productCount); i++)
             {
                 var product = Spawn(recipe.productPrefab);
@@ -212,7 +223,9 @@ namespace CivilGameJam.Cards
                 {
                     if (target.Station != null && target.Station.TryAssign(card)) return;
                     RestoreRejectedDrop(card, dragStart);
-                    ShowMessage(target.Station == null ? "This building does not accept workers." :
+                    ShowMessage(target.Kind == CardKind.ResearchCenter && !HasUndiscoveredBlueprints
+                        ? "All blueprints are discovered. Reuse them from the Vault." :
+                        target.Station == null ? "This building does not accept workers." :
                         target.Kind == CardKind.School && card.Kind == CardKind.EducatedPerson
                             ? "This person is already educated." : "This building holds up to 2 workers.");
                     return;
@@ -289,7 +302,13 @@ namespace CivilGameJam.Cards
         public void ClampToTable(DraggableCard card)
         {
             if (sidebar.Owns(card) && !card.IsDragging) return;
-            Vector2 half = Vector2.Scale(card.Rect.rect.size, card.LayoutScale) * 0.5f;
+            Vector2 half = Vector2.Scale(card.Rect.rect.size, card.IsDragging ? card.Rect.localScale : card.LayoutScale) * 0.5f;
+            if (card.IsDragging)
+            {
+                float angle = card.Rect.localEulerAngles.z * Mathf.Deg2Rad;
+                float cosine = Mathf.Abs(Mathf.Cos(angle)), sine = Mathf.Abs(Mathf.Sin(angle));
+                half = new Vector2(half.x * cosine + half.y * sine, half.x * sine + half.y * cosine);
+            }
             Rect area = CardLayer.rect;
             if (card.IsParkedInFactoryOutput && !card.IsDragging && factoryOutputArea != null)
                 area = BoundsInCardLayer(factoryOutputArea);
@@ -310,7 +329,11 @@ namespace CivilGameJam.Cards
 
         public void ReturnToTable(DraggableCard worker, Vector3 origin, bool animate = true)
         {
-            if (worker.Kind == CardKind.Blueprint && vault.Store(worker, animate ? origin : (Vector3?)null)) return;
+            if (worker.Kind == CardKind.Blueprint && vault.Store(worker, animate ? origin : (Vector3?)null))
+            {
+                if (animate) worker.GetComponent<BlueprintDiscoveryEffects>()?.BeginTransfer();
+                return;
+            }
             worker.StopFlight();
             worker.gameObject.SetActive(true);
             worker.Rect.SetParent(CardLayer, true);
@@ -322,14 +345,15 @@ namespace CivilGameJam.Cards
             RefreshPopulation();
         }
 
-        public void Graduate(DraggableCard student, Vector3 schoolPosition)
+        public DraggableCard Graduate(DraggableCard student, Vector3 schoolPosition, bool animate = true)
         {
             cards.Remove(student);
             Destroy(student.gameObject);
             var educated = Spawn(educatedPersonPrefab);
             sidebar.TransferRememberedPosition(student, educated);
-            ReturnToTable(educated, schoolPosition);
+            ReturnToTable(educated, schoolPosition, animate);
             ShowMessage("Education complete: 1 person became educated.");
+            return educated;
         }
 
         private Vector2 FindFreePosition(DraggableCard incoming)
@@ -416,9 +440,17 @@ namespace CivilGameJam.Cards
         public void ShowBlueprintChoice(BuildingStation station)
         {
             if (IsChoosingBlueprint) return;
+            if (!HasUndiscoveredBlueprints) { station.FinishResearch(); return; }
             CloseInspection();
             choosingStation = station;
             ClearPreview();
+            foreach (var option in blueprints)
+            {
+                bool discovered = vault.IsDiscovered(option.prefab.GetComponent<DraggableCard>().UpgradeType);
+                option.button.interactable = !discovered;
+                var label = option.button.transform.Find("Name")?.GetComponent<TextMeshProUGUI>();
+                if (label != null) label.text = option.title + (discovered ? "\nDISCOVERED" : string.Empty);
+            }
             choicePanel.SetAsLastSibling();
             choicePanel.gameObject.SetActive(true);
         }
@@ -426,12 +458,14 @@ namespace CivilGameJam.Cards
         public void SelectBlueprint(int index)
         {
             if (!IsChoosingBlueprint || index < 0 || index >= blueprints.Length) return;
+            if (vault.IsDiscovered(blueprints[index].prefab.GetComponent<DraggableCard>().UpgradeType)) return;
             var station = choosingStation;
             choosingStation = null;
             choicePanel.gameObject.SetActive(false);
-            station.FinishResearch();
             var blueprint = Spawn(blueprints[index].prefab);
             vault.Store(blueprint, station.Card.Rect.position);
+            station.FinishResearch();
+            blueprint.GetComponent<BlueprintDiscoveryEffects>()?.BeginDiscovery();
             ShowMessage(blueprints[index].title + " discovered. Blueprint added to the Vault.");
         }
 

@@ -2090,6 +2090,10 @@ MonoBehaviour:
   shadow: {fileID: 3933722985012512527}
   hoverScale: 1.21125
   hoverSeconds: 0.24
+  dragTiltDegrees: 4
+  tiltSmoothSeconds: 0.11
+  placementSquash: 0.035
+  placementSeconds: 0.34
 --- !u!114 &7254149656318839340
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2156,6 +2160,7 @@ MonoBehaviour:
   vaultSlot: {fileID: 0}
   feedback: {fileID: 7526396567725964346}
   details: {fileID: 4714427255207597670}
+  hoverOutline: {fileID: 0}
 --- !u!1 &5240226754852324774
 GameObject:
   m_ObjectHideFlags: 0

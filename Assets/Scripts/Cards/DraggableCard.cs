@@ -20,15 +20,20 @@ namespace CivilGameJam.Cards
         [SerializeField] private int initialGridCell = -1;
         private RectTransform rect;
         private bool pressed;
-        private Vector2 dragScreenOffset;
+        private Vector2 dragPointer;
+        private Vector3 dragGrip;
+        private Camera dragCamera;
         private Transform dragStartParent;
         private Vector3 dragStartLocal;
         private Coroutine flight;
+        private WorkerSlot returningFrom;
         private Transform flightSpace;
         private Vector3 flightOrigin;
         private Vector3 flightDestination;
         private int pointerId;
         private CardHover hover;
+        private BlueprintDiscoveryEffects discoveryEffects;
+        private HouseUpgrades houseUpgrades;
 
         public CardKind Kind => kind;
         public RectTransform Rect => rect != null ? rect : rect = (RectTransform)transform;
@@ -42,15 +47,17 @@ namespace CivilGameJam.Cards
         public int InitialGridCell => initialGridCell;
         public BuildingStation AssignedTo { get; internal set; }
         public bool IsDragging { get; private set; }
-        public bool IsFlying => flight != null;
+        public bool IsFlying => flight != null || IsReturningFromFolder;
+        public bool IsReturningFromFolder => returningFrom != null;
         public bool IsNewProduct { get; private set; }
         public bool IsParkedInFactoryOutput { get; internal set; }
+        public bool IsInstallingUpgrade => houseUpgrades != null && houseUpgrades.IsInstalling;
         public bool IsPerson => Kind == CardKind.Person || Kind == CardKind.EducatedPerson;
         public bool IsBuilding => Kind == CardKind.House || Kind == CardKind.School ||
             Kind == CardKind.Factory || Kind == CardKind.ResearchCenter;
         public Vector3 LayoutScale => feedback.LayoutScale;
         public bool CanShowHover => game != null && !game.IsChoosingBlueprint && !IsDragging &&
-            !game.IsDraggingAnyCard && !IsStored && flight == null && (station == null || !station.IsReceivingWorker);
+            !game.IsDraggingAnyCard && !IsStored && !IsFlying && !IsInstallingUpgrade && (station == null || !station.IsAnimatingWorkers);
         public Vector2 TablePosition => game != null
             ? (Vector2)game.CardLayer.InverseTransformPoint(flight != null
                 ? flightSpace.TransformPoint(flightDestination) : Rect.position) : Rect.anchoredPosition;
@@ -73,6 +80,8 @@ namespace CivilGameJam.Cards
             game = owner;
             canvasGroup = GetComponent<CanvasGroup>();
             hover = GetComponent<CardHover>();
+            discoveryEffects = GetComponent<BlueprintDiscoveryEffects>();
+            houseUpgrades = GetComponent<HouseUpgrades>();
             // Normalize anchors without moving the editor-authored card on screen.
             Vector3 position = Rect.position;
             Rect.anchorMin = Rect.anchorMax = new Vector2(0.5f, 0.5f);
@@ -84,19 +93,20 @@ namespace CivilGameJam.Cards
 
         public void SetLayoutScale(Vector3 scale) => feedback.SetLayoutScale(scale);
 
-        public void MatchArtworkWidth(float worldWidth)
+        public void MatchArtworkWidth(float worldWidth, Quaternion? worldRotation = null)
         {
             var artwork = transform.Find("Artwork") as RectTransform ?? Rect;
             float width = artwork.rect.width * artwork.lossyScale.x;
             if (width <= 0f) return;
             feedback.SetDisplayedScale(Rect.localScale.x / LayoutScale.x * worldWidth / width);
+            if (worldRotation.HasValue) feedback.SetDisplayedRotation(Quaternion.Inverse(Rect.parent.rotation) * worldRotation.Value);
             feedback.Release();
         }
 
         public void OnPointerDown(PointerEventData eventData)
         {
             if (eventData.button != PointerEventData.InputButton.Left || pressed || IsDragging ||
-                IsStored || game.IsChoosingBlueprint) return;
+                IsStored || IsReturningFromFolder || game.IsChoosingBlueprint) return;
             pressed = true;
             pointerId = eventData.pointerId;
             AcknowledgeProduct();
@@ -117,7 +127,7 @@ namespace CivilGameJam.Cards
         public void OnBeginDrag(PointerEventData eventData)
         {
             if (eventData.button != PointerEventData.InputButton.Left || IsDragging ||
-                IsStored || game.IsChoosingBlueprint ||
+                IsStored || IsReturningFromFolder || game.IsChoosingBlueprint ||
                 (pressed && pointerId != eventData.pointerId)) return;
 
             // Closing an edge-clamped hover restores its layout position. Keep the visible
@@ -140,25 +150,38 @@ namespace CivilGameJam.Cards
             canvasGroup.blocksRaycasts = false;
             canvasGroup.alpha = 0.97f;
             feedback.PickUp();
-            dragScreenOffset = RectTransformUtility.WorldToScreenPoint(eventData.pressEventCamera, Rect.position) - eventData.position;
+            dragPointer = eventData.position;
+            dragCamera = eventData.pressEventCamera;
+            RectTransformUtility.ScreenPointToWorldPointInRectangle(game.CardLayer, dragPointer, dragCamera, out var grip);
+            dragGrip = Rect.InverseTransformPoint(grip);
+            feedback.BeginDragMotion();
         }
 
         public void OnDrag(PointerEventData eventData)
         {
             if (!IsDragging || eventData.pointerId != pointerId) return;
-            if (RectTransformUtility.ScreenPointToWorldPointInRectangle(game.CardLayer, eventData.position + dragScreenOffset,
-                    eventData.pressEventCamera, out var pointer))
+            Vector3 previous = Rect.position;
+            dragPointer = eventData.position;
+            KeepDragGrip();
+            feedback.TrackDrag(game.CardLayer.InverseTransformVector(Rect.position - previous));
+            game.PreviewDrop(this, eventData.position, eventData.pressEventCamera);
+        }
+
+        internal void KeepDragGrip()
+        {
+            if (!IsDragging || game == null) return;
+            if (RectTransformUtility.ScreenPointToWorldPointInRectangle(game.CardLayer, dragPointer, dragCamera, out var pointer))
             {
-                Rect.position = pointer;
+                Rect.position += pointer - Rect.TransformPoint(dragGrip);
                 game.ClampToTable(this);
             }
-            game.PreviewDrop(this, eventData.position, eventData.pressEventCamera);
         }
 
         public void OnEndDrag(PointerEventData eventData)
         {
             if (!IsDragging || eventData.pointerId != pointerId) return;
             IsDragging = false;
+            feedback.EndDragMotion();
             game.EndCardDrag(this);
             pressed = false;
             canvasGroup.blocksRaycasts = true;
@@ -211,9 +234,28 @@ namespace CivilGameJam.Cards
 
         public void StopFlight()
         {
+            discoveryEffects?.StopEffects();
+            if (returningFrom != null) returningFrom.CancelExit(this);
             if (flight == null) return;
             StopCoroutine(flight);
             flight = null;
+        }
+
+        internal void BeginFolderReturn(WorkerSlot source)
+        {
+            StopFlight();
+            returningFrom = source;
+            feedback.SetDisplayedScale(1f);
+            canvasGroup.alpha = 0f;
+            canvasGroup.blocksRaycasts = false;
+        }
+
+        internal void EndFolderReturn(WorkerSlot source)
+        {
+            if (returningFrom != source) return;
+            returningFrom = null;
+            canvasGroup.alpha = 1f;
+            canvasGroup.blocksRaycasts = true;
         }
 
         private IEnumerator Fly()
@@ -225,9 +267,11 @@ namespace CivilGameJam.Cards
                 float ease = 1f - (1f - t) * (1f - t);
                 Rect.localPosition = Vector3.Lerp(flightOrigin, flightDestination, ease) +
                                      Vector3.up * (Mathf.Sin(t * Mathf.PI) * 65f);
+                discoveryEffects?.SetFlightProgress(t);
                 yield return null;
             }
             Rect.localPosition = flightDestination;
+            discoveryEffects?.StopEffects();
             flight = null;
         }
     }

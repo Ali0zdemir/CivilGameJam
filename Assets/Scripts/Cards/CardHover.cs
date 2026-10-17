@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.UI;
 
 namespace CivilGameJam.Cards
 {
@@ -10,6 +11,7 @@ namespace CivilGameJam.Cards
         [SerializeField] private BlueprintVaultSlot vaultSlot;
         [SerializeField] private CardFeedback feedback;
         [SerializeField] private RectTransform details;
+        [SerializeField] private Image hoverOutline;
         private RectTransform viewport;
         private Transform originalParent;
         private Vector2 originalPosition;
@@ -35,6 +37,7 @@ namespace CivilGameJam.Cards
             detailPivot = details.pivot;
             detailPosition = details.anchoredPosition;
             details.gameObject.SetActive(false);
+            if (hoverOutline != null) hoverOutline.enabled = false;
         }
 
         public void OnPointerEnter(PointerEventData eventData) => selected = true;
@@ -81,6 +84,7 @@ namespace CivilGameJam.Cards
                 }
                 feedback.SetHovered(true);
                 details.gameObject.SetActive(true);
+                if (hoverOutline != null) hoverOutline.enabled = true;
             }
 
             // The saved layout stays intact; only the expanded preview is kept inside the display.
@@ -101,6 +105,7 @@ namespace CivilGameJam.Cards
 
         private void Hide()
         {
+            if (hoverOutline != null) hoverOutline.enabled = false;
             if (!showing) return;
             showing = false;
             if (Preview.parent == originalParent) Preview.anchoredPosition = originalPosition;

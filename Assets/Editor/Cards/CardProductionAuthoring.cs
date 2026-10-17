@@ -17,6 +17,51 @@ namespace CivilGameJam.Cards.Editor
         private static readonly string[] Titles = { "Rail System", "Breakwater", "Fire Protection" };
         private static readonly Color Ink = new Color(0.22f, 0.19f, 0.14f);
         private static readonly Color Gold = new Color(0.85f, 0.64f, 0.26f);
+        private const string FactoryWorkerInfo = "Workers combine effort.\nEducated workers are faster.\nWorkers are kept.";
+        private const string EducatedWorkerInfo = "Works faster in research\nand factory production.";
+
+        [MenuItem("Tools/Card Game/Save Factory Worker Rates")]
+        public static void SaveWorkerRatesForBatch()
+        {
+            if (EditorApplication.isPlayingOrWillChangePlaymode) return;
+            Edit("FactoryCard", root =>
+            {
+                SetWorkerRate(root.GetComponent<FactoryProduction>());
+                SetWorkerInfo(root, FactoryWorkerInfo);
+            });
+            Edit("EducatedPeopleCard", root => SetWorkerInfo(root, EducatedWorkerInfo));
+            AssetDatabase.SaveAssets();
+            var scene = EditorSceneManager.OpenScene("Assets/2DCardScene.unity");
+            var game = Object.FindFirstObjectByType<CardGameController>();
+            foreach (var card in game.GetComponentsInChildren<DraggableCard>(true))
+            {
+                if (card.Kind == CardKind.Factory)
+                {
+                    SetWorkerRate(card.GetComponent<FactoryProduction>());
+                    SetWorkerInfo(card.gameObject, FactoryWorkerInfo);
+                }
+                else if (card.Kind == CardKind.EducatedPerson) SetWorkerInfo(card.gameObject, EducatedWorkerInfo);
+            }
+            EditorSceneManager.MarkSceneDirty(scene);
+            EditorSceneManager.SaveScene(scene);
+            AssetDatabase.SaveAssets();
+            Debug.Log("Saved additive factory worker rates: normal 1, educated 1.8, and existing English information panels.");
+        }
+
+        private static void SetWorkerRate(FactoryProduction factory)
+        {
+            var data = new SerializedObject(factory);
+            data.FindProperty("educatedWorkerMultiplier").floatValue = 1.8f;
+            if (data.ApplyModifiedPropertiesWithoutUndo() && PrefabUtility.IsPartOfPrefabInstance(factory))
+                PrefabUtility.RecordPrefabInstancePropertyModifications(factory);
+        }
+
+        private static void SetWorkerInfo(GameObject root, string text)
+        {
+            var label = root.transform.Find("HoverDetails/Properties/Description").GetComponent<TextMeshProUGUI>();
+            label.text = text;
+            if (PrefabUtility.IsPartOfPrefabInstance(label)) PrefabUtility.RecordPrefabInstancePropertyModifications(label);
+        }
 
         public static void BuildForBatch()
         {
@@ -104,7 +149,7 @@ namespace CivilGameJam.Cards.Editor
             Refs(factory, ("station", station), ("productionStatus", status), ("blueprintLabel", label),
                 ("blueprintIcon", icon), ("progressRoot", root.transform.Find("ProgressBar")),
                 ("progressFill", root.transform.Find("ProgressBar/BlueProgress").GetComponent<Image>()), ("outline", root.GetComponent<Outline>()));
-            SetInfo(root, "Production", "Requires a blueprint\nand at least one worker.", "Each blueprint: 2 items\nWorkers are kept.");
+            SetInfo(root, "Production", "Requires a blueprint\nand at least one worker.", FactoryWorkerInfo);
         }
 
         private static void StyleHouse(GameObject root)
