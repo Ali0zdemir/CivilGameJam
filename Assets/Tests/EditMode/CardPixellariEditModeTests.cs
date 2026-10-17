@@ -12,7 +12,7 @@ public sealed class CardPixellariEditModeTests
     [Test]
     public void EverySavedGameLabelAndTheDefaultUsePixellariWithNoMissingGlyphs()
     {
-        var font = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>("Assets/EfeArts/Pixellari SDF.asset");
+        var font = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>("Assets/EfeArts/Fonts/Pixellari SDF.asset");
         Assert.That(TMP_Settings.defaultFontAsset, Is.SameAs(font));
         Assert.That(font.sourceFontFile, Is.Not.Null, "Builds need the source for changing status labels.");
         var checkedLabels = 0;

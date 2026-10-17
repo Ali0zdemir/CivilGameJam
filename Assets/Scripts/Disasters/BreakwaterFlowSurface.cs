@@ -80,7 +80,7 @@ namespace CivilGameJam.Disasters
                 ripple *= Mathf.SmoothStep(0f, 1f, (end - pz) / 0.3f);
                 var index = z * (Columns + 1) + x;
                 // The flanks fall to sea level, avoiding elevated, detached water sheets.
-                var level = Mathf.Lerp(sea, ground + depth + ripple, side);
+                var level = Mathf.Lerp(sea, ground + Mathf.Clamp(depth + ripple, 0f, crestDepth), side);
                 var streak = Mathf.Sin(pz * 3f - elapsed * speed + px * 0.5f) * 0.035f;
                 var color = new Color(0.1f * head * tail, 0.36f + depth / Mathf.Max(0.01f, crestDepth) * 0.22f + streak, 1f, alpha);
                 // Both meshes share the rendered inlet height and tint, including the side corners.

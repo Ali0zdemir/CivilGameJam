@@ -305,7 +305,7 @@ namespace CivilGameJam.Disasters
                 var color = new Color(white, 0.3f + streak + 0.2f * height / Mathf.Max(0.01f, targetDepth),
                     1f, Mathf.SmoothStep(0f, 1f, height / 0.025f));
                 corners[z * (columns + 1) + x] = new WaterVertex(
-                    new Vector3(area.min.x + x * dx, floor + height + ripple, area.min.z + z * dz), Vector3.up, color);
+                    new Vector3(area.min.x + x * dx, floor + Mathf.Clamp(height + ripple, 0f, maximumSurgeDepth), area.min.z + z * dz), Vector3.up, color);
             }
             // Shared corner shading lets the surface and its fading edge cross cell boundaries smoothly.
             for (var z = 0; z <= rows; z++)
