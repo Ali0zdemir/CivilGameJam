@@ -8,18 +8,23 @@ namespace CivilGameJam.Upgrades
     /// <summary>A thin water layer that spreads over the roof, spills over its edges and drains down the facade.</summary>
     internal sealed class HouseWallRunoff : IDisposable
     {
-        private const int RoofColumns = 20;
-        private const int RoofRows = 20;
-        private const int WallColumns = 20;
-        private const int WallRows = 24;
+        private const int RoofColumns = 10;
+        private const int RoofRows = 10;
+        private const int WallColumns = 10;
+        private const int WallRows = 12;
         private const int RoofCells = RoofColumns * RoofRows;
         private const int FaceCells = WallColumns * WallRows;
-        private const int RoofVertices = (RoofColumns + 1) * (RoofRows + 1);
-        private const int FaceVertices = (WallColumns + 1) * (WallRows + 2);
+        // Keep the original surface detail independently of the simulation grid.
+        private const int RenderRoofColumns = 20, RenderRoofRows = 20;
+        private const int RenderWallColumns = 20, RenderWallRows = 24;
+        private const int MaxSimulationSteps = 4;
+        private const int RoofVertices = (RenderRoofColumns + 1) * (RenderRoofRows + 1);
+        private const int FaceVertices = (RenderWallColumns + 1) * (RenderWallRows + 2);
         private const int VertexCount = RoofVertices + 4 * FaceVertices;
         private const float RoofDiffusion = .014f;
         private const float WallDiffusion = .009f;
         private readonly Transform building;
+        private readonly BuildingModelGeometry modelGeometry;
         private readonly Vector3[] basePoints = new Vector3[VertexCount];
         private readonly Vector3[] baseNormals = new Vector3[VertexCount];
         private readonly Vector3[] vertices = new Vector3[VertexCount];
@@ -48,6 +53,35 @@ namespace CivilGameJam.Upgrades
         private float roofDx, roofDz, roofArea, wallDy, age, stableStep;
         private bool geometryReady;
         private Matrix4x4 surfaceToMesh, surfaceToWorld;
+        private readonly Vector3[] meshBasePoints = new Vector3[VertexCount];
+        private readonly Vector3[] meshOffsetAxes = new Vector3[VertexCount];
+        private readonly Vector4[] ripplePhases = new Vector4[VertexCount];
+        private readonly WaterSample[] samples = new WaterSample[VertexCount];
+        private readonly Vector2[] roofCellCenters = new Vector2[RoofCells];
+        private readonly int[] sourceCells = new int[4 * RoofCells];
+        private readonly float[] sourceWeights = new float[4 * RoofCells];
+        private readonly int[] sourceCounts = new int[4];
+        private readonly List<int> visibleTriangles = new List<int>(14400);
+        private static readonly int[][] SurfaceTriangles = CreateSurfaceTriangles();
+        private static readonly Plane[] ViewPlanes = new Plane[6];
+        private static Camera frustumCamera;
+        private static Matrix4x4 frustumMatrix;
+        private Camera viewCamera;
+        private Matrix4x4 lastViewMatrix, lastBuildingMatrix, projectionToLocal, projectionNormalToWorld;
+        private int visibleFaces = -1;
+        private bool visibilityReady;
+        private Vector2 worldScale;
+        private Vector4 rippleClock;
+
+        private struct WaterSample
+        {
+            public int A, B, C, D;
+            public float X, Y, InverseArea;
+        }
+
+        public bool IsVisible { get; private set; } = true;
+        public int VisibleWallCount { get; private set; }
+        public int LastSimulationSteps { get; private set; }
 
         private struct RoofPanel
         {
@@ -66,12 +100,13 @@ namespace CivilGameJam.Upgrades
         public HouseWallRunoff(Transform house, Transform parent, Material material)
         {
             building = house;
+            modelGeometry = house.GetComponent<BuildingModelGeometry>();
+            viewCamera = Camera.main;
             Visuals = new GameObject("Wall_Runoff"); Visuals.transform.SetParent(parent, false); Visuals.SetActive(false);
             Mesh = new Mesh { name = "Spreading roof and facade water" }; Mesh.MarkDynamic();
-            var triangles = new List<int>();
-            AddGrid(triangles, 0, RoofColumns, RoofRows);
-            for (var face = 0; face < 4; face++) AddGrid(triangles, RoofVertices + face * FaceVertices, WallColumns, WallRows + 1);
-            Mesh.vertices = vertices; Mesh.SetTriangles(triangles, 0);
+            Mesh.vertices = vertices;
+            foreach (var surface in SurfaceTriangles) visibleTriangles.AddRange(surface);
+            Mesh.SetTriangles(visibleTriangles, 0);
             Visuals.AddComponent<MeshFilter>().sharedMesh = Mesh;
             renderer = Visuals.AddComponent<MeshRenderer>(); renderer.sharedMaterial = material;
             renderer.shadowCastingMode = ShadowCastingMode.Off; renderer.receiveShadows = false;
@@ -93,16 +128,87 @@ namespace CivilGameJam.Upgrades
             }
         }
 
+        private static int[][] CreateSurfaceTriangles()
+        {
+            var result = new int[5][];
+            var indices = new List<int>();
+            AddGrid(indices, 0, RenderRoofColumns, RenderRoofRows); result[0] = indices.ToArray();
+            for (var face = 0; face < 4; face++)
+            {
+                indices.Clear();
+                AddGrid(indices, RoofVertices + face * FaceVertices, RenderWallColumns, RenderWallRows + 1);
+                result[face + 1] = indices.ToArray();
+            }
+            return result;
+        }
+
+        public bool RefreshVisibility()
+        {
+            if (building == null) return false;
+            if (viewCamera == null) viewCamera = Camera.main;
+            var matrix = building.localToWorldMatrix;
+            var view = viewCamera != null ? viewCamera.projectionMatrix * viewCamera.worldToCameraMatrix : Matrix4x4.identity;
+            if (visibilityReady && matrix == lastBuildingMatrix && view == lastViewMatrix) return IsVisible;
+            if (!visibilityReady || matrix != lastBuildingMatrix)
+            {
+                projectionToLocal = matrix.inverse;
+                projectionNormalToWorld = projectionToLocal.transpose;
+            }
+            lastBuildingMatrix = matrix; lastViewMatrix = view; visibilityReady = true;
+            var mask = 15;
+            IsVisible = true;
+            if (viewCamera != null)
+            {
+                if (frustumCamera != viewCamera || frustumMatrix != view)
+                {
+                    GeometryUtility.CalculateFrustumPlanes(viewCamera, ViewPlanes);
+                    frustumCamera = viewCamera; frustumMatrix = view;
+                }
+                var extents = body.extents;
+                var worldExtents = new Vector3(
+                    Mathf.Abs(matrix.m00) * extents.x + Mathf.Abs(matrix.m01) * extents.y + Mathf.Abs(matrix.m02) * extents.z,
+                    Mathf.Abs(matrix.m10) * extents.x + Mathf.Abs(matrix.m11) * extents.y + Mathf.Abs(matrix.m12) * extents.z,
+                    Mathf.Abs(matrix.m20) * extents.x + Mathf.Abs(matrix.m21) * extents.y + Mathf.Abs(matrix.m22) * extents.z);
+                IsVisible = GeometryUtility.TestPlanesAABB(ViewPlanes, new Bounds(matrix.MultiplyPoint3x4(body.center), worldExtents * 2f + Vector3.one * .1f));
+                mask = 0;
+                for (var face = 0; face < 4; face++)
+                {
+                    var axis = FaceDirection(face);
+                    var center = body.center + Vector3.Scale(axis, body.extents);
+                    var towardCamera = viewCamera.orthographic ? -viewCamera.transform.forward : viewCamera.transform.position - matrix.MultiplyPoint3x4(center);
+                    if (Vector3.Dot(projectionNormalToWorld.MultiplyVector(axis), towardCamera) > .001f) mask |= 1 << face;
+                }
+            }
+            renderer.enabled = IsVisible;
+            if (mask == visibleFaces) return IsVisible;
+            visibleFaces = mask; VisibleWallCount = 0;
+            visibleTriangles.Clear(); visibleTriangles.AddRange(SurfaceTriangles[0]);
+            for (var face = 0; face < 4; face++)
+            {
+                if (IsFaceVisible(face)) { visibleTriangles.AddRange(SurfaceTriangles[face + 1]); VisibleWallCount++; }
+                else
+                {
+                    Array.Clear(wallWater, face * FaceCells, FaceCells); Array.Clear(wallNext, face * FaceCells, FaceCells);
+                    Array.Clear(wallWet, face * FaceCells, FaceCells); Array.Clear(bottomFlow, face * WallColumns, WallColumns);
+                }
+            }
+            Mesh.SetTriangles(visibleTriangles, 0, false);
+            return IsVisible;
+        }
+
+        private bool IsFaceVisible(int face) => (visibleFaces & (1 << face)) != 0;
+
         public void Rebuild()
         {
             var previousBody = body;
             var previousWater = geometryReady ? (float[])wallWater.Clone() : null;
             var previousWet = geometryReady ? (float[])wallWet.Clone() : null;
             var previousAreas = (float[])faceArea.Clone();
-            body = LocalBounds(building.Find("Structure/Walls").GetComponent<MeshRenderer>());
+            body = modelGeometry != null ? modelGeometry.BodyBounds : LocalBounds(building.Find("Structure/Walls").GetComponent<MeshRenderer>());
             roofPanels.Clear();
             var roofStarted = false;
-            foreach (var name in new[] { "Roof_Left", "Roof_Right", "Roof_Ridge" })
+            if (modelGeometry != null) roof = modelGeometry.RoofBounds;
+            else foreach (var name in new[] { "Roof_Left", "Roof_Right", "Roof_Ridge" })
             {
                 var part = building.Find("Roof/" + name);
                 var bounds = part.GetComponent<MeshFilter>().sharedMesh.bounds;
@@ -118,6 +224,12 @@ namespace CivilGameJam.Upgrades
                 }
             }
             var scale = building.lossyScale;
+            worldScale = new Vector2(Mathf.Abs(scale.x), Mathf.Abs(scale.z));
+            surfaceToWorld = building.localToWorldMatrix;
+            surfaceToMesh = Visuals.transform.worldToLocalMatrix * surfaceToWorld;
+            var mainRoofNormal = Vector3.up;
+            if (modelGeometry != null) modelGeometry.TryProjectRoof(roof.center, out _, out mainRoofNormal);
+            var roofSlope = new Vector2(mainRoofNormal.x, mainRoofNormal.z).magnitude;
             roofDx = roof.size.x * Mathf.Abs(scale.x) / RoofColumns;
             roofDz = roof.size.z * Mathf.Abs(scale.z) / RoofRows;
             roofArea = roofDx * roofDz;
@@ -134,21 +246,35 @@ namespace CivilGameJam.Upgrades
             {
                 var point = RoofPosition((x + .5f) / RoofColumns, (z + .5f) / RoofRows);
                 var index = z * RoofColumns + x;
+                roofCellCenters[index] = new Vector2(point.x * worldScale.x, point.z * worldScale.y);
                 roofValid[index] = TryProjectRoofLocal(point, out _, out var normal);
-                roofVelocity[index] = new Vector2(Mathf.Sign(point.x - roof.center.x) * (.23f + Mathf.Abs(normal.x) * .85f),
-                    Mathf.Sign(point.z - roof.center.z) * .32f);
+                roofVelocity[index] = modelGeometry != null
+                    ? new Vector2(normal.x * .85f + Mathf.Sign(point.x - roof.center.x) * .23f,
+                        normal.z * .85f + Mathf.Sign(point.z - roof.center.z) * .32f)
+                    : new Vector2(Mathf.Sign(point.x - roof.center.x) * (.23f + Mathf.Abs(normal.x) * .85f),
+                        Mathf.Sign(point.z - roof.center.z) * .32f);
             }
-            for (var z = 0; z <= RoofRows; z++)
-            for (var x = 0; x <= RoofColumns; x++)
+            for (var z = 0; z <= RenderRoofRows; z++)
+            for (var x = 0; x <= RenderRoofColumns; x++)
             {
-                var index = z * (RoofColumns + 1) + x;
-                var point = RoofPosition((float)x / RoofColumns, (float)z / RoofRows);
+                var index = z * (RenderRoofColumns + 1) + x;
+                var point = RoofPosition((float)x / RenderRoofColumns, (float)z / RenderRoofRows);
                 if (!TryProjectRoofLocal(point, out var surface, out var normal))
                     TryProjectRoofLocal(Vector3.Lerp(point, roof.center, .01f), out surface, out normal);
                 basePoints[index] = surface; baseNormals[index] = normal;
-                // Increasing V follows both roof slopes from the ridge down to the eaves.
-                var fromRidge = new Vector2((surface.x - roof.center.x) * scale.x, (surface.y - roof.max.y) * scale.y);
-                uvs[index] = new Vector2((point.z - roof.min.z) * Mathf.Abs(scale.z), fromRidge.magnitude);
+                // Flow follows the imported roof's slope, including roofs pitched along Z.
+                if (roofSlope > .05f)
+                {
+                    var alongRidge = Mathf.Abs(mainRoofNormal.z) > Mathf.Abs(mainRoofNormal.x)
+                        ? (point.x - roof.min.x) * Mathf.Abs(scale.x) : (point.z - roof.min.z) * Mathf.Abs(scale.z);
+                    uvs[index] = new Vector2(alongRidge, Mathf.Max(0f, roof.max.y - surface.y) * Mathf.Abs(scale.y) / roofSlope);
+                }
+                else
+                {
+                    var fromRidge = new Vector2((surface.x - roof.center.x) * scale.x, (surface.y - roof.max.y) * scale.y);
+                    uvs[index] = new Vector2((point.z - roof.min.z) * Mathf.Abs(scale.z), fromRidge.magnitude);
+                }
+                CacheVertex(index, RenderRoofColumns, RenderRoofRows, x, z, RoofColumns, RoofRows, 0, 1f / roofArea);
             }
             var surfaces = new List<Bounds>();
             foreach (var part in building.GetComponentsInChildren<MeshRenderer>())
@@ -157,31 +283,34 @@ namespace CivilGameJam.Upgrades
             {
                 var direction = FaceDirection(face); var across = face < 2 ? Vector3.forward : Vector3.right;
                 var padding = .005f / building.TransformVector(direction).magnitude;
-                for (var column = 0; column <= WallColumns; column++)
+                for (var column = 0; column <= RenderWallColumns; column++)
                 {
-                    var u = (float)column / WallColumns;
+                    var u = (float)column / RenderWallColumns;
                     var offset = Mathf.Lerp(face < 2 ? body.min.z : body.min.x, face < 2 ? body.max.z : body.max.x, u);
                     var lip = across * offset + direction * (Vector3.Dot(roof.center, direction) + (face < 2 ? roof.extents.x : roof.extents.z));
                     if (!TryProjectRoofLocal(lip, out var lipPoint, out var lipNormal))
                         TryProjectRoofLocal(Vector3.Lerp(lip, roof.center, .01f), out lipPoint, out lipNormal);
-                    for (var row = 0; row <= WallRows + 1; row++)
+                    // Antennas and rooftop plant must not extend the facade water above its eaves.
+                    var wallTop = modelGeometry != null ? Mathf.Min(body.max.y, lipPoint.y) : body.max.y;
+                    for (var row = 0; row <= RenderWallRows + 1; row++)
                     {
-                        var index = RoofVertices + face * FaceVertices + row * (WallColumns + 1) + column;
+                        var index = RoofVertices + face * FaceVertices + row * (RenderWallColumns + 1) + column;
                         if (row == 0) { basePoints[index] = lipPoint; baseNormals[index] = lipNormal; }
                         else
                         {
-                            var height = Mathf.Lerp(body.max.y, body.min.y, (float)(row - 1) / WallRows);
+                            var height = Mathf.Lerp(wallTop, body.min.y, (float)(row - 1) / RenderWallRows);
                             var outer = Vector3.Dot(body.center, direction) + (face < 2 ? body.extents.x : body.extents.z);
                             foreach (var part in surfaces)
                             {
-                                if (height < part.min.y - body.size.y / WallRows * .55f || height > part.max.y + body.size.y / WallRows * .55f) continue;
+                                if (height < part.min.y - body.size.y / RenderWallRows * .55f || height > part.max.y + body.size.y / RenderWallRows * .55f) continue;
                                 if (offset < (face < 2 ? part.min.z : part.min.x) || offset > (face < 2 ? part.max.z : part.max.x)) continue;
                                 outer = Mathf.Max(outer, Vector3.Dot(part.center, direction) + (face < 2 ? part.extents.x : part.extents.z));
                             }
                             basePoints[index] = across * offset + Vector3.up * height + direction * (outer + padding);
                             baseNormals[index] = direction;
                         }
-                        uvs[index] = new Vector2(u * faceDx[face] * WallColumns, (float)Mathf.Max(0, row - 1) / WallRows * wallDy * WallRows);
+                        uvs[index] = new Vector2(u * faceDx[face] * WallColumns, (float)Mathf.Max(0, row - 1) / RenderWallRows * wallDy * WallRows);
+                        CacheVertex(index, RenderWallColumns, RenderWallRows, column, Mathf.Max(0, row - 1), WallColumns, WallRows, face * FaceCells, 1f / faceArea[face]);
                     }
                 }
             }
@@ -199,17 +328,27 @@ namespace CivilGameJam.Upgrades
                     wallWater[index] = previousWater[old] / previousAreas[face] * faceArea[face]; wallWet[index] = previousWet[old];
                 }
             }
-            geometryReady = true; Mesh.uv = uvs; DrawWater();
+            geometryReady = true; visibilityReady = false;
+            Mesh.vertices = vertices; Mesh.normals = normals; Mesh.uv = uvs;
+            var waterBounds = new Bounds(vertices[0], Vector3.zero);
+            foreach (var point in vertices) waterBounds.Encapsulate(point);
+            waterBounds.Expand(.035f / Mathf.Max(.01f, Mathf.Min(Mathf.Abs(scale.x), Mathf.Abs(scale.y), Mathf.Abs(scale.z))));
+            Mesh.bounds = waterBounds;
+            RefreshVisibility(); DrawWater();
         }
 
         public void Advance(float sprayAge)
         {
-            var remaining = Mathf.Min(.25f, Mathf.Max(0f, sprayAge - age));
+            LastSimulationSteps = 0;
+            if (!RefreshVisibility()) { age = sprayAge; return; }
+            PrepareSources(sprayAge);
+            // Discard excess catch-up time instead of increasing the next frame's workload.
+            var remaining = Mathf.Min(stableStep * MaxSimulationSteps, Mathf.Max(0f, sprayAge - age));
             var clock = sprayAge - remaining;
-            while (remaining > .000001f)
+            while (remaining > .000001f && LastSimulationSteps < MaxSimulationSteps)
             {
                 var step = Mathf.Min(remaining, stableStep); clock += step;
-                Simulate(step, clock); remaining -= step;
+                Simulate(step, clock); remaining -= step; LastSimulationSteps++;
             }
             age = sprayAge; DrawWater();
         }
@@ -238,23 +377,26 @@ namespace CivilGameJam.Upgrades
                 RoofTransfer(x, z + 1, 2, (x + .5f) / RoofColumns, back);
             }
             for (var face = 0; face < 4; face++)
-            for (var row = 0; row < WallRows; row++)
-            for (var x = 0; x < WallColumns; x++)
             {
-                var index = face * FaceCells + row * WallColumns + x; var volume = wallWater[index]; if (volume <= 0f) continue;
-                var sway = .065f * Mathf.Sin(clock * 2f + row * .35f + x * .8f + face);
-                var left = Outflow(volume, WallAt(face, x - 1, row), faceArea[face], faceDx[face], WallDiffusion, Mathf.Max(0f, -sway), step);
-                var right = Outflow(volume, WallAt(face, x + 1, row), faceArea[face], faceDx[face], WallDiffusion, Mathf.Max(0f, sway), step);
-                var up = row > 0 ? Outflow(volume, WallAt(face, x, row - 1), faceArea[face], wallDy, WallDiffusion, 0f, step) : 0f;
-                var down = Outflow(volume, WallAt(face, x, row + 1), faceArea[face], wallDy, WallDiffusion, 1.25f + .12f * Mathf.Sin(clock * 2f + x * .9f), step);
-                var limit = Mathf.Min(1f, volume / Mathf.Max(.00000001f, left + right + up + down));
-                left *= limit; right *= limit; up *= limit; down *= limit;
-                wallNext[index] += Mathf.Max(0f, volume - left - right - up - down);
-                if (x > 0) wallNext[index - 1] += left; else AroundCorner(face, row, false, left);
-                if (x + 1 < WallColumns) wallNext[index + 1] += right; else AroundCorner(face, row, true, right);
-                if (row > 0) wallNext[index - WallColumns] += up;
-                if (row + 1 < WallRows) wallNext[index + WallColumns] += down;
-                else { DrainedVolume += down; bottomFlow[face * WallColumns + x] += down; }
+                if (!IsFaceVisible(face)) continue;
+                for (var row = 0; row < WallRows; row++)
+                for (var x = 0; x < WallColumns; x++)
+                {
+                    var index = face * FaceCells + row * WallColumns + x; var volume = wallWater[index]; if (volume <= 0f) continue;
+                    var sway = .065f * Mathf.Sin(clock * 2f + row * .35f + x * .8f + face);
+                    var left = Outflow(volume, WallAt(face, x - 1, row), faceArea[face], faceDx[face], WallDiffusion, Mathf.Max(0f, -sway), step);
+                    var right = Outflow(volume, WallAt(face, x + 1, row), faceArea[face], faceDx[face], WallDiffusion, Mathf.Max(0f, sway), step);
+                    var up = row > 0 ? Outflow(volume, WallAt(face, x, row - 1), faceArea[face], wallDy, WallDiffusion, 0f, step) : 0f;
+                    var down = Outflow(volume, WallAt(face, x, row + 1), faceArea[face], wallDy, WallDiffusion, 1.25f + .12f * Mathf.Sin(clock * 2f + x * .9f), step);
+                    var limit = Mathf.Min(1f, volume / Mathf.Max(.00000001f, left + right + up + down));
+                    left *= limit; right *= limit; up *= limit; down *= limit;
+                    wallNext[index] += Mathf.Max(0f, volume - left - right - up - down);
+                    if (x > 0) wallNext[index - 1] += left; else AroundCorner(face, row, false, left);
+                    if (x + 1 < WallColumns) wallNext[index + 1] += right; else AroundCorner(face, row, true, right);
+                    if (row > 0) wallNext[index - WallColumns] += up;
+                    if (row + 1 < WallRows) wallNext[index + WallColumns] += down;
+                    else { DrainedVolume += down; bottomFlow[face * WallColumns + x] += down; }
+                }
             }
             var swap = roofWater; roofWater = roofNext; roofNext = swap;
             swap = wallWater; wallWater = wallNext; wallNext = swap;
@@ -266,42 +408,54 @@ namespace CivilGameJam.Upgrades
                 roofWet[i] = Mathf.Max(roofWet[i] * wetDecay, Mathf.Clamp01(depth / .004f));
                 if (depth > .0008f) roofCount++;
             }
-            for (var i = 0; i < wallWater.Length; i++)
+            for (var face = 0; face < 4; face++)
             {
-                wallWater[i] *= wallDecay;
-                var depth = wallWater[i] / faceArea[i / FaceCells];
-                wallWet[i] = Mathf.Max(wallWet[i] * wetDecay, Mathf.Clamp01(depth / .003f));
-                if (depth > .0008f) wallCount++;
+                if (!IsFaceVisible(face)) continue;
+                for (var i = face * FaceCells; i < (face + 1) * FaceCells; i++)
+                {
+                    wallWater[i] *= wallDecay;
+                    var depth = wallWater[i] / faceArea[i / FaceCells];
+                    wallWet[i] = Mathf.Max(wallWet[i] * wetDecay, Mathf.Clamp01(depth / .003f));
+                    if (depth > .0008f) wallCount++;
+                }
             }
-            RoofWetCoverage = (float)roofCount / RoofCells; WallWetCoverage = (float)wallCount / wallWater.Length;
+            RoofWetCoverage = (float)roofCount / RoofCells;
+            WallWetCoverage = VisibleWallCount > 0 ? (float)wallCount / (VisibleWallCount * FaceCells) : 0f;
+        }
+
+        private void PrepareSources(float clock)
+        {
+            for (var head = 0; head < 4; head++)
+            {
+                sourceCounts[head] = 0;
+                if (!hasSource[head]) continue;
+                var source = new Vector2(sourcePoints[head].x * worldScale.x, sourcePoints[head].z * worldScale.y);
+                var radius = .105f + .015f * Mathf.Sin(clock * 3f + head);
+                var inverseRadius = 1f / (radius * radius); var weight = 0f;
+                var offset = head * RoofCells;
+                for (var cell = 0; cell < RoofCells; cell++)
+                {
+                    if (!roofValid[cell]) continue;
+                    var delta = roofCellCenters[cell] - source;
+                    var falloff = 1f - delta.sqrMagnitude * inverseRadius;
+                    if (falloff <= 0f) continue;
+                    var index = offset + sourceCounts[head]++;
+                    sourceCells[index] = cell; sourceWeights[index] = falloff * falloff;
+                    weight += sourceWeights[index];
+                }
+                if (weight <= .00001f) { sourceCounts[head] = 0; continue; }
+                for (var i = offset; i < offset + sourceCounts[head]; i++) sourceWeights[i] /= weight;
+            }
         }
 
         private void Inject(float step, float clock)
         {
-            var scale = building.lossyScale;
             for (var head = 0; head < 4; head++)
             {
-                if (!hasSource[head] || clock < sourceFlight[head]) continue;
-                var source = sourcePoints[head]; var radius = .105f + .015f * Mathf.Sin(clock * 3f + head);
-                var weight = 0f;
-                for (var z = 0; z < RoofRows; z++)
-                for (var x = 0; x < RoofColumns; x++)
-                {
-                    if (!roofValid[z * RoofColumns + x]) continue;
-                    var point = RoofPosition((x + .5f) / RoofColumns, (z + .5f) / RoofRows);
-                    var distance = new Vector2((point.x - source.x) * scale.x, (point.z - source.z) * scale.z).sqrMagnitude;
-                    var falloff = Mathf.Max(0f, 1f - distance / (radius * radius)); weight += falloff * falloff;
-                }
-                if (weight <= 0f) continue;
+                if (!hasSource[head] || clock < sourceFlight[head] || sourceCounts[head] == 0) continue;
                 var volume = .009f * step; InjectedVolume += volume;
-                for (var z = 0; z < RoofRows; z++)
-                for (var x = 0; x < RoofColumns; x++)
-                {
-                    var index = z * RoofColumns + x; if (!roofValid[index]) continue;
-                    var point = RoofPosition((x + .5f) / RoofColumns, (z + .5f) / RoofRows);
-                    var distance = new Vector2((point.x - source.x) * scale.x, (point.z - source.z) * scale.z).sqrMagnitude;
-                    var falloff = Mathf.Max(0f, 1f - distance / (radius * radius)); roofWater[index] += volume * falloff * falloff / weight;
-                }
+                var offset = head * RoofCells;
+                for (var i = offset; i < offset + sourceCounts[head]; i++) roofWater[sourceCells[i]] += volume * sourceWeights[i];
             }
         }
 
@@ -314,6 +468,7 @@ namespace CivilGameJam.Upgrades
         private void RoofTransfer(int x, int z, int face, float across, float amount)
         {
             if (x >= 0 && x < RoofColumns && z >= 0 && z < RoofRows && roofValid[z * RoofColumns + x]) { roofNext[z * RoofColumns + x] += amount; return; }
+            if (!IsFaceVisible(face)) { DrainedVolume += amount; return; }
             var center = Mathf.Clamp(Mathf.FloorToInt(across * WallColumns), 0, WallColumns - 1); var sum = 0f;
             for (var offset = -2; offset <= 2; offset++) if (center + offset >= 0 && center + offset < WallColumns) sum += 1f / (1f + offset * offset);
             for (var offset = -2; offset <= 2; offset++)
@@ -323,63 +478,53 @@ namespace CivilGameJam.Upgrades
         private void AroundCorner(int face, int row, bool positive, float volume)
         {
             var nextFace = face < 2 ? (positive ? 2 : 3) : (positive ? 0 : 1);
+            if (!IsFaceVisible(nextFace)) { DrainedVolume += volume; return; }
             var column = face == 0 || face == 2 ? WallColumns - 1 : 0;
             wallNext[nextFace * FaceCells + row * WallColumns + column] += volume;
         }
 
+        private void CacheVertex(int index, int renderColumns, int renderRows, int x, int y, int columns, int rows, int start, float inverseArea)
+        {
+            var gx = Mathf.Clamp((float)x / renderColumns * columns - .5f, 0f, columns - 1f);
+            var gy = Mathf.Clamp((float)y / renderRows * rows - .5f, 0f, rows - 1f);
+            var left = Mathf.FloorToInt(gx); var top = Mathf.FloorToInt(gy);
+            var right = Mathf.Min(left + 1, columns - 1); var bottom = Mathf.Min(top + 1, rows - 1);
+            samples[index] = new WaterSample { A = start + top * columns + left, B = start + top * columns + right,
+                C = start + bottom * columns + left, D = start + bottom * columns + right,
+                X = gx - left, Y = gy - top, InverseArea = inverseArea };
+            var axis = baseNormals[index];
+            meshBasePoints[index] = surfaceToMesh.MultiplyPoint3x4(basePoints[index]);
+            meshOffsetAxes[index] = surfaceToMesh.MultiplyVector(axis) / Mathf.Max(.0001f, surfaceToWorld.MultiplyVector(axis).magnitude);
+            normals[index] = surfaceToMesh.MultiplyVector(axis).normalized;
+            vertices[index] = meshBasePoints[index];
+            ripplePhases[index] = new Vector4(Mathf.Sin(uvs[index].x * 33f), Mathf.Cos(uvs[index].x * 33f),
+                Mathf.Sin(uvs[index].y * 27f), Mathf.Cos(uvs[index].y * 27f));
+        }
+
         private void DrawWater()
         {
-            surfaceToWorld = building.localToWorldMatrix;
-            surfaceToMesh = Visuals.transform.worldToLocalMatrix * surfaceToWorld;
-            for (var z = 0; z <= RoofRows; z++)
-            for (var x = 0; x <= RoofColumns; x++)
-            {
-                SampleRoof(x, z, out var depth, out var wet);
-                WriteVertex(z * (RoofColumns + 1) + x, depth, wet, depth / .02f, true);
-            }
+            var phase = Mathf.Sin(age * 5f) * .2f;
+            rippleClock = new Vector4(Mathf.Cos(phase), Mathf.Sin(phase), Mathf.Cos(age * 8f), Mathf.Sin(age * 8f));
+            for (var index = 0; index < RoofVertices; index++) WriteVertex(index, true);
             for (var face = 0; face < 4; face++)
-            for (var row = 0; row <= WallRows + 1; row++)
-            for (var x = 0; x <= WallColumns; x++)
             {
-                var water = 0f; var wet = 0f; var count = 0;
-                var wallRow = Mathf.Max(0, row - 1);
-                for (var dy = -1; dy <= 0; dy++)
-                for (var dx = -1; dx <= 0; dx++)
-                {
-                    var cx = x + dx; var cy = wallRow + dy;
-                    if (cx < 0 || cx >= WallColumns || cy < 0 || cy >= WallRows) continue;
-                    var cell = face * FaceCells + cy * WallColumns + cx;
-                    water += wallWater[cell] / faceArea[face]; wet += wallWet[cell]; count++;
-                }
-                if (count > 0) { water /= count; wet /= count; }
-                var index = RoofVertices + face * FaceVertices + row * (WallColumns + 1) + x;
-                WriteVertex(index, water, wet, water / .012f, false);
+                if (!IsFaceVisible(face)) continue;
+                for (var index = RoofVertices + face * FaceVertices; index < RoofVertices + (face + 1) * FaceVertices; index++) WriteVertex(index, false);
             }
-            Mesh.vertices = vertices; Mesh.normals = normals; Mesh.colors = colors; Mesh.RecalculateBounds();
+            Mesh.vertices = vertices; Mesh.colors = colors;
             properties.SetFloat("_FlowTime", age); renderer.SetPropertyBlock(properties);
         }
 
-        private void SampleRoof(int x, int z, out float depth, out float wet)
+        private void WriteVertex(int index, bool onRoof)
         {
-            depth = wet = 0f; var count = 0;
-            for (var dz = -1; dz <= 0; dz++)
-            for (var dx = -1; dx <= 0; dx++)
-            {
-                var cx = x + dx; var cz = z + dz;
-                if (cx < 0 || cx >= RoofColumns || cz < 0 || cz >= RoofRows) continue;
-                var cell = cz * RoofColumns + cx; depth += roofWater[cell] / roofArea; wet += roofWet[cell]; count++;
-            }
-            if (count > 0) { depth /= count; wet /= count; }
-        }
-
-        private void WriteVertex(int index, float depth, float wet, float turbulence, bool onRoof)
-        {
-            var axis = baseNormals[index]; var scale = surfaceToWorld.MultiplyVector(axis).magnitude;
-            var ripple = Mathf.Sin(uvs[index].x * 33f + Mathf.Sin(age * 5f) * .2f) * Mathf.Sin(uvs[index].y * 27f - age * 8f) * .0007f * Mathf.Clamp01(depth / .004f);
-            var offset = (.002f + Mathf.Min(.003f, depth * .15f) + ripple) / Mathf.Max(.0001f, scale);
-            vertices[index] = surfaceToMesh.MultiplyPoint3x4(basePoints[index] + axis * offset);
-            normals[index] = surfaceToMesh.MultiplyVector(axis).normalized;
-            colors[index] = new Color(Mathf.Clamp01(depth / (onRoof ? .018f : .012f)), wet, Mathf.Clamp01(turbulence), Mathf.Clamp01(depth / .002f));
+            var sample = samples[index];
+            var water = onRoof ? roofWater : wallWater; var wetness = onRoof ? roofWet : wallWet;
+            var depth = Mathf.Lerp(Mathf.Lerp(water[sample.A], water[sample.B], sample.X), Mathf.Lerp(water[sample.C], water[sample.D], sample.X), sample.Y) * sample.InverseArea;
+            var wet = Mathf.Lerp(Mathf.Lerp(wetness[sample.A], wetness[sample.B], sample.X), Mathf.Lerp(wetness[sample.C], wetness[sample.D], sample.X), sample.Y);
+            var phases = ripplePhases[index];
+            var ripple = (phases.x * rippleClock.x + phases.y * rippleClock.y) * (phases.z * rippleClock.z - phases.w * rippleClock.w) * .0007f * Mathf.Clamp01(depth / .004f);
+            vertices[index] = meshBasePoints[index] + meshOffsetAxes[index] * (.002f + Mathf.Min(.003f, depth * .15f) + ripple);
+            colors[index] = new Color(Mathf.Clamp01(depth / (onRoof ? .018f : .012f)), wet, Mathf.Clamp01(depth / (onRoof ? .02f : .012f)), Mathf.Clamp01(depth / .002f));
         }
 
         public bool TryGetDrip(int sample, out Vector3 point, out Vector3 outward)
@@ -388,31 +533,35 @@ namespace CivilGameJam.Upgrades
             {
                 var columnIndex = (sample * 17 + attempt * 23) % (4 * WallColumns);
                 var face = columnIndex / WallColumns; var column = columnIndex % WallColumns;
+                if (!IsFaceVisible(face)) continue;
                 var cell = face * FaceCells + (WallRows - 1) * WallColumns + column;
                 var fromEaves = sample % 3 != 0;
                 if (fromEaves) cell = face * FaceCells + column;
                 if (wallWater[cell] / faceArea[face] < .0005f) continue;
-                var row = fromEaves ? 0 : WallRows + 1;
-                var index = RoofVertices + face * FaceVertices + row * (WallColumns + 1) + column;
-                point = building.TransformPoint(Vector3.Lerp(basePoints[index], basePoints[index + 1], .5f));
-                outward = building.TransformDirection(FaceDirection(face)).normalized; point += outward * .008f;
+                var row = fromEaves ? 0 : RenderWallRows + 1;
+                var renderColumn = Mathf.Min(RenderWallColumns - 1, Mathf.FloorToInt((column + .5f) / WallColumns * RenderWallColumns));
+                var index = RoofVertices + face * FaceVertices + row * (RenderWallColumns + 1) + renderColumn;
+                point = lastBuildingMatrix.MultiplyPoint3x4(Vector3.Lerp(basePoints[index], basePoints[index + 1], .5f));
+                outward = projectionNormalToWorld.MultiplyVector(FaceDirection(face)).normalized; point += outward * .008f;
                 return true;
             }
             point = outward = Vector3.zero; return false;
         }
 
         public void SetSource(int head, Vector3 point, float travelTime, bool wetsRoof)
-        { sourcePoints[head] = building.InverseTransformPoint(point); sourceFlight[head] = travelTime; hasSource[head] = wetsRoof; }
+        { sourcePoints[head] = projectionToLocal.MultiplyPoint3x4(point); sourceFlight[head] = travelTime; hasSource[head] = wetsRoof; }
 
         public bool TryProjectRoof(Vector3 point, out Vector3 surface, out Vector3 normal)
         {
-            if (TryProjectRoofLocal(building.InverseTransformPoint(point), out var localSurface, out var localNormal))
-            { surface = building.TransformPoint(localSurface); normal = building.worldToLocalMatrix.transpose.MultiplyVector(localNormal).normalized; return true; }
+            if (!visibilityReady) RefreshVisibility();
+            if (TryProjectRoofLocal(projectionToLocal.MultiplyPoint3x4(point), out var localSurface, out var localNormal))
+            { surface = lastBuildingMatrix.MultiplyPoint3x4(localSurface); normal = projectionNormalToWorld.MultiplyVector(localNormal).normalized; return true; }
             surface = normal = Vector3.zero; return false;
         }
 
         private bool TryProjectRoofLocal(Vector3 point, out Vector3 surface, out Vector3 normal)
         {
+            if (modelGeometry != null) return modelGeometry.TryProjectRoof(point, out surface, out normal);
             var height = float.NegativeInfinity; normal = Vector3.up;
             foreach (var panel in roofPanels)
             {
@@ -452,7 +601,7 @@ namespace CivilGameJam.Upgrades
             Visuals.SetActive(active);
             if (active) return;
             foreach (var buffer in new[] { roofWater, roofNext, wallWater, wallNext, roofWet, wallWet, bottomFlow }) Array.Clear(buffer, 0, buffer.Length);
-            Array.Clear(hasSource, 0, hasSource.Length); age = InjectedVolume = DrainedVolume = WallWetCoverage = RoofWetCoverage = 0f;
+            Array.Clear(hasSource, 0, hasSource.Length); Array.Clear(sourceCounts, 0, sourceCounts.Length); LastSimulationSteps = 0; age = InjectedVolume = DrainedVolume = WallWetCoverage = RoofWetCoverage = 0f;
         }
 
         public void Dispose()

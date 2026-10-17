@@ -169,6 +169,11 @@ namespace CivilGameJam.Disasters
             {
                 if (!building.gameObject.activeInHierarchy) continue;
                 var renderers = Array.FindAll(building.GetComponentsInChildren<MeshRenderer>(), renderer => !IsSprinklerPart(renderer.transform, building));
+                building.TryGetComponent<BuildingModelGeometry>(out var model);
+                if (model != null)
+                {
+                    var surfaces = new List<MeshRenderer>(); model.AppendRenderers(surfaces); renderers = surfaces.ToArray();
+                }
                 if (renderers.Length == 0) continue;
                 var bounds = renderers[0].bounds;
                 foreach (var renderer in renderers) bounds.Encapsulate(renderer.bounds);
@@ -180,6 +185,7 @@ namespace CivilGameJam.Disasters
                     Size = Mathf.Clamp(Mathf.Sqrt(bounds.size.x * bounds.size.z), 0.65f, 1.5f)
                 };
                 foreach (var sprinkler in sprinklers) if (sprinkler.Building == building) { site.Sprinkler = sprinkler; break; }
+                if (model != null) AppendRoofAnchors(site, model);
                 foreach (var renderer in renderers)
                 {
                     var label = renderer.name;
@@ -215,6 +221,18 @@ namespace CivilGameJam.Disasters
             for (var parent = part; parent != null && parent != building; parent = parent.parent)
                 if (parent.name == "Roof_Sprinkler") return true;
             return false;
+        }
+
+        private static void AppendRoofAnchors(BurnSite site, BuildingModelGeometry model)
+        {
+            if (model.IsCollection) { foreach (var part in model.Parts) AppendRoofAnchors(site, part); return; }
+            var roof = model.RoofBounds;
+            for (var x = -1; x <= 1; x += 2)
+            for (var z = -1; z <= 1; z += 2)
+            {
+                var point = roof.center + new Vector3(roof.size.x * .24f * x, 0f, roof.size.z * .24f * z);
+                if (model.TryProjectRoof(point, out var surface, out _)) site.Anchors.Add(model.transform.TransformPoint(surface));
+            }
         }
 
         private void EnsureVisuals()

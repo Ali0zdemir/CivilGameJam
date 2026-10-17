@@ -33,9 +33,12 @@ namespace CivilGameJam.Upgrades
         private ParticleSystem installationDust;
         private Mesh dustMesh;
         private readonly System.Random dustRandom = new System.Random();
+        private BuildingRailUpgrade[] partUpgrades;
+        private bool managedExternally;
 
         public Transform Building => building;
-        public bool IsAvailable => building != null && building.Find("Second_Floor") != null;
+        public bool IsAvailable => building != null && (building.TryGetComponent<BuildingModelGeometry>(out var model)
+            ? model.IsResidential : building.Find("Second_Floor") != null);
         public bool IsInstalled { get; private set; }
         public bool IsTransitioning { get; private set; }
         public float CurrentLift => currentLift;
@@ -49,6 +52,18 @@ namespace CivilGameJam.Upgrades
             if (initialized) return building != null;
             if (building == null) return false;
             originalLocalPosition = building.localPosition;
+            if (building.TryGetComponent<BuildingModelGeometry>(out var model))
+            {
+                if (model.IsCollection)
+                {
+                    EnsureParts(model);
+                    foreach (var part in partUpgrades) if (!part.IsAvailable) return false;
+                    initialized = true; return true;
+                }
+                foundationBounds = model.FoundationBounds;
+                initialized = true;
+                return true;
+            }
             // Use the foundation, so chimneys, flags and roof overhangs cannot enlarge the rails.
             var renderers = building.GetComponentsInChildren<MeshRenderer>();
             var found = false;
@@ -76,6 +91,12 @@ namespace CivilGameJam.Upgrades
         public void SetInstalled(bool installed)
         {
             if (!Application.isPlaying || !isActiveAndEnabled || !Initialize() || installed == IsInstalled) return;
+            if (partUpgrades != null)
+            {
+                foreach (var part in partUpgrades) part.SetInstalled(installed);
+                IsInstalled = installed; IsTransitioning = true;
+                StateChanged?.Invoke(this); return;
+            }
             if (installed)
             {
                 if (railMaterial == null || supportMaterial == null)
@@ -97,12 +118,21 @@ namespace CivilGameJam.Upgrades
 
         private void Update()
         {
-            if (IsTransitioning) AdvanceTransition(Time.unscaledDeltaTime);
+            if (!managedExternally && IsTransitioning) AdvanceTransition(Time.unscaledDeltaTime);
         }
 
         private void AdvanceTransition(float deltaTime)
         {
             if (!IsTransitioning) return;
+            if (partUpgrades != null)
+            {
+                var transitioning = false; currentLift = 0f;
+                foreach (var part in partUpgrades)
+                { part.AdvanceTransition(deltaTime); transitioning |= part.IsTransitioning; currentLift += part.CurrentLift / partUpgrades.Length; }
+                IsTransitioning = transitioning;
+                if (!transitioning) StateChanged?.Invoke(this);
+                return;
+            }
             if (building == null) { ResetUpgrade(); return; }
             transitionAge += Mathf.Max(0f, deltaTime);
             var progress = Mathf.Clamp01(transitionAge / Mathf.Max(0.1f, transitionDuration));
@@ -168,6 +198,7 @@ namespace CivilGameJam.Upgrades
 
         public void ResetUpgrade()
         {
+            if (partUpgrades != null) foreach (var part in partUpgrades) if (part != null) part.ResetUpgrade();
             if (initialized && building != null) building.localPosition = originalLocalPosition;
             IsInstalled = false;
             IsTransitioning = false;
@@ -182,11 +213,27 @@ namespace CivilGameJam.Upgrades
         }
 
         private void OnDisable() => ResetUpgrade();
+        private void EnsureParts(BuildingModelGeometry model)
+        {
+            if (partUpgrades != null) return;
+            partUpgrades = new BuildingRailUpgrade[model.Parts.Length];
+            for (var i = 0; i < partUpgrades.Length; i++)
+            {
+                var child = new GameObject("Rails_" + model.Parts[i].name); child.transform.SetParent(transform, false);
+                var part = child.AddComponent<BuildingRailUpgrade>(); part.managedExternally = true;
+                part.building = model.Parts[i].transform; part.liftHeight = liftHeight; part.railWidth = railWidth;
+                part.endExtension = endExtension; part.railSpacing = railSpacing; part.transitionDuration = transitionDuration;
+                part.railMaterial = railMaterial; part.supportMaterial = supportMaterial;
+                part.installationDustMaterial = installationDustMaterial; part.dustAmount = dustAmount;
+                part.dustSize = dustSize; part.dustLifetime = dustLifetime; partUpgrades[i] = part;
+            }
+        }
         private void OnDestroy()
         {
             ResetUpgrade();
             if (railVisuals != null) Destroy(railVisuals);
             if (dustMesh != null) Destroy(dustMesh);
+            if (partUpgrades != null) foreach (var part in partUpgrades) if (part != null) Destroy(part.gameObject);
         }
     }
 }

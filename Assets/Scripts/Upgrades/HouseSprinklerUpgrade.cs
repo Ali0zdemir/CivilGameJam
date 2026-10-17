@@ -28,6 +28,14 @@ namespace CivilGameJam.Upgrades
         private GameObject waterVisuals;
         private Transform rotor;
         private Vector3 roofAnchor;
+        private float sprinklerScale = 1f;
+        private float nozzleOutwardSlope = .3f;
+        private readonly Vector3[] nozzleAims = new Vector3[4];
+        private readonly Vector3[] nozzleMouths = new Vector3[4];
+        private float waterGravity = 3.924f;
+        private bool importedModel;
+        private HouseSprinklerUpgrade[] partUpgrades;
+        private bool managedExternally;
         private Mesh cylinderMesh;
         private Mesh jointMesh;
         private Mesh jetMesh;
@@ -55,11 +63,12 @@ namespace CivilGameJam.Upgrades
         private readonly ParticleSystem.Particle[] waterBuffer = new ParticleSystem.Particle[512];
         private readonly float[] jetFlight = new float[JetCount];
         private readonly Vector3[] jetImpacts = new Vector3[JetCount];
-        private float WaterGravity => Mathf.Max(0.1f, -Physics.gravity.y * WaterGravityMultiplier);
+        private float WaterGravity => waterGravity;
         private float GroundLevel => groundRenderer != null ? groundRenderer.bounds.max.y + 0.008f : building.position.y + 0.008f;
 
         public Transform Building => building;
-        public bool IsAvailable => building != null && building.Find("Second_Floor") != null && building.Find("Roof/Roof_Ridge") != null;
+        public bool IsAvailable => building != null && (building.TryGetComponent<BuildingModelGeometry>(out var model)
+            ? model.IsResidential : building.Find("Second_Floor") != null && building.Find("Roof/Roof_Ridge") != null);
         public bool IsInstalled { get; private set; }
         public bool IsSpraying { get; private set; }
         public float FireMultiplier => IsInstalled && isActiveAndEnabled ? Mathf.Clamp01(fireIntensityMultiplier) : 1f;
@@ -69,6 +78,12 @@ namespace CivilGameJam.Upgrades
         {
             if (!Application.isPlaying || !isActiveAndEnabled || !IsAvailable || installed == IsInstalled) return;
             if (!installed) { ResetUpgrade(); return; }
+            if (building.TryGetComponent<BuildingModelGeometry>(out var model) && model.IsCollection)
+            {
+                EnsureParts(model);
+                foreach (var part in partUpgrades) part.SetInstalled(true);
+                IsInstalled = true; StateChanged?.Invoke(this); return;
+            }
             if (metalMaterial == null || darkMaterial == null || bodyMaterial == null || nozzleMaterial == null) return;
             EnsureVisuals();
             wallRunoff?.Rebuild();
@@ -81,21 +96,41 @@ namespace CivilGameJam.Upgrades
         private void EnsureVisuals()
         {
             if (sprinklerVisuals != null) return;
-            var ridge = building.Find("Roof/Roof_Ridge").GetComponent<MeshRenderer>().bounds;
+            var mountedHeight = mastHeight;
             groundRenderer = GameObject.Find("Continuous_Ground")?.GetComponent<Renderer>();
-            roofAnchor = building.InverseTransformPoint(new Vector3(ridge.center.x, ridge.max.y + 0.005f, ridge.center.z));
+            if (building.TryGetComponent<BuildingModelGeometry>(out var model))
+            {
+                importedModel = true;
+                nozzleOutwardSlope = .12f;
+                roofAnchor = model.SprinklerAnchor;
+                var roof = Vector3.Scale(model.RoofBounds.size, building.lossyScale);
+                sprinklerScale = Mathf.Clamp(Mathf.Min(Mathf.Abs(roof.x), Mathf.Abs(roof.z)) / .85f, .35f, 1f);
+                var roofTop = building.TransformPoint(model.RoofBounds.max).y;
+                mountedHeight = Mathf.Max(mastHeight, (roofTop - building.TransformPoint(roofAnchor).y) / sprinklerScale + .08f);
+            }
+            else
+            {
+                var ridge = building.Find("Roof/Roof_Ridge").GetComponent<MeshRenderer>().bounds;
+                roofAnchor = building.InverseTransformPoint(new Vector3(ridge.center.x, ridge.max.y + 0.005f, ridge.center.z));
+            }
+            for (var head = 0; head < JetCount; head++)
+            {
+                var radial = JetDirection(head);
+                nozzleAims[head] = (radial * nozzleOutwardSlope - Vector3.up).normalized;
+                nozzleMouths[head] = radial * .187f + Vector3.up * .012f + nozzleAims[head] * .079f;
+            }
             sprinklerVisuals = new GameObject("Roof_Sprinkler");
             sprinklerVisuals.transform.SetParent(building, false);
             sprinklerVisuals.transform.localPosition = roofAnchor;
             var scale = building.lossyScale;
-            sprinklerVisuals.transform.localScale = new Vector3(1f / Mathf.Abs(scale.x), 1f / Mathf.Abs(scale.y), 1f / Mathf.Abs(scale.z));
+            sprinklerVisuals.transform.localScale = new Vector3(sprinklerScale / Mathf.Abs(scale.x), sprinklerScale / Mathf.Abs(scale.y), sprinklerScale / Mathf.Abs(scale.z));
             cylinderMesh = CreateCylinder(); jointMesh = CreateOctahedron();
             Tube(sprinklerVisuals.transform,"Roof_Mount",new Vector3(0f,.0125f,0f),Vector3.up,.025f,.085f,darkMaterial);
-            Tube(sprinklerVisuals.transform,"Mounting_Rod",new Vector3(0f,.025f+mastHeight*.5f,0f),Vector3.up,mastHeight,.024f,metalMaterial);
+            Tube(sprinklerVisuals.transform,"Mounting_Rod",new Vector3(0f,.025f+mountedHeight*.5f,0f),Vector3.up,mountedHeight,.024f,metalMaterial);
             Tube(sprinklerVisuals.transform,"Lower_Collar",new Vector3(0f,.05f,0f),Vector3.up,.028f,.036f,bodyMaterial);
-            Tube(sprinklerVisuals.transform,"Upper_Collar",new Vector3(0f,mastHeight+.015f,0f),Vector3.up,.025f,.038f,nozzleMaterial);
+            Tube(sprinklerVisuals.transform,"Upper_Collar",new Vector3(0f,mountedHeight+.015f,0f),Vector3.up,.025f,.038f,nozzleMaterial);
             rotor = new GameObject("Rotating_Sprinkler_Head").transform;
-            rotor.SetParent(sprinklerVisuals.transform,false); rotor.localPosition = Vector3.up * (mastHeight+.04f);
+            rotor.SetParent(sprinklerVisuals.transform,false); rotor.localPosition = Vector3.up * (mountedHeight+.04f);
             rotor.localRotation = Quaternion.Euler(0f,25f,0f);
             Part(rotor,"Red_Gimbal",jointMesh,bodyMaterial,Vector3.zero,Vector3.one*.13f,Quaternion.identity);
             Tube(rotor,"Cross_Arm_X",Vector3.zero,Vector3.right,.29f,.026f,bodyMaterial);
@@ -149,7 +184,7 @@ namespace CivilGameJam.Upgrades
             var system = drops.AddComponent<ParticleSystem>();
             var main=system.main; main.playOnAwake=false; main.loop=true; main.useUnscaledTime=true;
             main.simulationSpace=ParticleSystemSimulationSpace.World; main.maxParticles=512; main.startSpeed=0f;
-            main.startRotation3D=true; main.startSize3D=true; main.gravityModifier=WaterGravityMultiplier;
+            main.startRotation3D=true; main.startSize3D=true; main.gravityModifier=WaterGravityMultiplier*sprinklerScale;
             main.cullingMode=ParticleSystemCullingMode.AlwaysSimulate;
             var emission=system.emission; emission.enabled=false; var shape=system.shape; shape.enabled=false;
             var size=system.sizeOverLifetime; size.enabled=true;
@@ -160,11 +195,19 @@ namespace CivilGameJam.Upgrades
             return system;
         }
 
-        private void Update() => AdvanceSprinkler(Time.unscaledDeltaTime);
+        private void Update() { if (!managedExternally) AdvanceSprinkler(Time.unscaledDeltaTime); }
 
         private void AdvanceSprinkler(float deltaTime)
         {
+            if (partUpgrades != null)
+            {
+                IsSpraying = false;
+                foreach (var part in partUpgrades) { part.AdvanceSprinkler(deltaTime); IsSpraying |= part.IsSpraying; }
+                return;
+            }
             if(!IsInstalled || fire==null || !fire.IsRunning || waterMaterial==null || sprayMaterial==null) { StopSpray(); return; }
+            if (!wallRunoff.RefreshVisibility()) { StopSpray(); return; }
+            waterGravity = Mathf.Max(.1f, -Physics.gravity.y * WaterGravityMultiplier);
             if(!IsSpraying)
             {
                 sprayAge=0f; waterVisuals.SetActive(true); roofRunoff.gameObject.SetActive(true);
@@ -212,7 +255,7 @@ namespace CivilGameJam.Upgrades
                 var head=dropIndex++%JetCount;
                 var sideways=Vector3.Cross(Vector3.up,JetDirection(head));
                 var position=rotor.TransformPoint(NozzleMouth(head)+sideways*Range(-.004f,.004f));
-                var velocity=rotor.TransformDirection(NozzleAim(head)*JetSpeed+sideways*Range(-.12f,.12f));
+                var velocity=rotor.TransformVector(NozzleAim(head)*JetSpeed+sideways*Range(-.12f,.12f));
                 EmitWater(droplets,position,velocity,Range(.012f,.024f),Range(.025f,.06f),.7f,jetFlight[head]);
             }
             runoffRemainder+=step*480f;
@@ -235,23 +278,26 @@ namespace CivilGameJam.Upgrades
             }
         }
 
-        private static Vector3 JetDirection(int head) => Quaternion.Euler(0f,head*90f,0f)*Vector3.right;
-        private static Vector3 NozzleAim(int head) => (JetDirection(head)*.3f-Vector3.up).normalized;
-        private static Vector3 NozzleMouth(int head) => JetDirection(head)*.187f+Vector3.up*.012f+NozzleAim(head)*.079f;
+        private static Vector3 JetDirection(int head) => head == 0 ? Vector3.right : head == 1 ? Vector3.back : head == 2 ? Vector3.left : Vector3.forward;
+        private Vector3 NozzleAim(int head) => nozzleAims[head];
+        private Vector3 NozzleMouth(int head) => nozzleMouths[head];
 
         private Vector3 JetPoint(int head,float t)
         {
             var point=NozzleMouth(head)+NozzleAim(head)*(JetSpeed*t)-Vector3.up*(.5f*WaterGravity*t*t);
             // Older water keeps the direction it had when leaving the rotating nozzle.
-            return Quaternion.Euler(0f,-rotationSpeed*t,0f)*point;
+            var angle = rotationSpeed * t * Mathf.Deg2Rad;
+            var sine = Mathf.Sin(angle); var cosine = Mathf.Cos(angle);
+            return new Vector3(cosine * point.x - sine * point.z, point.y, sine * point.x + cosine * point.z);
         }
 
         private bool FindRoofImpact(int head,out float flight,out Vector3 impact)
         {
             var previous=0f;
+            var maximumFlight = importedModel ? 1.2f : .6f;
             for(var sample=1;sample<=32;sample++)
             {
-                var time=sample*.6f/32f;
+                var time=sample*maximumFlight/32f;
                 var point=rotor.TransformPoint(JetPoint(head,time));
                 if(wallRunoff.TryProjectRoof(point,out var roof,out _)&&point.y<=roof.y+.004f)
                 {
@@ -269,13 +315,16 @@ namespace CivilGameJam.Upgrades
                 previous=time;
             }
             var origin=rotor.TransformPoint(NozzleMouth(head));
-            flight=FlightTime(origin.y,NozzleAim(head).y*JetSpeed);
+            flight=FlightTime(origin.y,NozzleAim(head).y*JetSpeed*sprinklerScale);
             impact=rotor.TransformPoint(JetPoint(head,flight));
             return false;
         }
 
-        private float FlightTime(float height,float upwardSpeed) =>
-            Mathf.Max(.02f,(upwardSpeed+Mathf.Sqrt(upwardSpeed*upwardSpeed+2f*WaterGravity*Mathf.Max(0f,height-GroundLevel)))/WaterGravity);
+        private float FlightTime(float height,float upwardSpeed)
+        {
+            var gravity = WaterGravity * sprinklerScale;
+            return Mathf.Max(.02f,(upwardSpeed+Mathf.Sqrt(upwardSpeed*upwardSpeed+2f*gravity*Mathf.Max(0f,height-GroundLevel)))/gravity);
+        }
 
         private void EmitWater(ParticleSystem system,Vector3 position,Vector3 velocity,float width,float length,float opacity,float lifetime=-1f)
         {
@@ -322,6 +371,7 @@ namespace CivilGameJam.Upgrades
 
         public void ResetUpgrade()
         {
+            if (partUpgrades != null) foreach (var part in partUpgrades) if (part != null) part.ResetUpgrade();
             var changed=IsInstalled; IsInstalled=false; StopSpray();
             if(sprinklerVisuals!=null)sprinklerVisuals.SetActive(false);
             if(installationDust!=null)installationDust.Stop(true,ParticleSystemStopBehavior.StopEmittingAndClear);
@@ -369,6 +419,21 @@ namespace CivilGameJam.Upgrades
         }
 
         private void OnEnable() => HouseColumnUpgrade.GeometryChanged += OnHouseGeometryChanged;
+        private void EnsureParts(BuildingModelGeometry model)
+        {
+            if (partUpgrades != null) return;
+            partUpgrades = new HouseSprinklerUpgrade[model.Parts.Length];
+            for (var i = 0; i < partUpgrades.Length; i++)
+            {
+                var child = new GameObject("Sprinkler_" + model.Parts[i].name); child.transform.SetParent(transform, false);
+                var part = child.AddComponent<HouseSprinklerUpgrade>(); part.managedExternally = true;
+                part.building = model.Parts[i].transform; part.fire = fire;
+                part.metalMaterial = metalMaterial; part.darkMaterial = darkMaterial; part.bodyMaterial = bodyMaterial;
+                part.nozzleMaterial = nozzleMaterial; part.waterMaterial = waterMaterial; part.sprayMaterial = sprayMaterial;
+                part.installationDustMaterial = installationDustMaterial; part.mastHeight = mastHeight;
+                part.fireIntensityMultiplier = fireIntensityMultiplier; part.rotationSpeed = rotationSpeed; partUpgrades[i] = part;
+            }
+        }
         private void OnHouseGeometryChanged(HouseColumnUpgrade upgrade)
         {
             if(upgrade.Building==building)wallRunoff?.Rebuild();
@@ -384,6 +449,7 @@ namespace CivilGameJam.Upgrades
             wallRunoff?.Dispose();
             if(sprinklerVisuals!=null)Destroy(sprinklerVisuals);
             foreach(var mesh in new[]{cylinderMesh,jointMesh,jetMesh,dustMesh})if(mesh!=null)Destroy(mesh);
+            if (partUpgrades != null) foreach (var part in partUpgrades) if (part != null) Destroy(part.gameObject);
         }
     }
 }

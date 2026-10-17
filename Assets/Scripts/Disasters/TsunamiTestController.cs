@@ -416,7 +416,13 @@ namespace CivilGameJam.Disasters
                 var footprint = new Bounds();
                 var found = false;
                 var foundationFound = false;
-                foreach (var renderer in renderers)
+                if (building.TryGetComponent<BuildingModelGeometry>(out var model))
+                {
+                    bounds = LocalBounds(model.WorldBounds);
+                    footprint = LocalBounds(model.WorldFoundationBounds);
+                    found = foundationFound = true;
+                }
+                else foreach (var renderer in renderers)
                 {
                     if (IsBuildingUpgrade(renderer.transform, building) || IsRoofDecoration(renderer.name)) continue;
                     var local = LocalBounds(renderer.bounds);
@@ -484,10 +490,12 @@ namespace CivilGameJam.Disasters
             var upgrades = FindObjectsByType<HouseColumnUpgrade>(FindObjectsSortMode.None);
             foreach (var site in impactSites)
             {
+                if (site.Building == null) continue;
                 HouseColumnUpgrade openHouse = null;
                 foreach (var upgrade in upgrades)
                     if (upgrade.Building == site.Building && upgrade.IsInstalled) { openHouse = upgrade; break; }
                 if (openHouse != null) openHouse.AppendColumnBounds(transform, floodObstacles);
+                else if (site.Building.TryGetComponent<BuildingModelGeometry>(out var model)) model.AppendFoundationBounds(transform, floodObstacles);
                 else floodObstacles.Add(site.Footprint);
             }
             // Water can pass between the columns instead of meeting the former solid ground floor.

@@ -20,6 +20,7 @@ namespace CivilGameJam.Upgrades
         [SerializeField, Range(0.3f, 1.2f)] private float dustLifetime = 0.7f;
 
         private Transform walls;
+        private BuildingModelGeometry modelGeometry;
         private Vector3 originalWallPosition;
         private Vector3 originalWallScale;
         private GameObject[] groundFloorParts;
@@ -32,6 +33,7 @@ namespace CivilGameJam.Upgrades
         private Mesh dustMesh;
         private float floorHeight;
         private bool initialized;
+        private HouseColumnUpgrade[] partUpgrades;
 
         public Transform Building => building;
         public bool IsInstalled { get; private set; }
@@ -43,8 +45,25 @@ namespace CivilGameJam.Upgrades
 
         private bool Initialize()
         {
-            if (initialized) return building != null && walls != null;
+            if (initialized) return building != null && (walls != null || modelGeometry != null);
             if (building == null) return false;
+            if (building.TryGetComponent(out modelGeometry))
+            {
+                if (!modelGeometry.CanOpenGroundFloor) return false;
+                if (modelGeometry.IsCollection)
+                {
+                    EnsureParts();
+                    foreach (var part in partUpgrades) if (!part.IsAvailable) return false;
+                    initialized = true; return true;
+                }
+                originalWallPosition = modelGeometry.BodyBounds.center;
+                originalWallScale = modelGeometry.BodyBounds.size;
+                floorHeight = modelGeometry.GroundFloorHeight;
+                groundFloorParts = Array.Empty<GameObject>();
+                originalPartStates = Array.Empty<bool>();
+                initialized = true;
+                return true;
+            }
             walls = building.Find("Structure/Walls");
             var upperFloor = building.Find("Second_Floor");
             var entrance = building.Find("Windows_and_Entrance");
@@ -65,6 +84,11 @@ namespace CivilGameJam.Upgrades
         {
             if (!Application.isPlaying || !isActiveAndEnabled || installed == IsInstalled || !Initialize()) return;
             if (!installed) { ResetUpgrade(); return; }
+            if (partUpgrades != null)
+            {
+                foreach (var part in partUpgrades) part.SetInstalled(true);
+                IsInstalled = true; StateChanged?.Invoke(this); GeometryChanged?.Invoke(this); return;
+            }
             if (columnMaterial == null || beamMaterial == null)
             {
                 Debug.LogWarning("Assign the house column and beam materials before opening the ground floor.", this);
@@ -72,8 +96,12 @@ namespace CivilGameJam.Upgrades
             }
             EnsureColumns();
             // Shorten the existing wall from the bottom; the upper storey keeps its material overrides.
-            walls.localScale = originalWallScale - Vector3.up * floorHeight;
-            walls.localPosition = originalWallPosition + Vector3.up * (floorHeight * 0.5f);
+            if (modelGeometry != null) modelGeometry.SetGroundFloorOpen(true);
+            else
+            {
+                walls.localScale = originalWallScale - Vector3.up * floorHeight;
+                walls.localPosition = originalWallPosition + Vector3.up * (floorHeight * 0.5f);
+            }
             foreach (var part in groundFloorParts) part.SetActive(false);
             columnVisuals.SetActive(true);
             IsInstalled = true;
@@ -126,6 +154,7 @@ namespace CivilGameJam.Upgrades
         public void AppendColumnBounds(Transform relativeTo, List<Bounds> output)
         {
             if (!IsInstalled) return;
+            if (partUpgrades != null) { foreach (var part in partUpgrades) part.AppendColumnBounds(relativeTo, output); return; }
             foreach (var column in columns)
             {
                 if (column == null) continue;
@@ -151,8 +180,13 @@ namespace CivilGameJam.Upgrades
         public void ResetUpgrade()
         {
             var changed = IsInstalled;
-            if (initialized)
+            if (partUpgrades != null)
             {
+                foreach (var part in partUpgrades) if (part != null) part.ResetUpgrade();
+            }
+            else if (initialized)
+            {
+                if (modelGeometry != null) modelGeometry.SetGroundFloorOpen(false);
                 if (walls != null) { walls.localPosition = originalWallPosition; walls.localScale = originalWallScale; }
                 for (var i = 0; i < groundFloorParts.Length; i++)
                     if (groundFloorParts[i] != null) groundFloorParts[i].SetActive(originalPartStates[i]);
@@ -166,11 +200,25 @@ namespace CivilGameJam.Upgrades
         }
 
         private void OnDisable() => ResetUpgrade();
+        private void EnsureParts()
+        {
+            if (partUpgrades != null) return;
+            partUpgrades = new HouseColumnUpgrade[modelGeometry.Parts.Length];
+            for (var i = 0; i < partUpgrades.Length; i++)
+            {
+                var child = new GameObject("Columns_" + modelGeometry.Parts[i].name); child.transform.SetParent(transform, false);
+                var part = child.AddComponent<HouseColumnUpgrade>(); part.building = modelGeometry.Parts[i].transform;
+                part.columnMaterial = columnMaterial; part.beamMaterial = beamMaterial; part.columnWidth = columnWidth;
+                part.installationDustMaterial = installationDustMaterial; part.dustAmount = dustAmount;
+                part.dustSize = dustSize; part.dustLifetime = dustLifetime; partUpgrades[i] = part;
+            }
+        }
         private void OnDestroy()
         {
             ResetUpgrade();
             if (columnVisuals != null) Destroy(columnVisuals);
             if (dustMesh != null) Destroy(dustMesh);
+            if (partUpgrades != null) foreach (var part in partUpgrades) if (part != null) Destroy(part.gameObject);
         }
     }
 }
