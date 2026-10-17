@@ -1,6 +1,6 @@
 {
     "name": "CivilGameJam.Cards.Editor",
-    "references": ["CivilGameJam.Cards", "UnityEngine.UI", "Unity.TextMeshPro"],
+    "references": ["CivilGameJam.Cards", "CivilGameJam.World", "CivilGameJam.Integration", "UnityEngine.UI", "Unity.TextMeshPro"],
     "includePlatforms": ["Editor"],
     "autoReferenced": true
 }

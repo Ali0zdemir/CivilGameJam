@@ -1,0 +1,47 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3718dfbfbd0543218c330eb4e9ff7397, type: 3}
+  m_Name: Apartment_04_Surfaces
+  m_EditorClassIdentifier: 
+  residential: 1
+  closedMesh: {fileID: 4200003486272053892, guid: 6b3dd8b0cd76ebb459bfc2d2993d246d, type: 3}
+  openGroundFloorMesh: {fileID: 4300000, guid: c10cc350d96a929489904212980b6ec8, type: 2}
+  bodyBounds:
+    m_Center: {x: 0, y: 4.214694, z: 0.00000011920929}
+    m_Extent: {x: 0.699998, y: 4.214694, z: 0.69999814}
+  foundationBounds:
+    m_Center: {x: 0, y: 0.06, z: 0.00000011920929}
+    m_Extent: {x: 0.699998, y: 0.06, z: 0.69999814}
+  roofBounds:
+    m_Center: {x: 0, y: 7.0901337, z: 0}
+    m_Extent: {x: 0.699998, y: 0.7241287, z: 0.699998}
+  groundFloorHeight: 0.9
+  sprinklerAnchor: {x: 0, y: 7.100134, z: 0}
+  roofTriangles:
+  - {x: -0.699998, y: 7.814263, z: -0.699998}
+  - {x: -0.699998, y: 7.814263, z: 0.699998}
+  - {x: 0.699998, y: 6.366005, z: 0.699998}
+  - {x: -0.699998, y: 7.814263, z: -0.699998}
+  - {x: 0.699998, y: 6.366005, z: 0.699998}
+  - {x: 0.699998, y: 6.366005, z: -0.699998}
+  - {x: -0.25312912, y: 8.429388, z: 0.07881585}
+  - {x: -0.25312912, y: 8.429388, z: 0.15354553}
+  - {x: -0.17839944, y: 8.429388, z: 0.15354553}
+  - {x: -0.25312912, y: 8.429388, z: 0.07881585}
+  - {x: -0.17839944, y: 8.429388, z: 0.15354553}
+  - {x: -0.17839944, y: 8.429388, z: 0.07881585}
+  - {x: -0.31923085, y: 7.553676, z: 0.012714092}
+  - {x: -0.31923085, y: 7.553676, z: 0.21964729}
+  - {x: -0.112297684, y: 7.553676, z: 0.21964729}
+  - {x: -0.31923085, y: 7.553676, z: 0.012714092}
+  - {x: -0.112297684, y: 7.553676, z: 0.21964729}
+  - {x: -0.112297684, y: 7.553676, z: 0.012714092}

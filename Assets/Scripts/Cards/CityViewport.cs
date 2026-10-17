@@ -12,6 +12,8 @@ namespace CivilGameJam.Cards
         [SerializeField] private RawImage cityImage;
         [SerializeField] private Camera worldCamera;
         [SerializeField] private Transform world;
+        [Tooltip("Disable when the saved city camera has its own pan, zoom and shake controller.")]
+        [SerializeField] private bool frameWorldAutomatically = true;
         [SerializeField] private RenderTexture previewTexture;
         [Min(0f)] [SerializeField] private float margin = 24f;
         [Min(1f)] [SerializeField] private float framingPadding = 1.08f;
@@ -26,6 +28,8 @@ namespace CivilGameJam.Cards
         public Camera WorldCamera => worldCamera;
         public RectTransform ViewRect => cityImage.rectTransform;
         public RectTransform Sidebar => sidebar;
+        public Transform World => world;
+        public bool FramesWorldAutomatically => frameWorldAutomatically;
 
         private void Update() => RefreshViewport();
 
@@ -62,6 +66,7 @@ namespace CivilGameJam.Cards
             if (worldCamera.targetTexture != target) worldCamera.targetTexture = target;
             if (cityImage.texture != target) cityImage.texture = target;
             worldCamera.aspect = Mathf.Max(0.01f, view.rect.width / Mathf.Max(1f, view.rect.height));
+            if (!frameWorldAutomatically) return;
             if (!hasBounds || !Application.IsPlaying(gameObject) || boundsRotation != worldCamera.transform.rotation) RefreshBounds();
             if (!hasBounds) return;
             Vector3 right = worldCamera.transform.right;

@@ -1,0 +1,47 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3718dfbfbd0543218c330eb4e9ff7397, type: 3}
+  m_Name: Apartment_Apartment4_Surfaces
+  m_EditorClassIdentifier: 
+  residential: 1
+  closedMesh: {fileID: 4200003486272053892, guid: 6b3dd8b0cd76ebb459bfc2d2993d246d, type: 3}
+  openGroundFloorMesh: {fileID: 4300000, guid: dca653c1490a1b945b5f4f028c61a79e, type: 2}
+  bodyBounds:
+    m_Center: {x: 0, y: 1.0041989, z: 0.000000029802322}
+    m_Extent: {x: 0.19999944, y: 1.2041982, z: 0.19999947}
+  foundationBounds:
+    m_Center: {x: 0, y: -0.18249933, z: 0.000000029802322}
+    m_Extent: {x: 0.19999944, y: 0.017499998, z: 0.19999947}
+  roofBounds:
+    m_Center: {x: 0, y: 1.8257532, z: 0}
+    m_Extent: {x: 0.19999944, y: 0.20689398, z: 0.19999944}
+  groundFloorHeight: 0.25
+  sprinklerAnchor: {x: 0, y: 1.8307532, z: 0}
+  roofTriangles:
+  - {x: -0.19999944, y: 2.0326471, z: -0.19999944}
+  - {x: -0.19999944, y: 2.0326471, z: 0.19999944}
+  - {x: 0.19999944, y: 1.6188592, z: 0.19999944}
+  - {x: -0.19999944, y: 2.0326471, z: -0.19999944}
+  - {x: 0.19999944, y: 1.6188592, z: 0.19999944}
+  - {x: 0.19999944, y: 1.6188592, z: -0.19999944}
+  - {x: -0.07232261, y: 2.2083972, z: 0.022518814}
+  - {x: -0.07232261, y: 2.2083972, z: 0.04387015}
+  - {x: -0.05097127, y: 2.2083972, z: 0.04387015}
+  - {x: -0.07232261, y: 2.2083972, z: 0.022518814}
+  - {x: -0.05097127, y: 2.2083972, z: 0.04387015}
+  - {x: -0.05097127, y: 2.2083972, z: 0.022518814}
+  - {x: -0.091208816, y: 1.9581938, z: 0.0036325976}
+  - {x: -0.091208816, y: 1.9581938, z: 0.06275637}
+  - {x: -0.032085054, y: 1.9581938, z: 0.06275637}
+  - {x: -0.091208816, y: 1.9581938, z: 0.0036325976}
+  - {x: -0.032085054, y: 1.9581938, z: 0.06275637}
+  - {x: -0.032085054, y: 1.9581938, z: 0.0036325976}

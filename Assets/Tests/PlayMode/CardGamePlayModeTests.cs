@@ -982,11 +982,11 @@ public sealed partial class CardGamePlayModeTests
             Is.EqualTo(RectTransformUtility.WorldToScreenPoint(uiCamera, sideCorners[2]).x).Within(0.1f), "The sidebar and dock must touch.");
         int visibleLandmarks = 0;
         foreach (var landmark in new[] { "ResearchCenter", "School", "Factory" })
-            if (GameObject.Find("World3D/" + landmark).GetComponentsInChildren<Renderer>().Any(renderer =>
+            if (city.World.Find("Buildings/" + landmark).GetComponentsInChildren<Renderer>().Any(renderer =>
                 Mathf.Lerp(viewBottom, viewTop, city.WorldCamera.WorldToViewportPoint(renderer.bounds.center).y) > resolution.y * 0.77f))
                 visibleLandmarks++;
         Assert.That(visibleLandmarks, Is.GreaterThanOrEqualTo(2), "At least two city buildings must remain visible above the expanded drawer: " + resolution);
-        foreach (var renderer in GameObject.Find("World3D").GetComponentsInChildren<Renderer>())
+        foreach (var renderer in city.World.GetComponentsInChildren<Renderer>())
         {
             if (renderer.name == "Water") continue;
             Bounds bounds = renderer.bounds;

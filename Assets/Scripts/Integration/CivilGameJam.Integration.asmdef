@@ -1,0 +1,5 @@
+{
+    "name": "CivilGameJam.Integration",
+    "references": ["CivilGameJam.World", "CivilGameJam.Cards"],
+    "autoReferenced": true
+}
