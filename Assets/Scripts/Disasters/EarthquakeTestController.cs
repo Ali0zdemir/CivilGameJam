@@ -3,7 +3,7 @@ using UnityEngine.UI;
 
 namespace CivilGameJam.Disasters
 {
-    /// <summary>Runs a camera-only earthquake test and restores the camera afterwards.</summary>
+    /// <summary>Keeps the existing camera shake running through the monster's steps and their aftermath.</summary>
     [DisallowMultipleComponent]
     public sealed class EarthquakeTestController : MonoBehaviour
     {
@@ -12,10 +12,17 @@ namespace CivilGameJam.Disasters
         private const float DefaultHorizontalDisplacement = 0.054f;
         private const float DefaultVerticalDisplacement = 0.0396f;
 
+        [Header("Saved sea monster")]
+        [SerializeField] private SeaMonsterWalk seaMonsterWalk;
+        [SerializeField] private FireTestController fire;
+        [SerializeField, Min(0f)] private float afterLastStepDelay = 2f;
+
         [Header("Timing")]
+        [Tooltip("Used when no saved monster walk is assigned; otherwise the steps and their delay determine the duration.")]
         [SerializeField, Min(3f)] private float duration = 7f;
 
         [Header("Camera shake")]
+        [SerializeField] private CityCameraController navigation;
         [SerializeField] private Transform cameraTransform;
         [Tooltip("Side-to-side movement. Lower values also reduce horizontal angular shake; zero locks this screen axis.")]
         [SerializeField, Range(0f, 0.15f)] private float horizontalDisplacement = DefaultHorizontalDisplacement;
@@ -56,15 +63,23 @@ namespace CivilGameJam.Disasters
         private readonly System.Random random = new System.Random();
 
         public bool IsRunning { get; private set; }
-        public float NormalizedProgress => IsRunning ? Mathf.Clamp01(elapsed / Mathf.Max(3f, duration)) : 0f;
+        public float TestDuration => seaMonsterWalk != null
+            ? seaMonsterWalk.WalkDuration + Mathf.Max(0f, afterLastStepDelay) : Mathf.Max(3f, duration);
+        public float NormalizedProgress => IsRunning ? Mathf.Clamp01(elapsed / TestDuration) : 0f;
+        private float ReleaseStartProgress => seaMonsterWalk != null ? seaMonsterWalk.WalkDuration / TestDuration : 0.72f;
 
         private void Awake() => ResetTest();
 
         [ContextMenu("Start earthquake test (Play Mode)")]
-        public void StartEarthquake()
+        public void StartEarthquake() => BeginEarthquake(false);
+
+        public void StartSequenceEarthquake() => BeginEarthquake(true);
+
+        private void BeginEarthquake(bool preserveTsunami)
         {
             if (!Application.isPlaying || !isActiveAndEnabled || IsRunning || cameraTransform == null) return;
             if (cameraTransform.GetComponent<Camera>() == null) return;
+            if (fire != null) fire.StopFire();
             cameraPosition = cameraTransform.localPosition;
             cameraRotation = cameraTransform.localRotation;
             poseCaptured = true;
@@ -72,10 +87,12 @@ namespace CivilGameJam.Disasters
             shakePhase = 0f;
             vibrationPhase = 0f;
             noiseSeed = RandomRange(0f, 1000f);
-            nextJoltTime = Mathf.Max(3f, duration) * RandomRange(0.22f, 0.30f);
+            nextJoltTime = TestDuration * RandomRange(0.22f, 0.30f);
             joltAge = JoltDuration;
             joltRotation = Vector3.zero;
             IsRunning = true;
+            if (navigation != null) navigation.AcquireEventInputLock(this);
+            if (seaMonsterWalk != null) seaMonsterWalk.BeginWalk(preserveTsunami);
             if (testButton != null) testButton.interactable = false;
             if (statusLabel != null) statusLabel.text = "Earthquake started";
         }
@@ -88,14 +105,16 @@ namespace CivilGameJam.Disasters
 
         private void AdvanceShake(float deltaTime)
         {
+            if (!IsRunning) return;
             if (cameraTransform == null)
             {
                 ResetTest();
                 return;
             }
 
-            var testDuration = Mathf.Max(3f, duration);
-            elapsed = Mathf.Min(elapsed + deltaTime, testDuration);
+            var testDuration = TestDuration;
+            elapsed = Mathf.Min(elapsed + Mathf.Max(0f, deltaTime), testDuration);
+            if (seaMonsterWalk != null && !seaMonsterWalk.HasStartedAfterEventWalk) seaMonsterWalk.SetWalkTime(elapsed);
             var progress = elapsed / testDuration;
             var ramp = Mathf.SmoothStep(0f, 1f, progress / 0.8f);
             var speedLimit = Mathf.Clamp(maximumFrequency, 0.5f, MaximumShakeFrequency);
@@ -106,7 +125,7 @@ namespace CivilGameJam.Disasters
             vibrationPhase += Mathf.Lerp(vibrationFrequency * 0.45f, vibrationFrequency, ramp) * deltaTime;
 
             var attack = Mathf.SmoothStep(0f, 1f, progress / 0.22f);
-            var release = 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.72f, 1f, progress));
+            var release = 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(ReleaseStartProgress, 1f, progress));
             var surge = Mathf.Lerp(0.65f, 1f, SampleNoise(elapsed * 0.65f, 113.5f) * 0.5f + 0.5f);
             var energy = attack * release * Mathf.Lerp(0.25f, 1f, ramp) * surge;
 
@@ -114,14 +133,14 @@ namespace CivilGameJam.Disasters
             ShakeCamera(energy);
             if (progressFill != null) progressFill.fillAmount = Mathf.Floor(progress * 10f + 0.00001f) * 0.1f;
             if (statusLabel != null)
-                statusLabel.text = progress < 0.30f ? "Light tremors" : progress < 0.72f ? "Shaking intensifies" : "Shaking subsides";
-            if (elapsed >= testDuration) ResetTest();
+                statusLabel.text = progress < 0.30f ? "Light tremors" : progress < ReleaseStartProgress ? "Shaking intensifies" : "Shaking subsides";
+            if (elapsed >= testDuration) ResetTest(true);
         }
 
         private void UpdateJolt(float deltaTime, float progress)
         {
             joltAge += deltaTime;
-            if (elapsed < nextJoltTime || progress >= 0.72f) return;
+            if (elapsed < nextJoltTime || progress >= ReleaseStartProgress) return;
 
             joltAge = elapsed - nextJoltTime;
             joltRotation = new Vector3(RandomRange(-1f, 1f), RandomRange(-0.75f, 0.75f), RandomRange(-0.25f, 0.25f))
@@ -176,14 +195,23 @@ namespace CivilGameJam.Disasters
             if (Application.isPlaying) ResetTest();
         }
 
+        public void FinishForFire()
+        {
+            if (!IsRunning) return;
+            if (seaMonsterWalk != null) seaMonsterWalk.CompleteWalk();
+            ResetTest(true);
+        }
+
         private void OnDisable()
         {
             if (poseCaptured || IsRunning) ResetTest();
         }
 
-        private void ResetTest()
+        private void ResetTest(bool completed = false)
         {
             IsRunning = false;
+            if (navigation != null) navigation.ReleaseEventInputLock(this);
+            if (!completed && seaMonsterWalk != null) seaMonsterWalk.CancelWalk();
             if (poseCaptured && cameraTransform != null)
                 cameraTransform.SetLocalPositionAndRotation(cameraPosition, cameraRotation);
             poseCaptured = false;

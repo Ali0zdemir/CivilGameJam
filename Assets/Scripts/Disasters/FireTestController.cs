@@ -17,13 +17,17 @@ namespace CivilGameJam.Disasters
         [SerializeField, Range(0f, 5f)] private float spreadTime = 3.5f;
         [SerializeField, Range(2.2f, 4f)] private float fadeOutTime = 2.5f;
 
+        [Header("Spreading breath and street fire")]
+        [SerializeField, Range(10f, 45f)] private float breathHalfAngle = 28f;
+        [SerializeField, Range(0.8f, 6f)] private float softFireLeadTime = 4.2f;
+
         [Header("Low poly flames")]
         [SerializeField, Range(0.3f, 2.5f)] private float flameHeight = 1.1f;
         [SerializeField, Range(0.15f, 0.8f)] private float flameWidth = 0.42f;
         [SerializeField, Range(8f, 45f)] private float flameRate = 24f;
 
         [Header("Smoke and embers")]
-        [SerializeField, Range(0f, 2f)] private float smokeAmount = 0.8f;
+        [SerializeField, Range(0f, 2f)] private float smokeAmount = 0.75f;
         [SerializeField, Range(0.3f, 2f)] private float smokeRiseSpeed = 0.9f;
         [SerializeField, Range(0f, 2f)] private float emberAmount = 1f;
         [SerializeField] private Vector2 wind = new Vector2(0.35f, 0.12f);
@@ -32,9 +36,15 @@ namespace CivilGameJam.Disasters
         [SerializeField, Range(0f, 1f)] private float extinguishHissVolume = 0.16f;
 
         [Header("Scene")]
+        [SerializeField] private SeaMonsterFireBreath seaMonsterFire;
+        [SerializeField] private EarthquakeTestController earthquake;
+        [SerializeField] private TsunamiTestController tsunami;
+        [SerializeField] private CityCameraController navigation;
         [SerializeField] private Transform buildingsRoot;
         [SerializeField] private Material flameMaterial;
         [SerializeField] private Material smokeMaterial;
+        [SerializeField] private Material softFireMaterial;
+        [SerializeField] private Material gasFireMaterial;
 
         [Header("Test panel")]
         [SerializeField] private Button testButton;
@@ -48,14 +58,21 @@ namespace CivilGameJam.Disasters
         private ParticleSystem smoke;
         private ParticleSystem embers;
         private ParticleSystem extinguishSmoke;
+        private ParticleSystem softFlames;
         private AudioSource extinguishAudio;
         private AudioClip extinguishHiss;
-        private Mesh flameMesh;
+        private MaterialPropertyBlock gasProperties;
         private Mesh smokeMesh;
         private Mesh emberMesh;
+        private LowPolyFireStream breathStream;
+        private StreetFireSpread streetFire;
+        private float[] streetSuppression;
+        private Vector3 ignitionPoint;
+        private Vector3 lastBreathOrigin;
+        private bool monsterDepartureStarted;
         private float elapsed;
         private const float SprinklerExtinguishDuration = 2f;
-        private readonly ParticleSystem.Particle[] extinguishBuffer = new ParticleSystem.Particle[700];
+        private readonly ParticleSystem.Particle[] extinguishBuffer = new ParticleSystem.Particle[1600];
 
         private sealed class BurnSite
         {
@@ -63,8 +80,11 @@ namespace CivilGameJam.Disasters
             public HouseSprinklerUpgrade Sprinkler;
             public readonly List<Vector3> Anchors = new List<Vector3>();
             public Vector3 Center;
+            public Bounds Bounds;
+            public Bounds Foundation;
             public float Size;
             public float Delay;
+            public float SoftDelay;
             public float FlameRemainder;
             public float SmokeRemainder;
             public float EmberRemainder;
@@ -75,8 +95,21 @@ namespace CivilGameJam.Disasters
         }
 
         public bool IsRunning { get; private set; }
-        public float TestDuration => Mathf.Max(5f, duration);
+        public float CityIgnitionTime => seaMonsterFire != null ? seaMonsterFire.CityIgnitionTime : 0f;
+        public float BuildingIgnitionTime => CityIgnitionTime + Mathf.Max(0.8f, softFireLeadTime);
+        public float TestDuration => BuildingIgnitionTime + Mathf.Max(5f, duration);
+        public int ActiveStreetFireCells => IsRunning && streetFire != null ? streetFire.ActiveCellCount : 0;
         public float NormalizedProgress => IsRunning ? Mathf.Clamp01(elapsed / TestDuration) : 0f;
+        public int IgnitedBuildingCount
+        {
+            get
+            {
+                if (!IsRunning) return 0;
+                var count = 0;
+                foreach (var site in sites) if (elapsed > site.Delay && !site.Extinguished) count++;
+                return count;
+            }
+        }
 
         private void Awake() => ResetTest(false);
 
@@ -84,24 +117,31 @@ namespace CivilGameJam.Disasters
         public void StartFire()
         {
             if (!Application.isPlaying || !isActiveAndEnabled || IsRunning) return;
-            if (buildingsRoot == null || flameMaterial == null || smokeMaterial == null)
+            if (buildingsRoot == null || flameMaterial == null || smokeMaterial == null || softFireMaterial == null || gasFireMaterial == null)
             {
-                Debug.LogWarning("Assign the buildings root and both fire materials before starting the test.", this);
+                Debug.LogWarning("Assign the buildings root and the fire, smoke, street and gas materials before starting the test.", this);
                 return;
             }
+            if (tsunami != null && tsunami.IsRunning) tsunami.StopTsunami();
+            if (earthquake != null) earthquake.FinishForFire();
             CacheBurnSites();
             if (sites.Count == 0) return;
+            if (seaMonsterFire != null) seaMonsterFire.BeginFire();
             EnsureVisuals();
+            CacheStreetSpread();
             elapsed = 0f;
+            monsterDepartureStarted = false;
             IsRunning = true;
+            if (navigation != null) navigation.AcquireEventInputLock(this);
             visuals.SetActive(true);
             flames.Play(true);
             smoke.Play(true);
             embers.Play(true);
             extinguishSmoke.Play(true);
+            softFlames.Play(true);
             if (testButton != null) testButton.interactable = false;
             if (progressFill != null) progressFill.fillAmount = 0f;
-            if (statusLabel != null) statusLabel.text = "Fire started";
+            if (statusLabel != null) statusLabel.text = seaMonsterFire != null ? "Monster heating up" : "Fire started";
         }
 
         private void Update()
@@ -115,17 +155,35 @@ namespace CivilGameJam.Disasters
             var step = Mathf.Min(Mathf.Max(0f, deltaTime), TestDuration - elapsed);
             var previousElapsed = elapsed;
             elapsed += step;
+            if (seaMonsterFire != null)
+            {
+                var departNow = !monsterDepartureStarted && elapsed >= seaMonsterFire.BreathEndTime;
+                if (departNow)
+                {
+                    seaMonsterFire.SetFireTime(seaMonsterFire.BreathEndTime);
+                    if (seaMonsterFire.Mouth != null) lastBreathOrigin = seaMonsterFire.Mouth.position;
+                }
+                seaMonsterFire.SetFireTime(elapsed);
+                if (seaMonsterFire.Mouth != null)
+                    breathStream.Update(monsterDepartureStarted || departNow ? lastBreathOrigin : seaMonsterFire.Mouth.position, ignitionPoint,
+                        elapsed - seaMonsterFire.FlameStartTime, seaMonsterFire.TravelDuration, seaMonsterFire.BreathDuration, breathHalfAngle);
+                if (departNow)
+                {
+                    monsterDepartureStarted = true;
+                    if (seaMonsterFire.Walk != null) seaMonsterFire.Walk.BeginAfterEventWalk();
+                }
+            }
             var releaseStart = TestDuration - Mathf.Clamp(fadeOutTime, 2.2f, TestDuration * 0.45f);
             // Stop feeding the fire before the test ends so the final smoke can drift away.
             var releaseEnd = TestDuration - 1.6f;
             var release = 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(releaseStart, releaseEnd, elapsed));
             foreach (var site in sites)
             {
-                if (site.Extinguished || elapsed <= site.Delay) continue;
-                var burnStep = elapsed - Mathf.Max(previousElapsed, site.Delay);
+                if (site.Extinguished || elapsed <= site.SoftDelay) continue;
+                var exposureStep = elapsed - Mathf.Max(previousElapsed, site.SoftDelay);
                 var protectedHouse = site.Sprinkler != null && site.Sprinkler.IsInstalled && site.Sprinkler.isActiveAndEnabled;
                 // Count from this house catching fire, or from installing protection on a burning house.
-                site.SprinklerExposure = protectedHouse ? site.SprinklerExposure + burnStep : 0f;
+                site.SprinklerExposure = protectedHouse ? site.SprinklerExposure + exposureStep : 0f;
                 var suppression = protectedHouse ? 1f - Mathf.SmoothStep(0f, 1f, site.SprinklerExposure / SprinklerExtinguishDuration) : 1f;
                 // Shrink live particles as well as new flames, so the final frame has no abrupt cut.
                 if (suppression < site.SuppressionScale)
@@ -133,6 +191,7 @@ namespace CivilGameJam.Disasters
                     var ratio = suppression / Mathf.Max(0.00001f, site.SuppressionScale);
                     ScaleBurningParticles(flames, site.ParticleSeed, ratio);
                     ScaleBurningParticles(embers, site.ParticleSeed, ratio);
+                    ScaleBurningParticles(softFlames, site.ParticleSeed, ratio);
                 }
                 site.SuppressionScale = suppression;
                 if (site.SprinklerExposure >= SprinklerExtinguishDuration - 0.00001f)
@@ -141,11 +200,14 @@ namespace CivilGameJam.Disasters
                     site.FlameRemainder = site.SmokeRemainder = site.EmberRemainder = 0f;
                     RemoveBurningParticles(flames, site.ParticleSeed);
                     RemoveBurningParticles(embers, site.ParticleSeed);
+                    RemoveBurningParticles(softFlames, site.ParticleSeed);
                     EmitExtinguishSmoke(site);
                     if (extinguishAudio != null && extinguishHissVolume > 0f)
                         extinguishAudio.PlayOneShot(extinguishHiss, extinguishHissVolume);
                     continue;
                 }
+                if (elapsed <= site.Delay) continue;
+                var burnStep = elapsed - Mathf.Max(previousElapsed, site.Delay);
                 var ignitionDuration = protectedHouse ? Mathf.Min(0.12f, ignitionTime) : Mathf.Max(0.2f, ignitionTime);
                 var ignition = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(site.Delay, site.Delay + ignitionDuration, elapsed));
                 var strength = ignition * release * suppression;
@@ -153,67 +215,119 @@ namespace CivilGameJam.Disasters
                 EmitSmoke(site, burnStep, strength);
                 EmitEmbers(site, burnStep, strength);
             }
+            for (var i = 0; i < sites.Count; i++) streetSuppression[i] = sites[i].SuppressionScale;
+            streetFire.Update(elapsed, release, streetSuppression);
+            EmitStreetFlames(step);
+            AdvectGas(flames, step, 0.65f);
+            AdvectGas(softFlames, step, 0.35f);
             if (progressFill != null) progressFill.fillAmount = Mathf.Floor(elapsed / TestDuration * 10f + 0.00001f) * 0.1f;
             if (statusLabel != null)
-                statusLabel.text = elapsed >= releaseStart ? "Fire fading" : elapsed < Mathf.Min(spreadTime, releaseStart * 0.7f) + ignitionTime ? "Fire spreading" : "Fire intensified";
+                statusLabel.text = seaMonsterFire != null && elapsed < seaMonsterFire.ChargeDuration ? "Monster heating up"
+                    : seaMonsterFire != null && elapsed < seaMonsterFire.FlameStartTime ? "Monster taking aim"
+                    : elapsed < CityIgnitionTime ? "Flame approaching city"
+                    : elapsed < BuildingIgnitionTime ? "Fire flowing through streets"
+                    : elapsed >= releaseStart ? "Fire fading"
+                    : elapsed < BuildingIgnitionTime + spreadTime + ignitionTime ? "Fire spreading" : "Fire intensified";
             if (elapsed >= TestDuration) ResetTest(true);
         }
 
         private void CacheBurnSites()
         {
             sites.Clear();
-            var ignitionCenter = Vector3.zero;
-            var foundFactory = false;
             var sprinklers = FindObjectsByType<HouseSprinklerUpgrade>(FindObjectsSortMode.None);
             foreach (Transform building in buildingsRoot)
             {
                 if (!building.gameObject.activeInHierarchy) continue;
-                var renderers = Array.FindAll(building.GetComponentsInChildren<MeshRenderer>(), renderer => !IsSprinklerPart(renderer.transform, building));
                 building.TryGetComponent<BuildingModelGeometry>(out var model);
-                if (model != null)
-                {
-                    var surfaces = new List<MeshRenderer>(); model.AppendRenderers(surfaces); renderers = surfaces.ToArray();
-                }
-                if (renderers.Length == 0) continue;
-                var bounds = renderers[0].bounds;
-                foreach (var renderer in renderers) bounds.Encapsulate(renderer.bounds);
-                var site = new BurnSite
-                {
-                    Building = building,
-                    ParticleSeed = (uint)sites.Count + 1u,
-                    Center = bounds.center,
-                    Size = Mathf.Clamp(Mathf.Sqrt(bounds.size.x * bounds.size.z), 0.65f, 1.5f)
-                };
-                foreach (var sprinkler in sprinklers) if (sprinkler.Building == building) { site.Sprinkler = sprinkler; break; }
-                if (model != null) AppendRoofAnchors(site, model);
-                foreach (var renderer in renderers)
-                {
-                    var label = renderer.name;
-                    if (label.IndexOf("roof", StringComparison.OrdinalIgnoreCase) < 0 || label.IndexOf("vent", StringComparison.OrdinalIgnoreCase) >= 0) continue;
-                    var roof = renderer.bounds;
-                    if (roof.size.x < 0.2f || roof.size.z < 0.2f) continue;
-                    for (var x = -1; x <= 1; x += 2)
-                    for (var z = -1; z <= 1; z += 2)
-                        site.Anchors.Add(new Vector3(roof.center.x + roof.size.x * 0.28f * x, roof.center.y - 0.02f, roof.center.z + roof.size.z * 0.24f * z));
-                }
-                if (site.Anchors.Count == 0) site.Anchors.Add(new Vector3(bounds.center.x, bounds.max.y - 0.08f, bounds.center.z));
-                // A few flames on the visible facade connect roof flames to the building itself.
-                for (var x = -1; x <= 1; x += 2)
-                    site.Anchors.Add(new Vector3(bounds.center.x + bounds.size.x * 0.26f * x, bounds.min.y + bounds.size.y * 0.28f, bounds.min.z - 0.025f));
-                sites.Add(site);
-                if (building.name.IndexOf("factory", StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    ignitionCenter = bounds.center;
-                    foundFactory = true;
-                }
+                if (model != null) AppendModelSites(model, sprinklers);
+                else AddBurnSite(building, null, sprinklers);
             }
             if (sites.Count == 0) return;
-            if (!foundFactory) ignitionCenter = sites[0].Center;
-            var maximumDistance = 0.01f;
-            foreach (var site in sites) maximumDistance = Mathf.Max(maximumDistance, Vector2.Distance(new Vector2(site.Center.x, site.Center.z), new Vector2(ignitionCenter.x, ignitionCenter.z)));
-            var maximumDelay = Mathf.Min(Mathf.Max(0f, spreadTime), TestDuration * 0.45f);
-            foreach (var site in sites)
-                site.Delay = Vector2.Distance(new Vector2(site.Center.x, site.Center.z), new Vector2(ignitionCenter.x, ignitionCenter.z)) / maximumDistance * maximumDelay;
+            var city = sites[0].Foundation;
+            foreach (var site in sites) city.Encapsulate(site.Foundation);
+            ignitionPoint = new Vector3(city.center.x, city.min.y + 0.3f, Mathf.Lerp(city.min.z, city.max.z, 0.3f));
+        }
+
+        private void CacheStreetSpread()
+        {
+            var foundations = new Bounds[sites.Count]; streetSuppression = new float[sites.Count];
+            for (var i = 0; i < sites.Count; i++) { foundations[i] = sites[i].Foundation; streetSuppression[i] = 1f; }
+            var ground = WorldGroundBounds();
+            if (seaMonsterFire != null) ignitionPoint = seaMonsterFire.GroundImpact(ground.max.y + 0.025f);
+            var mouth = seaMonsterFire != null && seaMonsterFire.Mouth != null ? seaMonsterFire.AimedMouthPosition
+                : ignitionPoint - Vector3.forward * 5f;
+            streetFire.Rebuild(foundations, ground, mouth, ignitionPoint, breathHalfAngle, CityIgnitionTime,
+                Mathf.Min(Mathf.Max(0f, spreadTime), Mathf.Max(5f, duration) * 0.45f));
+            for (var i = 0; i < sites.Count; i++)
+            {
+                sites[i].SoftDelay = streetFire.ArrivalTimes[i];
+                sites[i].Delay = sites[i].SoftDelay + Mathf.Max(0.8f, softFireLeadTime);
+            }
+        }
+
+        private Bounds WorldGroundBounds()
+        {
+            var ground = sites[0].Foundation;
+            foreach (var site in sites) ground.Encapsulate(site.Foundation);
+            ground.Expand(new Vector3(0.7f, 0f, 0.65f));
+            if (tsunami != null)
+            {
+                var city = tsunami.CityBounds;
+                ground = new Bounds(tsunami.transform.TransformPoint(city.center), Vector3.zero);
+                for (var corner = 0; corner < 8; corner++)
+                    ground.Encapsulate(tsunami.transform.TransformPoint(city.center + Vector3.Scale(city.extents,
+                        new Vector3((corner & 1) == 0 ? -1f : 1f, (corner & 2) == 0 ? -1f : 1f, (corner & 4) == 0 ? -1f : 1f))));
+            }
+            return ground;
+        }
+
+        private void AppendModelSites(BuildingModelGeometry model, HouseSprinklerUpgrade[] sprinklers)
+        {
+            if (model.IsCollection)
+            {
+                foreach (var part in model.Parts) if (part.gameObject.activeInHierarchy) AppendModelSites(part, sprinklers);
+            }
+            else AddBurnSite(model.transform, model, sprinklers);
+        }
+
+        private void AddBurnSite(Transform building, BuildingModelGeometry model, HouseSprinklerUpgrade[] sprinklers)
+        {
+            var renderers = Array.FindAll(building.GetComponentsInChildren<MeshRenderer>(), renderer => !IsSprinklerPart(renderer.transform, building));
+            if (model != null) { var surfaces = new List<MeshRenderer>(); model.AppendRenderers(surfaces); renderers = surfaces.ToArray(); }
+            if (renderers.Length == 0) return;
+            var bounds = renderers[0].bounds;
+            foreach (var renderer in renderers) bounds.Encapsulate(renderer.bounds);
+            var site = new BurnSite
+            {
+                Building = building,
+                ParticleSeed = (uint)sites.Count + 1u,
+                Center = bounds.center,
+                Bounds = bounds,
+                Foundation = model != null ? model.WorldFoundationBounds : bounds,
+                Size = Mathf.Clamp(Mathf.Sqrt(bounds.size.x * bounds.size.z), 0.5f, 1.3f)
+            };
+            foreach (var sprinkler in sprinklers) if (sprinkler.Building == building) { site.Sprinkler = sprinkler; break; }
+            if (model != null) AppendRoofAnchors(site, model);
+            foreach (var renderer in renderers)
+            {
+                var label = renderer.name;
+                if (label.IndexOf("roof", StringComparison.OrdinalIgnoreCase) < 0 || label.IndexOf("vent", StringComparison.OrdinalIgnoreCase) >= 0) continue;
+                var roof = renderer.bounds;
+                if (roof.size.x < 0.2f || roof.size.z < 0.2f) continue;
+                for (var x = -1; x <= 1; x += 2)
+                for (var z = -1; z <= 1; z += 2)
+                    site.Anchors.Add(new Vector3(roof.center.x + roof.size.x * 0.28f * x, roof.center.y - 0.02f, roof.center.z + roof.size.z * 0.24f * z));
+            }
+            if (site.Anchors.Count == 0) site.Anchors.Add(new Vector3(bounds.center.x, bounds.max.y - 0.08f, bounds.center.z));
+            // Rounded flame clusters grow up the facade as well as over each individual roof.
+            for (var x = -1; x <= 1; x += 2)
+            {
+                site.Anchors.Add(new Vector3(bounds.center.x + bounds.size.x * 0.26f * x, bounds.min.y + bounds.size.y * 0.28f, bounds.min.z - 0.025f));
+                site.Anchors.Add(new Vector3(bounds.center.x + bounds.size.x * 0.32f * x, bounds.min.y + 0.03f, bounds.min.z - 0.04f));
+                site.Anchors.Add(new Vector3(bounds.min.x - 0.025f, bounds.min.y + bounds.size.y * 0.55f,
+                    bounds.center.z + bounds.size.z * 0.25f * x));
+            }
+            sites.Add(site);
         }
 
         private static bool IsSprinklerPart(Transform part, Transform building)
@@ -241,12 +355,16 @@ namespace CivilGameJam.Disasters
             visuals = new GameObject("Low_Poly_Fire");
             visuals.transform.SetParent(transform, false);
             visuals.SetActive(false);
-            flameMesh = CreateFlameMesh();
+            gasProperties = new MaterialPropertyBlock();
             smokeMesh = CreateSmokeMesh();
             emberMesh = CreateEmberMesh();
-            flames = CreateParticles("Flames", flameMesh, flameMaterial, 700, 0f,
-                new AnimationCurve(new Keyframe(0f, 0.25f), new Keyframe(0.18f, 1f), new Keyframe(0.6f, 0.85f), new Keyframe(1f, 0f)));
-            smoke = CreateParticles("Smoke", smokeMesh, smokeMaterial, 180, 0f,
+            breathStream = new LowPolyFireStream(visuals.transform, gasFireMaterial);
+            streetFire = new StreetFireSpread(visuals.transform, softFireMaterial);
+            softFlames = CreateParticles("Soft_Street_Flames", null, gasFireMaterial, 1600, 0f,
+                new AnimationCurve(new Keyframe(0f, 0.4f), new Keyframe(0.25f, 1f), new Keyframe(0.7f, 0.8f), new Keyframe(1f, 0f)));
+            flames = CreateParticles("Flames", null, gasFireMaterial, 1600, 0f,
+                new AnimationCurve(new Keyframe(0f, 0.4f), new Keyframe(0.18f, 1f), new Keyframe(0.6f, 0.8f), new Keyframe(1f, 0f)));
+            smoke = CreateParticles("Smoke", smokeMesh, smokeMaterial, 360, 0f,
                 new AnimationCurve(new Keyframe(0f, 0.25f), new Keyframe(0.2f, 0.75f), new Keyframe(0.65f, 1.2f), new Keyframe(1f, 0f)));
             embers = CreateParticles("Embers", emberMesh, flameMaterial, 220, 0.08f,
                 new AnimationCurve(new Keyframe(0f, 1f), new Keyframe(0.55f, 0.8f), new Keyframe(1f, 0f)));
@@ -281,6 +399,12 @@ namespace CivilGameJam.Disasters
             var size = system.sizeOverLifetime;
             size.enabled = true;
             size.size = new ParticleSystem.MinMaxCurve(1f, sizeCurve);
+            var fade = system.colorOverLifetime;
+            fade.enabled = true;
+            var gradient = new Gradient();
+            gradient.SetKeys(new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.white, 1f) },
+                new[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(1f, 0.12f), new GradientAlphaKey(0.85f, 0.55f), new GradientAlphaKey(0f, 1f) });
+            fade.color = gradient;
             var renderer = system.GetComponent<ParticleSystemRenderer>();
             renderer.renderMode = ParticleSystemRenderMode.Mesh;
             renderer.alignment = ParticleSystemRenderSpace.World;
@@ -289,7 +413,26 @@ namespace CivilGameJam.Disasters
             renderer.shadowCastingMode = ShadowCastingMode.Off;
             renderer.receiveShadows = false;
             renderer.enableGPUInstancing = false;
+            if (particleMesh == null) FireFlow.ConfigureGas(system, material);
             return system;
+        }
+
+        private void AdvectGas(ParticleSystem system, float step, float strength)
+        {
+            var count = system.GetParticles(extinguishBuffer);
+            var blend = 1f - Mathf.Exp(-Mathf.Max(0f, step) * 4f);
+            for (var i = 0; i < count; i++)
+            {
+                var particle = extinguishBuffer[i];
+                var curl = FireFlow.Curl(particle.position, elapsed);
+                var velocity = new Vector3(wind.x * 0.12f, 0.5f, wind.y * 0.12f) + curl * strength;
+                particle.velocity = Vector3.Lerp(particle.velocity, velocity, blend);
+                particle.rotation += curl.z * step * 48f;
+                extinguishBuffer[i] = particle;
+            }
+            system.SetParticles(extinguishBuffer, count);
+            gasProperties.SetFloat("_FireTime", elapsed);
+            system.GetComponent<ParticleSystemRenderer>().SetPropertyBlock(gasProperties);
         }
 
         private void EmitFlames(BurnSite site, float step, float strength)
@@ -304,13 +447,37 @@ namespace CivilGameJam.Disasters
                 flames.Emit(new ParticleSystem.EmitParams
                 {
                     position = RandomAnchor(site) + new Vector3(RandomRange(-0.09f, 0.09f), -0.03f, RandomRange(-0.09f, 0.09f)),
-                    velocity = new Vector3(wind.x * 0.15f, RandomRange(0.1f, 0.35f), wind.y * 0.15f),
-                    startLifetime = RandomRange(0.45f, 0.85f),
+                    velocity = new Vector3(wind.x * 0.16f, RandomRange(0.16f, 0.4f), wind.y * 0.16f),
+                    startLifetime = RandomRange(0.75f, 1.15f),
                     randomSeed = site.ParticleSeed,
-                    startSize3D = new Vector3(width, flameHeight * site.Size * RandomRange(0.65f, 1.25f) * Mathf.Lerp(0.35f, 1f, protection) * site.SuppressionScale, width),
-                    rotation3D = new Vector3(RandomRange(-10f, 10f), RandomRange(0f, 360f), RandomRange(-12f, 12f)),
-                    startColor = Color.Lerp(new Color(1f, 0.26f, 0.015f), new Color(1f, 0.88f, 0.12f), RandomRange(0f, 1f))
+                    startSize3D = new Vector3(width * 1.8f, flameHeight * site.Size * RandomRange(0.8f, 1.5f) * Mathf.Lerp(0.35f, 1f, protection) * site.SuppressionScale, width),
+                    rotation = RandomRange(-18f, 18f),
+                    startColor = Color.Lerp(Color.white, new Color(1f, 0.82f, 0.65f, 0.88f), RandomRange(0f, 1f))
                 }, 1);
+            }
+        }
+
+        private void EmitStreetFlames(float step)
+        {
+            foreach (var cell in streetFire.Cells)
+            {
+                if (cell.Strength <= 0.001f) continue;
+                cell.Remainder += step * 1.8f * cell.Strength;
+                var count = Mathf.Min(4, Mathf.FloorToInt(cell.Remainder)); cell.Remainder -= count;
+                for (var i = 0; i < count; i++)
+                {
+                    var width = cell.Radius * RandomRange(2.8f, 3.8f);
+                    softFlames.Emit(new ParticleSystem.EmitParams
+                    {
+                        position = cell.Position + Vector3.up * 0.045f,
+                        velocity = new Vector3(wind.x * 0.04f, RandomRange(0.06f, 0.18f), wind.y * 0.04f),
+                        startLifetime = RandomRange(0.6f, 0.95f),
+                        startSize3D = new Vector3(width, RandomRange(0.35f, 0.65f), width),
+                        rotation = RandomRange(-22f, 22f),
+                        randomSeed = sites[cell.Owner].ParticleSeed,
+                        startColor = Color.Lerp(new Color(1f, 0.29f, 0.012f, 0.32f), new Color(1f, 0.71f, 0.09f, 0.48f), RandomRange(0f, 1f))
+                    }, 1);
+                }
             }
         }
 
@@ -321,16 +488,16 @@ namespace CivilGameJam.Disasters
             site.SmokeRemainder -= count;
             for (var i = 0; i < count; i++)
             {
-                var size = site.Size * RandomRange(0.4f, 0.65f);
-                var shade = RandomRange(0.2f, 0.38f);
+                var size = site.Size * RandomRange(0.65f, 0.95f);
+                var shade = RandomRange(0.18f, 0.3f);
                 smoke.Emit(new ParticleSystem.EmitParams
                 {
                     position = RandomAnchor(site) + Vector3.up * flameHeight * site.Size * 0.6f,
                     velocity = new Vector3(wind.x + RandomRange(-0.12f, 0.12f), smokeRiseSpeed * RandomRange(0.8f, 1.2f), wind.y + RandomRange(-0.1f, 0.1f)),
-                    startLifetime = RandomRange(1.4f, 2.1f),
+                    startLifetime = RandomRange(1.8f, 2.5f),
                     startSize3D = new Vector3(size, size, size),
                     rotation3D = new Vector3(RandomRange(0f, 360f), RandomRange(0f, 360f), RandomRange(0f, 360f)),
-                    startColor = new Color(shade, shade * 1.03f, shade * 1.06f)
+                    startColor = new Color(shade, shade * 0.96f, shade * 0.92f, 0.34f)
                 }, 1);
             }
         }
@@ -360,7 +527,7 @@ namespace CivilGameJam.Disasters
 
         private void EmitExtinguishSmoke(BurnSite site)
         {
-            for (var i = 0; i < 12; i++)
+            for (var i = 0; i < 8; i++)
             {
                 var angle = RandomRange(0f, Mathf.PI * 2f);
                 var outward = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle));
@@ -416,41 +583,38 @@ namespace CivilGameJam.Disasters
             system.SetParticles(extinguishBuffer, kept);
         }
 
-        private static Mesh CreateFlameMesh()
-        {
-            const int sides = 5;
-            var points = new Vector3[sides * 3 + 1];
-            for (var ring = 0; ring < 3; ring++)
-            for (var side = 0; side < sides; side++)
-            {
-                var angle = side * Mathf.PI * 2f / sides;
-                var radius = ring == 0 ? 0.25f : ring == 1 ? 0.5f : 0.22f;
-                var height = ring == 0 ? 0f : ring == 1 ? 0.32f : 0.72f;
-                points[ring * sides + side] = new Vector3(Mathf.Cos(angle) * radius + ring * 0.04f, height, Mathf.Sin(angle) * radius);
-            }
-            points[points.Length - 1] = new Vector3(0.22f, 1f, 0.04f);
-            var indices = new List<int>();
-            for (var ring = 0; ring < 2; ring++)
-            for (var side = 0; side < sides; side++)
-            {
-                var a = ring * sides + side;
-                var b = ring * sides + (side + 1) % sides;
-                indices.Add(a); indices.Add(a + sides); indices.Add(b);
-                indices.Add(b); indices.Add(a + sides); indices.Add(b + sides);
-            }
-            for (var side = 0; side < sides; side++)
-            {
-                indices.Add(2 * sides + side); indices.Add(points.Length - 1); indices.Add(2 * sides + (side + 1) % sides);
-            }
-            return FlatMesh("Low poly flame", points, indices.ToArray(), true);
-        }
-
         private static Mesh CreateSmokeMesh()
         {
             var t = (1f + Mathf.Sqrt(5f)) * 0.5f;
             var points = new[] { new Vector3(-1,t,0), new Vector3(1,t,0), new Vector3(-1,-t,0), new Vector3(1,-t,0), new Vector3(0,-1,t), new Vector3(0,1,t), new Vector3(0,-1,-t), new Vector3(0,1,-t), new Vector3(t,0,-1), new Vector3(t,0,1), new Vector3(-t,0,-1), new Vector3(-t,0,1) };
             for (var i = 0; i < points.Length; i++) points[i] = points[i].normalized * 0.5f;
-            return FlatMesh("Low poly smoke puff", points, new[] { 0,11,5, 0,5,1, 0,1,7, 0,7,10, 0,10,11, 1,5,9, 5,11,4, 11,10,2, 10,7,6, 7,1,8, 3,9,4, 3,4,2, 3,2,6, 3,6,8, 3,8,9, 4,9,5, 2,4,11, 6,2,10, 8,6,7, 9,8,1 }, false);
+            var indices = new[] { 0,11,5, 0,5,1, 0,1,7, 0,7,10, 0,10,11, 1,5,9, 5,11,4, 11,10,2, 10,7,6, 7,1,8, 3,9,4, 3,4,2, 3,2,6, 3,6,8, 3,8,9, 4,9,5, 2,4,11, 6,2,10, 8,6,7, 9,8,1 };
+            var rounded = new List<Vector3>(points);
+            var triangles = new List<int>();
+            var midpoints = new Dictionary<int, int>();
+            for (var triangle = 0; triangle < indices.Length; triangle += 3)
+            {
+                var a = indices[triangle]; var b = indices[triangle + 1]; var c = indices[triangle + 2];
+                var ab = PuffMidpoint(a, b, rounded, midpoints);
+                var bc = PuffMidpoint(b, c, rounded, midpoints);
+                var ca = PuffMidpoint(c, a, rounded, midpoints);
+                triangles.AddRange(new[] { a, ab, ca, b, bc, ab, c, ca, bc, ab, bc, ca });
+            }
+            var result = new Mesh { name = "Soft low poly smoke puffs" };
+            result.SetVertices(rounded); result.SetTriangles(triangles, 0);
+            var colors = new Color32[rounded.Count];
+            for (var i = 0; i < colors.Length; i++) colors[i] = Color.white;
+            result.colors32 = colors;
+            result.RecalculateNormals(); result.RecalculateBounds();
+            return result;
+        }
+
+        private static int PuffMidpoint(int a, int b, List<Vector3> points, Dictionary<int, int> midpoints)
+        {
+            var key = Mathf.Min(a, b) * 12 + Mathf.Max(a, b);
+            if (midpoints.TryGetValue(key, out var index)) return index;
+            index = points.Count; points.Add((points[a] + points[b]).normalized * 0.5f); midpoints.Add(key, index);
+            return index;
         }
 
         private static Mesh CreateEmberMesh() => FlatMesh("Low poly ember",
@@ -491,23 +655,30 @@ namespace CivilGameJam.Disasters
         private void ResetTest(bool completed)
         {
             IsRunning = false;
+            if (seaMonsterFire != null) seaMonsterFire.ResetPose();
+            if (breathStream != null) breathStream.Hide();
+            if (streetFire != null) streetFire.Clear();
+            if (navigation != null) navigation.ReleaseEventInputLock(this);
             if (flames != null) flames.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
             if (smoke != null) smoke.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
             if (embers != null) embers.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
             if (extinguishSmoke != null) extinguishSmoke.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            if (softFlames != null) softFlames.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
             if (extinguishAudio != null) extinguishAudio.Stop();
             if (visuals != null) visuals.SetActive(false);
             if (testButton != null) testButton.interactable = true;
             if (progressFill != null) progressFill.fillAmount = 0f;
             if (statusLabel != null) statusLabel.text = completed ? "Completed · ready" : "Ready";
+            if (!completed && seaMonsterFire != null && seaMonsterFire.Walk != null) seaMonsterFire.Walk.StopAfterEventWalk();
         }
 
         private void OnDestroy()
         {
-            if (flameMesh != null) Destroy(flameMesh);
             if (smokeMesh != null) Destroy(smokeMesh);
             if (emberMesh != null) Destroy(emberMesh);
             if (extinguishHiss != null) Destroy(extinguishHiss);
+            if (breathStream != null) breathStream.Dispose();
+            if (streetFire != null) streetFire.Dispose();
         }
     }
 }

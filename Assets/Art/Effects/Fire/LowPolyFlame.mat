@@ -18,7 +18,7 @@ Material:
   m_DoubleSidedGI: 1
   m_CustomRenderQueue: -1
   stringTagMap:
-    RenderType: Opaque
+    RenderType: Transparent
   disabledShaderPasses: []
   m_LockedProperties: 
   m_SavedProperties:
@@ -27,5 +27,7 @@ Material:
     m_Ints: []
     m_Floats:
     - _Lighting: 0.15
+    - _Glow: 0.22
+    - _EdgeSoftness: 0.85
     m_Colors:
     - _BaseColor: {r: 1, g: 1, b: 1, a: 1}
