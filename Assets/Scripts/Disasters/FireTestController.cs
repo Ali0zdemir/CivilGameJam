@@ -29,13 +29,18 @@ namespace CivilGameJam.Disasters
         [SerializeField, Range(8f, 45f)] private float flameRate = 24f;
 
         [Header("Smoke and embers")]
-        [SerializeField, Range(0f, 2f)] private float smokeAmount = 0.75f;
+        [SerializeField, Range(0f, 2f)] private float smokeAmount = 0.22f;
         [SerializeField, Range(0.3f, 2f)] private float smokeRiseSpeed = 0.9f;
         [SerializeField, Range(0f, 2f)] private float emberAmount = 1f;
         [SerializeField] private Vector2 wind = new Vector2(0.35f, 0.12f);
 
         [Header("Extinguishing")]
         [SerializeField, Range(0f, 1f)] private float extinguishHissVolume = 0.16f;
+
+        [Header("Burnt buildings")]
+        [Tooltip("Final grey-blue tint on houses that catch fire. Other buildings keep their original colors.")]
+        [SerializeField] private Color burntBuildingColor = new Color(.32f, .38f, .43f, 1f);
+        [SerializeField, Min(.1f)] private float burnColorDuration = 1.5f;
 
         [Header("Scene")]
         [SerializeField] private SeaMonsterFireBreath seaMonsterFire;
@@ -75,6 +80,8 @@ namespace CivilGameJam.Disasters
         private bool monsterDepartureStarted;
         private float elapsed;
         private const float SprinklerExtinguishDuration = 2f;
+        private static readonly int BaseColor = Shader.PropertyToID("_BaseColor");
+        private static readonly int LegacyColor = Shader.PropertyToID("_Color");
         private readonly ParticleSystem.Particle[] extinguishBuffer = new ParticleSystem.Particle[1600];
 
         private sealed class BurnSite
@@ -95,11 +102,25 @@ namespace CivilGameJam.Disasters
             public float SuppressionScale = 1f;
             public bool Extinguished;
             public uint ParticleSeed;
+            public float BurnExposure;
+            public readonly List<BurnSurface> Surfaces = new List<BurnSurface>();
+        }
+
+        private sealed class BurnSurface
+        {
+            public MeshRenderer Renderer;
+            public int MaterialIndex;
+            public int ColorProperty;
+            public Color OriginalColor;
+            public MaterialPropertyBlock OriginalProperties;
+            public MaterialPropertyBlock Properties;
         }
 
         public bool IsRunning { get; private set; }
         public float CityIgnitionTime => seaMonsterFire != null ? seaMonsterFire.CityIgnitionTime : 0f;
         public float BuildingIgnitionTime => CityIgnitionTime + Mathf.Max(0.8f, softFireLeadTime);
+        public float SprinklerStartTime => CityIgnitionTime + .35f;
+        public bool SprinklersActive => IsRunning && elapsed >= SprinklerStartTime;
         public float TestDuration => BuildingIgnitionTime + Mathf.Max(5f, duration);
         public int ActiveStreetFireCells => IsRunning && streetFire != null ? streetFire.ActiveCellCount : 0;
         public float NormalizedProgress => IsRunning ? Mathf.Clamp01(elapsed / TestDuration) : 0f;
@@ -189,8 +210,8 @@ namespace CivilGameJam.Disasters
             foreach (var site in sites)
             {
                 if (site.Extinguished || elapsed <= site.SoftDelay) continue;
-                var exposureStep = elapsed - Mathf.Max(previousElapsed, site.SoftDelay);
-                var protectedHouse = site.Sprinkler != null && site.Sprinkler.IsInstalled && site.Sprinkler.isActiveAndEnabled;
+                var exposureStep = Mathf.Max(0f, elapsed - Mathf.Max(previousElapsed, Mathf.Max(site.SoftDelay, SprinklerStartTime)));
+                var protectedHouse = SprinklersActive && site.Sprinkler != null && site.Sprinkler.IsOperational;
                 // Count from this house catching fire, or from installing protection on a burning house.
                 site.SprinklerExposure = protectedHouse ? site.SprinklerExposure + exposureStep : 0f;
                 var suppression = protectedHouse ? 1f - Mathf.SmoothStep(0f, 1f, site.SprinklerExposure / SprinklerExtinguishDuration) : 1f;
@@ -220,6 +241,8 @@ namespace CivilGameJam.Disasters
                 var ignitionDuration = protectedHouse ? Mathf.Min(0.12f, ignitionTime) : Mathf.Max(0.2f, ignitionTime);
                 var ignition = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(site.Delay, site.Delay + ignitionDuration, elapsed));
                 var strength = ignition * release * suppression;
+                site.BurnExposure += burnStep * strength;
+                ApplyBurnColor(site);
                 EmitFlames(site, burnStep, strength);
                 EmitSmoke(site, burnStep, strength);
                 EmitEmbers(site, burnStep, strength);
@@ -243,11 +266,13 @@ namespace CivilGameJam.Disasters
 
         private void CacheBurnSites()
         {
+            RestoreBuildingColors();
             sites.Clear();
             var sprinklers = FindObjectsByType<HouseSprinklerUpgrade>(FindObjectsSortMode.None);
             foreach (Transform building in buildingsRoot)
             {
                 if (!building.gameObject.activeInHierarchy) continue;
+                if (building.TryGetComponent<ApartmentTsunamiCollapse>(out var collapse) && collapse.HasDisappeared) continue;
                 building.TryGetComponent<BuildingModelGeometry>(out var model);
                 if (model != null) AppendModelSites(model, sprinklers);
                 else AddBurnSite(building, null, sprinklers);
@@ -316,6 +341,13 @@ namespace CivilGameJam.Disasters
                 Foundation = model != null ? model.WorldFoundationBounds : bounds,
                 Size = Mathf.Clamp(Mathf.Sqrt(bounds.size.x * bounds.size.z), 0.5f, 1.3f)
             };
+            if (model != null ? model.IsResidential : building.Find("Second_Floor") != null)
+            {
+                var burnRenderers = new List<MeshRenderer>();
+                if (model != null) model.AppendRenderers(burnRenderers, true);
+                else burnRenderers.AddRange(renderers);
+                CacheBurnSurfaces(site, burnRenderers);
+            }
             foreach (var sprinkler in sprinklers) if (sprinkler.Building == building) { site.Sprinkler = sprinkler; break; }
             if (model != null) AppendRoofAnchors(site, model);
             foreach (var renderer in renderers)
@@ -338,6 +370,65 @@ namespace CivilGameJam.Disasters
                     bounds.center.z + bounds.size.z * 0.25f * x));
             }
             sites.Add(site);
+        }
+
+        private static void CacheBurnSurfaces(BurnSite site, List<MeshRenderer> renderers)
+        {
+            foreach (var renderer in renderers)
+            {
+                var materials = renderer.sharedMaterials;
+                for (var i = 0; i < materials.Length; i++)
+                {
+                    var material = materials[i];
+                    if (material == null) continue;
+                    var colorProperty = material.HasProperty(BaseColor) ? BaseColor : LegacyColor;
+                    if (!material.HasProperty(colorProperty)) continue;
+                    var original = new MaterialPropertyBlock();
+                    var properties = new MaterialPropertyBlock();
+                    renderer.GetPropertyBlock(original, i);
+                    renderer.GetPropertyBlock(properties, i);
+                    if (properties.isEmpty) renderer.GetPropertyBlock(properties);
+                    site.Surfaces.Add(new BurnSurface
+                    {
+                        Renderer = renderer, MaterialIndex = i, ColorProperty = colorProperty,
+                        OriginalColor = properties.HasColor(colorProperty) ? properties.GetColor(colorProperty) : material.GetColor(colorProperty),
+                        OriginalProperties = original, Properties = properties
+                    });
+                }
+            }
+        }
+
+        private void ApplyBurnColor(BurnSite site)
+        {
+            var amount = Mathf.SmoothStep(0f, 1f, site.BurnExposure / Mathf.Max(.1f, burnColorDuration));
+            if (amount <= 0f) return;
+            foreach (var surface in site.Surfaces)
+            {
+                if (surface.Renderer == null) continue;
+                var target = burntBuildingColor; target.a = surface.OriginalColor.a;
+                surface.Properties.SetColor(surface.ColorProperty, Color.Lerp(surface.OriginalColor, target, amount));
+                surface.Renderer.SetPropertyBlock(surface.Properties, surface.MaterialIndex);
+            }
+        }
+
+        private void RestoreBuildingColors()
+        {
+            foreach (var site in sites)
+            {
+                site.BurnExposure = 0f;
+                foreach (var surface in site.Surfaces)
+                    if (surface.Renderer != null)
+                        surface.Renderer.SetPropertyBlock(surface.OriginalProperties.isEmpty ? null : surface.OriginalProperties, surface.MaterialIndex);
+            }
+        }
+
+        public bool WasHouseBurnt(Transform house)
+        {
+            if (house == null) return false;
+            foreach (var site in sites)
+                if (site.BurnExposure > 0f && site.Surfaces.Count > 0 && site.Building != null &&
+                    (site.Building == house || site.Building.IsChildOf(house))) return true;
+            return false;
         }
 
         private static bool IsSprinklerPart(Transform part, Transform building)
@@ -450,7 +541,7 @@ namespace CivilGameJam.Disasters
 
         private void EmitFlames(BurnSite site, float step, float strength)
         {
-            var protection = site.Sprinkler != null ? site.Sprinkler.FireMultiplier : 1f;
+            var protection = SprinklersActive && site.Sprinkler != null ? site.Sprinkler.FireMultiplier : 1f;
             site.FlameRemainder += step * Mathf.Max(0f, flameRate) * strength;
             var count = Mathf.Min(80, Mathf.FloorToInt(site.FlameRemainder));
             site.FlameRemainder -= count;
@@ -501,7 +592,7 @@ namespace CivilGameJam.Disasters
             site.SmokeRemainder -= count;
             for (var i = 0; i < count; i++)
             {
-                var size = site.Size * RandomRange(0.65f, 0.95f);
+                var size = site.Size * RandomRange(0.325f, 0.475f);
                 var shade = RandomRange(0.18f, 0.3f);
                 smoke.Emit(new ParticleSystem.EmitParams
                 {
@@ -544,7 +635,7 @@ namespace CivilGameJam.Disasters
             {
                 var angle = RandomRange(0f, Mathf.PI * 2f);
                 var outward = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle));
-                var size = site.Size * RandomRange(0.22f, 0.36f);
+                var size = site.Size * RandomRange(0.11f, 0.18f);
                 var shade = RandomRange(0.025f, 0.07f);
                 extinguishSmoke.Emit(new ParticleSystem.EmitParams
                 {
@@ -668,6 +759,7 @@ namespace CivilGameJam.Disasters
         private void ResetTest(bool completed)
         {
             IsRunning = false;
+            if (!completed) RestoreBuildingColors();
             if (seaMonsterFire != null) seaMonsterFire.ResetPose();
             if (breathStream != null) breathStream.Hide();
             if (streetFire != null) streetFire.Clear();

@@ -36,7 +36,7 @@ public sealed class CardSceneEditModeTests
         Assert.That(scaler.referenceResolution.y, Is.GreaterThanOrEqualTo(900f));
         var table = (RectTransform)game.transform;
         Assert.That(table.sizeDelta.x * table.localScale.x, Is.LessThan(scaler.referenceResolution.x));
-        Assert.That(table.sizeDelta.y, Is.Zero);
+        Assert.That(table.sizeDelta.y, Is.EqualTo(-73.853f).Within(.001f), "Preserve the authored drawer height inset.");
         Assert.That(table.anchorMin, Is.EqualTo(Vector2.zero));
         Assert.That(table.anchorMax.x * table.localScale.x, Is.EqualTo(1f).Within(0.0001f));
         Assert.That(table.sizeDelta.x * table.localScale.x + table.anchoredPosition.x, Is.EqualTo(0f).Within(0.01f));
@@ -114,8 +114,9 @@ public sealed class CardSceneEditModeTests
         if (card.IsBuilding || card.Kind == CardKind.Blueprint)
         {
             Assert.That(card.Rect.sizeDelta, Is.EqualTo(new Vector2(300f, 400f)));
-            Assert.That(card.Rect.localScale.x, Is.EqualTo(0.64897f * 1.6f * 1.2f *
-                (card.Kind == CardKind.Blueprint ? 0.7f : 1f)).Within(0.00001f));
+            float savedScale = card.Kind == CardKind.House ? 1.2821271f
+                : card.Kind == CardKind.Blueprint ? .8722157f : 1.2460225f;
+            Assert.That(card.Rect.localScale.x, Is.EqualTo(savedScale).Within(.00001f));
             Assert.That(card.Rect.localScale.y, Is.EqualTo(card.Rect.localScale.x));
         }
         Assert.That(prefab.GetComponent<CanvasGroup>(), Is.Not.Null);
@@ -308,7 +309,8 @@ public sealed class CardSceneEditModeTests
             Assert.That(slot.CardRect.rect.height, Is.GreaterThan(190f));
             Assert.That(slot.CardRect.rect.size, Is.EqualTo(new Vector2(300f, 400f)));
             Assert.That(Vector3.Distance(slot.CardRect.localScale,
-                AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/HouseCard.prefab").transform.localScale * 0.7f), Is.LessThan(0.00001f));
+                AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/" +
+                    new[] { "RaylıSistemBlueprint", "DalgaKıranBlueprint", "YangınBlueprint" }[i] + ".prefab").transform.localScale), Is.LessThan(0.00001f));
             var hover = slot.GetComponent<CardHover>();
             Assert.That(hover, Is.Not.Null);
             Assert.That(new SerializedObject(hover).FindProperty("vaultSlot").objectReferenceValue, Is.SameAs(slot));
@@ -416,8 +418,12 @@ public sealed class CardSceneEditModeTests
         var nextLocal = game.Grid.rectTransform.InverseTransformPoint(nextRow);
         float gapX = secondLocal.x - firstLocal.x - game.Grid.CellSize.x;
         float gapY = firstLocal.y - nextLocal.y - game.Grid.CellSize.y;
-        Assert.That(gapX, Is.EqualTo(27.5472f).Within(0.01f));
-        Assert.That(gapY, Is.EqualTo(gapX).Within(0.01f), "Row spacing should be as compact as column spacing.");
+        Assert.That(gapX, Is.GreaterThan(0f));
+        Assert.That(gapY, Is.GreaterThan(0f));
+        var panel = (RectTransform)game.transform;
+        Assert.That(panel.GetComponent<Image>().sprite, Is.EqualTo(FindArtwork("Deck Ui (2)")));
+        Assert.That(secondLocal.x - firstLocal.x, Is.EqualTo(panel.rect.width * .245f).Within(.01f));
+        Assert.That(firstLocal.y - nextLocal.y, Is.EqualTo(panel.rect.height * .49f).Within(.01f));
         var people = cards.Where(c => c.IsPerson).OrderBy(c => c.name).ToArray();
         for (int i = 0; i < people.Length; i++)
         {

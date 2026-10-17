@@ -50,11 +50,11 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(popups[0].color.a, Is.GreaterThan(.9f));
         yield return new WaitForSecondsRealtime(.35f);
         Assert.That(hud.IsFlashing, Is.False);
-        Assert.That(counter.anchoredPosition, Is.EqualTo(position));
+        Assert.That(Vector2.Distance(counter.anchoredPosition, position), Is.LessThan(.001f), "Canvas float rounding must not hide visible counter drift.");
         yield return new WaitForSecondsRealtime(.4f);
         Assert.That(popups.All(popup => !popup.gameObject.activeSelf), Is.True);
         Assert.That(hud.IsFlashing, Is.False);
-        Assert.That(counter.anchoredPosition, Is.EqualTo(position));
+        Assert.That(Vector2.Distance(counter.anchoredPosition, position), Is.LessThan(.001f));
         Assert.That(counter.localScale, Is.EqualTo(scale));
         Assert.That(label.color, Is.EqualTo(color));
         Assert.That(bank.TrySpend(0), Is.True);

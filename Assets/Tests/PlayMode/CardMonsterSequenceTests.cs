@@ -120,6 +120,7 @@ public sealed partial class CardGamePlayModeTests
                     Assert.That(ControlField<float>(rig.Fire, "elapsed"), Is.InRange(rig.Breath.BreathEndTime, rig.Breath.BreathEndTime + 0.1f));
                 rig.For(0.3f);
                 Assert.That(Vector3.Distance(model.position, rig.Walk.WalkPoint.position), Is.GreaterThan(0.001f));
+                Assert.That(model.gameObject.activeSelf, Is.True, "The boss remains visible while walking to the second point.");
                 if (number < 3)
                 {
                     var position = model.position;
@@ -131,6 +132,7 @@ public sealed partial class CardGamePlayModeTests
                 rig.Until(() => !sequence.IsRunning);
                 Assert.That(sequence.Stage, Is.EqualTo(MonsterSequenceStage.Complete));
                 Assert.That(Vector3.Distance(model.position, rig.Walk.AfterEventPoint.position), Is.LessThan(0.0001f));
+                Assert.That(model.gameObject.activeSelf, Is.False, "The saved boss disappears on arrival and is reused on replay.");
                 Assert.That(rig.Walk.IsWalkingAfterEvent || rig.Tsunami.IsRunning || rig.Quake.IsRunning || rig.Fire.IsRunning, Is.False);
                 Assert.That(rig.Navigation.InputBlocked && rig.Navigation.IsEventCameraActive, Is.True,
                     "The smooth camera return continues after the sequence finishes.");
@@ -153,6 +155,7 @@ public sealed partial class CardGamePlayModeTests
         rig.Until(() => !rig.Walk.IsWalkingAfterEvent);
         var position = rig.Monster.Model.position;
         Assert.That(Vector3.Distance(position, rig.Walk.AfterEventPoint.position), Is.LessThan(0.0001f));
+        Assert.That(rig.Monster.Model.gameObject.activeSelf, Is.False, "Disappearance does not wait for the remaining city fire.");
         Assert.That(rig.Fire.IsRunning && rig.Sequence.IsRunning && rig.Navigation.InputBlocked, Is.True,
             "Reaching the second point cannot cut the city fire short or release the active event's camera lock.");
         rig.Until(() => !rig.Sequence.IsRunning);
@@ -198,6 +201,7 @@ public sealed partial class CardGamePlayModeTests
     }
 
     private static int[] SequenceUIIds() => Object.FindObjectsByType<RectTransform>(FindObjectsInactive.Include, FindObjectsSortMode.None)
+        .Where(rect => rect.GetComponent<TMPro.TextMeshPro>() == null)
         .Select(rect => rect.GetInstanceID()).OrderBy(id => id).ToArray();
 
     private sealed class SequencePreview

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using TMPro;
 using CivilGameJam.Presentation;
 using UnityEngine;
@@ -17,7 +18,12 @@ namespace CivilGameJam.Disasters
         [Header("Saved sea monster")]
         [SerializeField] private SeaMonsterWalk seaMonsterWalk;
         [SerializeField] private FireTestController fire;
+        [SerializeField] private ApartmentEarthquakeAnimation[] buildingAnimations = new ApartmentEarthquakeAnimation[0];
         [SerializeField, Min(0f)] private float afterLastStepDelay = 2f;
+
+        [Header("Building animations")]
+        [Tooltip("When more than two houses shake, randomly stagger their starts by this interval. All animations still finish with the earthquake.")]
+        [SerializeField, Range(.05f, .8f)] private float buildingStartDelay = .35f;
 
         [Header("Timing")]
         [Tooltip("Used when no saved monster walk is assigned; otherwise the steps and their delay determine the duration.")]
@@ -64,6 +70,8 @@ namespace CivilGameJam.Disasters
         private Vector3 joltRotation;
         private bool poseCaptured;
         private readonly System.Random random = new System.Random();
+        private readonly List<ApartmentEarthquakeAnimation> activeBuildingAnimations = new List<ApartmentEarthquakeAnimation>();
+        private float buildingStaggerStep;
 
         public bool IsRunning { get; private set; }
         public float TestDuration => seaMonsterWalk != null
@@ -101,8 +109,30 @@ namespace CivilGameJam.Disasters
             if (progressFeedback != null) progressFeedback.Begin();
             if (navigation != null) navigation.AcquireEventInputLock(this);
             if (seaMonsterWalk != null) seaMonsterWalk.BeginWalk(preserveTsunami);
+            PrepareBuildingAnimations();
             if (testButton != null) testButton.interactable = false;
             if (statusLabel != null) statusLabel.text = "Earthquake started";
+        }
+
+        private void PrepareBuildingAnimations()
+        {
+            activeBuildingAnimations.Clear();
+            foreach (var animation in buildingAnimations)
+                if (animation != null && !activeBuildingAnimations.Contains(animation) && animation.BeginEarthquake())
+                    activeBuildingAnimations.Add(animation);
+
+            buildingStaggerStep = 0f;
+            if (activeBuildingAnimations.Count <= 2) return;
+            // Change the order each run, and keep the delays short even for a larger city.
+            for (var i = activeBuildingAnimations.Count - 1; i > 0; i--)
+            {
+                var other = random.Next(i + 1);
+                var animation = activeBuildingAnimations[i];
+                activeBuildingAnimations[i] = activeBuildingAnimations[other];
+                activeBuildingAnimations[other] = animation;
+            }
+            buildingStaggerStep = Mathf.Min(Mathf.Max(.05f, buildingStartDelay),
+                TestDuration * .15f / (activeBuildingAnimations.Count - 1));
         }
 
         private void LateUpdate()
@@ -124,6 +154,12 @@ namespace CivilGameJam.Disasters
             elapsed = Mathf.Min(elapsed + Mathf.Max(0f, deltaTime), testDuration);
             if (seaMonsterWalk != null && !seaMonsterWalk.HasStartedAfterEventWalk) seaMonsterWalk.SetWalkTime(elapsed);
             var progress = elapsed / testDuration;
+            for (var i = 0; i < activeBuildingAnimations.Count; i++)
+            {
+                var animation = activeBuildingAnimations[i];
+                if (animation != null)
+                    animation.SetEarthquakeProgress(Mathf.InverseLerp(i * buildingStaggerStep, testDuration, elapsed));
+            }
             var ramp = Mathf.SmoothStep(0f, 1f, progress / 0.8f);
             var speedLimit = Mathf.Clamp(maximumFrequency, 0.5f, MaximumShakeFrequency);
             var startSpeed = Mathf.Clamp(startingFrequency, 0.05f, Mathf.Min(1f, speedLimit));
@@ -219,6 +255,14 @@ namespace CivilGameJam.Disasters
         private void ResetTest(bool completed = false)
         {
             IsRunning = false;
+            foreach (var animation in buildingAnimations)
+                if (animation != null)
+                {
+                    if (completed) animation.FinishEarthquake();
+                    else animation.ResetEarthquake();
+                }
+            activeBuildingAnimations.Clear();
+            buildingStaggerStep = 0f;
             if (navigation != null) navigation.ReleaseEventInputLock(this);
             if (!completed && seaMonsterWalk != null) seaMonsterWalk.CancelWalk();
             if (poseCaptured && cameraTransform != null)

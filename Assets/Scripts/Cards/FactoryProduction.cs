@@ -171,6 +171,7 @@ namespace CivilGameJam.Cards
                 Progress = Mathf.Min(1f, Progress);
                 if (Progress >= 1f)
                 {
+                    card.GetComponent<CardFeedback>()?.PlayWorkComplete();
                     if (progressFeedback != null) progressFeedback.Complete();
                     var blueprint = PendingBlueprint;
                     PendingBlueprint = null;

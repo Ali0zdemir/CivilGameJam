@@ -36,10 +36,15 @@ namespace CivilGameJam.Disasters
         [SerializeField] private ApartmentUpgradeModel apartment;
         [SerializeField] private Transform animationRoot;
         [SerializeField] private AnimationClip collapseAnimation;
+        [SerializeField] private BuildingCollapseFeedback collapseFeedback;
         [SerializeField] private Part[] parts = Array.Empty<Part>();
+        private const float FinalPoseHoldSeconds = 2f;
         private float elapsed;
         private bool captured;
+        private Renderer[] hiddenRenderers;
+        private bool[] originalRenderingOff;
         public bool HasCollapsed { get; private set; }
+        public bool HasDisappeared { get; private set; }
         public bool IsPlaying => HasCollapsed && elapsed < Duration;
         public float Duration => collapseAnimation != null ? collapseAnimation.length : 0f;
         public float Progress => HasCollapsed ? Mathf.Clamp01(elapsed / Mathf.Max(.001f, Duration)) : 0f;
@@ -48,9 +53,13 @@ namespace CivilGameJam.Disasters
         {
             if (!Application.isPlaying || !isActiveAndEnabled || HasCollapsed || apartment == null ||
                 apartment.IsElevatorProtected || animationRoot == null || collapseAnimation == null || parts.Length == 0) return false;
+            if (!TryGetComponent<BuildingModelGeometry>(out var geometry) || !geometry.IsResidential) return false;
             foreach (var part in parts)
                 if (part == null || part.body == null || part.attachments == null || Array.Exists(part.attachments, target => target == null)) return false;
+            // A flood takes over the pose without competing with the earthquake animation.
+            if (TryGetComponent<ApartmentEarthquakeAnimation>(out var earthquake)) earthquake.ReleaseForTsunami();
             CapturePose();
+            if (collapseFeedback != null) collapseFeedback.PrepareCollapse();
             elapsed = 0f; HasCollapsed = true;
             SamplePose();
             return true;
@@ -85,20 +94,29 @@ namespace CivilGameJam.Disasters
 
         private void AdvanceCollapse(float seconds)
         {
-            if (!HasCollapsed) return;
-            elapsed = Mathf.Min(Duration, elapsed + Mathf.Max(0f, seconds));
+            if (!HasCollapsed || HasDisappeared) return;
+            elapsed = Mathf.Min(Duration + FinalPoseHoldSeconds, elapsed + Mathf.Max(0f, seconds));
             SamplePose();
+            if (elapsed >= Duration + FinalPoseHoldSeconds) HideCollapsedModel();
         }
 
         private void LateUpdate()
         {
-            if (HasCollapsed) FollowAttachments();
+            if (HasCollapsed && !HasDisappeared) FollowAttachments();
         }
 
         private void SamplePose()
         {
-            collapseAnimation.SampleAnimation(animationRoot.gameObject, elapsed);
+            collapseAnimation.SampleAnimation(animationRoot.gameObject, Mathf.Min(elapsed, Duration));
             FollowAttachments();
+            if (collapseFeedback != null)
+            {
+                if (!collapseFeedback.Reported || elapsed < Duration)
+                    foreach (var part in parts)
+                        if (part.body.localPosition.y < part.bodyRest.position.y - .05f || Quaternion.Angle(part.bodyRest.rotation, part.body.localRotation) > 12f)
+                        { collapseFeedback.ReportCollapse(); break; }
+                if (elapsed >= Duration) collapseFeedback.FinishCollapse();
+            }
         }
 
         private void FollowAttachments()
@@ -118,15 +136,32 @@ namespace CivilGameJam.Disasters
             }
         }
 
+        private void HideCollapsedModel()
+        {
+            hiddenRenderers = animationRoot.GetComponentsInChildren<Renderer>(true);
+            originalRenderingOff = new bool[hiddenRenderers.Length];
+            for (var i = 0; i < hiddenRenderers.Length; i++)
+            {
+                originalRenderingOff[i] = hiddenRenderers[i].forceRenderingOff;
+                hiddenRenderers[i].forceRenderingOff = true;
+            }
+            HasDisappeared = true;
+        }
+
         public void ResetCollapse()
         {
+            if (hiddenRenderers != null)
+                for (var i = 0; i < hiddenRenderers.Length; i++)
+                    if (hiddenRenderers[i] != null) hiddenRenderers[i].forceRenderingOff = originalRenderingOff[i];
+            hiddenRenderers = null; originalRenderingOff = null;
+            if (captured && collapseFeedback != null) collapseFeedback.ResetFeedback();
             if (captured)
                 foreach (var part in parts)
                 {
                     part.bodyRest.Restore(part.body);
                     for (int i = 0; i < part.attachments.Length; i++) part.attachmentRest[i].Restore(part.attachments[i]);
                 }
-            captured = false; HasCollapsed = false; elapsed = 0f;
+            captured = false; HasCollapsed = HasDisappeared = false; elapsed = 0f;
         }
 
         private void OnDisable() => ResetCollapse();

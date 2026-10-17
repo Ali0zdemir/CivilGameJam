@@ -122,10 +122,11 @@ namespace CivilGameJam.Cards.Editor
             data.FindProperty("game").objectReferenceValue = game;
             data.FindProperty("dock").objectReferenceValue = game.GetComponent<CardDock>();
             data.FindProperty("navigation").objectReferenceValue = world.GetComponentInChildren<CityCameraController>(true);
-            data.FindProperty("zoomFactor").floatValue = 1.12f;
-            data.FindProperty("zoomSeconds").floatValue = 0.4f;
-            data.FindProperty("holdSeconds").floatValue = 0.55f;
-            data.FindProperty("returnSeconds").floatValue = 0.35f;
+            data.FindProperty("zoomFactor").floatValue = 2.2f;
+            data.FindProperty("closeupMagnification").floatValue = 1.5f;
+            data.FindProperty("zoomSeconds").floatValue = 0.9f;
+            data.FindProperty("holdSeconds").floatValue = 1.1f;
+            data.FindProperty("returnSeconds").floatValue = 1.2f;
             data.ApplyModifiedPropertiesWithoutUndo();
             foreach (var rail in world.GetComponentsInChildren<BuildingRailUpgrade>(true))
             {

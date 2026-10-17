@@ -26,7 +26,9 @@ namespace CivilGameJam.Disasters
         [SerializeField, Min(0.1f)] private float cameraReturnSeconds = 1.6f;
 
         [Header("Wave")]
+        [SerializeField] private AuthoredTsunamiWave authoredWave;
         [SerializeField, Range(0.1f, 8f)] private float waveHeight = 1.05f;
+        [Tooltip("Fallback speed when no authored wave is assigned. Otherwise use its Movement Speed.")]
         [SerializeField, Range(1f, 18f)] private float waveSpeed = 4.5f;
         [SerializeField, Range(8f, 20f)] private float waveWidth = 12f;
         [SerializeField, Range(0.15f, 5f)] private float crestLength = 1.6f;
@@ -91,6 +93,8 @@ namespace CivilGameJam.Disasters
         private int[] surfaceIndices;
         private float elapsed;
         private float sequenceElapsed;
+        private float shoreArrivalElapsed = -1f;
+        private float routeEndElapsed = -1f;
         private float front;
         private float growth;
         private float drain;
@@ -119,6 +123,8 @@ namespace CivilGameJam.Disasters
         }
 
         public bool IsRunning { get; private set; }
+        public float WaveSpeed => authoredWave != null ? authoredWave.MovementSpeed : Mathf.Max(1f, waveSpeed);
+        public bool IsWaveCameraActive => authoredWave != null && IsRunning && cameraFocusStarted;
         public float TestDuration => Mathf.Max(seaMonster != null ? seaMonster.RiseDuration : 0f, WaveReleaseDelay + WaveDuration);
         public float NormalizedProgress => IsRunning ? Mathf.Clamp01(sequenceElapsed / TestDuration) : 0f;
         public float MaximumFloodWaterLevel
@@ -138,8 +144,14 @@ namespace CivilGameJam.Disasters
         public float SeaLevel => seaLevel;
         private float FloodCrestLevel => MaximumFloodWaterLevel;
         private float WaveReleaseDelay => seaMonster != null ? seaMonster.WaveReleaseDelay : 0f;
-        private float WaveDuration => ShoreArrivalTime + Mathf.Max(0.3f, floodPulseDuration) + Mathf.Max(1f, floodRunoffTime);
-        private float ShoreArrivalTime => Mathf.Max(0.1f, (shorelineDistance - startDistance) / Mathf.Max(1f, waveSpeed));
+        private float WaveDuration => Mathf.Max(ShoreArrivalTime + Mathf.Max(0.3f, floodPulseDuration) + Mathf.Max(1f, floodRunoffTime),
+            authoredWave != null ? RouteEndTime + .35f : 0f);
+        private float RouteEndTime => routeEndElapsed >= 0f ? routeEndElapsed :
+            IsRunning ? elapsed + Mathf.Max(0f, authoredWave.EndDistance - front) / WaveSpeed :
+            Mathf.Max(0f, authoredWave.EndDistance - authoredWave.StartDistance) / WaveSpeed;
+        private float ShoreArrivalTime => shoreArrivalElapsed >= 0f ? shoreArrivalElapsed :
+            IsRunning ? elapsed + Mathf.Max(0f, shorelineDistance - front) / WaveSpeed :
+            Mathf.Max(.0001f, (shorelineDistance - startDistance) / WaveSpeed);
         private float WaveScale => Mathf.Clamp(waveHeight / 4.5f, 0.05f, 2f);
         private float CrestOffset => crestLength * 0.4f;
         private float FrontReach => Mathf.Max(0.2f, crestLength * 0.25f);
@@ -181,6 +193,7 @@ namespace CivilGameJam.Disasters
 
             if (fire != null) fire.StopFire();
             if (earthquake != null) earthquake.StopEarthquake();
+            if (authoredWave != null) startDistance = authoredWave.StartDistance;
             EnsureVisuals();
             BuildSurface();
             foreach (var site in impactSites)
@@ -193,6 +206,8 @@ namespace CivilGameJam.Disasters
             RefreshFloodObstacles();
             elapsed = 0f;
             sequenceElapsed = 0f;
+            shoreArrivalElapsed = -1f;
+            routeEndElapsed = -1f;
             sequenceOwnsCamera = useSequenceCamera;
             monsterReleasedToWalk = false;
             if (seaMonster != null) seaMonster.ResetEmergence();
@@ -203,12 +218,13 @@ namespace CivilGameJam.Disasters
             growth = 0f;
             drain = 1f;
             IsRunning = true;
+            if (authoredWave != null) authoredWave.SetWave(startDistance, seaLevel, 1f, 0f);
             if (progressFeedback != null) progressFeedback.Begin();
             if (navigation != null) navigation.AcquireEventInputLock(this);
             cameraFocusStarted = cameraFollowFinished = false;
             UpdateEventCamera();
             visuals.SetActive(WaveReleaseDelay <= 0f);
-            waterRenderer.enabled = true;
+            waterRenderer.enabled = authoredWave == null;
             if (spray != null && visuals.activeSelf) spray.Play(true);
             if (testButton != null) testButton.interactable = false;
             if (statusLabel != null) statusLabel.text = seaMonster != null ? "Monster emerging" : "Tsunami approaching";
@@ -225,10 +241,12 @@ namespace CivilGameJam.Disasters
         {
             if (!IsRunning) return;
             // Simulate the whole elapsed interval, even if a frame stalls or a test advances time.
-            var remaining = Mathf.Min(Mathf.Max(0f, deltaTime), TestDuration - sequenceElapsed);
-            while (remaining > 0.00001f)
+            // Arrival/route-end times become exact during this loop; keep the requested interval
+            // available rather than truncating it to the estimate made before landfall.
+            var remaining = Mathf.Max(0f, deltaTime);
+            while (remaining > 0.00001f && sequenceElapsed < TestDuration - 0.00001f)
             {
-                var step = Mathf.Min(remaining, 1f / 60f);
+                var step = Mathf.Min(remaining, 1f / 60f, TestDuration - sequenceElapsed);
                 var previousWaveTime = elapsed;
                 sequenceElapsed += step;
                 elapsed = Mathf.Max(0f, sequenceElapsed - WaveReleaseDelay);
@@ -240,7 +258,12 @@ namespace CivilGameJam.Disasters
                     visuals.SetActive(true);
                     if (spray != null) spray.Play(true);
                 }
-                front = startDistance + elapsed * Mathf.Max(1f, waveSpeed);
+                var previousFront = front;
+                front += waveStep * WaveSpeed;
+                if (shoreArrivalElapsed < 0f && front >= shorelineDistance)
+                    shoreArrivalElapsed = previousWaveTime + Mathf.Max(0f, shorelineDistance - previousFront) / WaveSpeed;
+                if (authoredWave != null && routeEndElapsed < 0f && front >= authoredWave.EndDistance)
+                    routeEndElapsed = previousWaveTime + Mathf.Max(0f, authoredWave.EndDistance - previousFront) / WaveSpeed;
                 growth = Mathf.SmoothStep(0f, 1f, elapsed / Mathf.Max(0.1f, buildupTime));
                 var impactAge = elapsed - ShoreArrivalTime;
                 drain = 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.35f, Mathf.Max(0.6f, fadeOutTime), impactAge));
@@ -254,26 +277,39 @@ namespace CivilGameJam.Disasters
                 EmitBreakwaterSplashes(waveStep);
                 EmitBuildingSplashes();
             }
-            if (seaMonster != null && !monsterReleasedToWalk) seaMonster.SetEmergenceTime(sequenceElapsed);
+            if (seaMonster != null && !monsterReleasedToWalk)
+                seaMonster.SetEmergenceTime(sequenceElapsed, Mathf.InverseLerp(startDistance, shorelineDistance, front));
+            if (authoredWave != null)
+                authoredWave.SetWave(front, seaLevel, 1f, elapsed > .00001f ? 1f : 0f);
             UpdateEventCamera();
             UpdateSurface();
             SetWaterProperties(Mathf.SmoothStep(0f, 1f, elapsed / 0.15f) * drain);
             var runoffFade = 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(WaveDuration - 0.35f, WaveDuration, elapsed));
             flood.UpdateMesh(FloodWaterLevel - groundLevel, runoffFade);
-            transmittedFlow.Update(breakwater, flood, front, elapsed, waveSpeed, floodPulseDuration, runoffFade);
+            transmittedFlow.Update(breakwater, flood, front, elapsed, WaveSpeed, floodPulseDuration, runoffFade);
             if (progressFeedback != null) progressFeedback.SetProgress(sequenceElapsed / TestDuration, true);
             else if (progressFill != null) progressFill.fillAmount = Mathf.Clamp01(sequenceElapsed / TestDuration);
             if (statusLabel != null)
                 statusLabel.text = sequenceElapsed < WaveReleaseDelay ? "Monster emerging" :
                     elapsed < ShoreArrivalTime ? "Wave approaching" :
+                    authoredWave != null && elapsed < RouteEndTime ? "Wave crossing the city" :
                     elapsed < ShoreArrivalTime + floodPulseDuration ? "Water flowing through streets" : "Water draining";
             if (sequenceElapsed >= TestDuration - 0.0001f) ResetTest(true);
         }
 
         private void UpdateEventCamera()
         {
-            if (navigation == null || sequenceOwnsCamera) return;
+            if (navigation == null) return;
             var leadStart = Mathf.Max(0f, WaveReleaseDelay - cameraLeadSeconds);
+            if (authoredWave != null)
+            {
+                // Keep the player's normal viewing distance and hold on the city as the wave crosses it.
+                // Start immediately so a sequence's initial framing cannot widen the view first.
+                if (!cameraFocusStarted)
+                    cameraFocusStarted = navigation.BeginEventFocus(this, transform.TransformPoint(cityBounds.center), 1f, cameraLeadSeconds);
+                return;
+            }
+            if (sequenceOwnsCamera) return;
             if (!cameraFocusStarted && sequenceElapsed >= leadStart)
             {
                 var origin = transform.TransformPoint(new Vector3(cityBounds.center.x, seaLevel + waveHeight * 0.6f, startDistance));
@@ -482,7 +518,10 @@ namespace CivilGameJam.Disasters
 
         private void EmitCrestSpray(float deltaTime)
         {
-            if (spray == null || sprayAmount <= 0f) return;
+            // The artist mesh already contains its foam. The hidden procedural crest has a
+            // different profile, so its droplets would float ahead of a resized authored wave.
+            // Keep contact splashes at the breakwater and flooded buildings independent.
+            if (authoredWave != null || spray == null || sprayAmount <= 0f) return;
             sprayRemainder += deltaTime * 100f * sprayAmount * growth;
             var count = Mathf.Min(64, Mathf.FloorToInt(sprayRemainder));
             sprayRemainder -= count;
@@ -564,8 +603,7 @@ namespace CivilGameJam.Disasters
         private void EmitBreakwaterSplashes(float deltaTime)
         {
             if (spray == null || breakwater == null || !breakwater.IsActive) { breakwaterSprayRemainder = 0f; return; }
-            var impactTime = (breakwater.FrontDistance - startDistance) / Mathf.Max(1f, waveSpeed);
-            var age = elapsed - impactTime;
+            var age = (front - breakwater.FrontDistance) / WaveSpeed;
             if (age < 0f || age > 1.3f) return;
             var strength = Mathf.Max(0f, Mathf.Sin(Mathf.Clamp01(age / 1.15f) * Mathf.PI));
             breakwaterSprayRemainder += deltaTime * 220f * sprayAmount * strength;
@@ -576,7 +614,7 @@ namespace CivilGameJam.Disasters
                 var x = breakwater.CenterX + RandomRange(-0.49f, 0.49f) * breakwater.Width;
                 if (Mathf.Abs(x) > waveWidth * 0.5f) continue;
                 if (!breakwater.TryGetWaveFace(x, out var distance)) continue;
-                var localAge = elapsed - (distance - startDistance) / Mathf.Max(1f, waveSpeed);
+                var localAge = (front - distance) / WaveSpeed;
                 if (localAge < 0f || localAge > 1f) continue;
                 var point = new Vector3(x, breakwater.TopLevel + RandomRange(-0.04f, 0.06f), distance - 0.03f);
                 EmitDroplet(point, new Vector3(RandomRange(-1.5f, 1.5f), RandomRange(3f, 5.5f), RandomRange(-2.2f, -0.3f)), RandomRange(0.1f, 0.2f));
@@ -635,7 +673,11 @@ namespace CivilGameJam.Disasters
                 if (site.Building == null || !site.Building.gameObject.activeInHierarchy) continue;
                 if (Mathf.Abs(bounds.center.x) > waveWidth * 0.5f) continue;
                 var footprint = site.Footprint;
-                var waterDepth = flood.SampleDepth(footprint.center.x, footprint.min.z - 0.17f);
+                // A coastal tile can leave less than the usual probe offset in front of its building.
+                // Keep the probe inside the simulated shore so real inlet water still registers contact.
+                var sampleX = Mathf.Clamp(footprint.center.x, cityBounds.min.x + .001f, cityBounds.max.x - .001f);
+                var sampleZ = Mathf.Clamp(footprint.min.z - .17f, cityBounds.min.z + .001f, cityBounds.max.z - .001f);
+                var waterDepth = flood.SampleDepth(sampleX, sampleZ);
                 if (waterDepth < 0.03f) continue;
                 if (site.Collapse != null) site.Collapse.TryCollapse();
                 if (site.Hit) continue;
@@ -686,6 +728,9 @@ namespace CivilGameJam.Disasters
         private void ResetTest(bool completed)
         {
             IsRunning = false;
+            shoreArrivalElapsed = -1f;
+            routeEndElapsed = -1f;
+            if (authoredWave != null) authoredWave.Hide();
             if (!completed)
                 foreach (var site in impactSites) if (site.Collapse != null) site.Collapse.ResetCollapse();
             if (navigation != null)

@@ -9,7 +9,7 @@ using UnityEngine;
 public sealed class SeaMonsterTsunamiEditModeTests
 {
     [TestCase("Assets/2DCardScene.unity")]
-        public void MonsterAndSeaAreSavedOnTheNewIncomingSideBeforePlay(string path)
+    public void MonsterAndSeaAreSavedOnTheNewIncomingSideBeforePlay(string path)
     {
         var scene = EditorSceneManager.OpenScene(path);
         var tsunami = scene.GetRootGameObjects().SelectMany(root => root.GetComponentsInChildren<TsunamiTestController>()).Single();
@@ -30,6 +30,10 @@ public sealed class SeaMonsterTsunamiEditModeTests
         Assert.That(sequenceData.FindProperty("sequenceButtons").arraySize, Is.EqualTo(3));
         Assert.That(sequenceData.FindProperty("startButton").objectReferenceValue, Is.Not.Null);
         Assert.That(sequenceData.FindProperty("stopButton").objectReferenceValue, Is.Not.Null);
+        var roundData = new SerializedObject(Object.FindFirstObjectByType<EarthquakeRoundController>());
+        Assert.That(roundData.FindProperty("sequence").objectReferenceValue, Is.SameAs(sequence));
+        Assert.That(roundData.FindProperty("readyButton").objectReferenceValue, Is.Not.Null,
+            "READY remains the saved playable-round entry point alongside the restored debug controls.");
         Assert.That(model.Find("Left_Leg"), Is.Not.Null);
         Assert.That(model.Find("Right_Leg"), Is.Not.Null);
         Assert.That(model.GetComponentsInChildren<MeshRenderer>(true).Length, Is.GreaterThanOrEqualTo(5));
@@ -47,8 +51,11 @@ public sealed class SeaMonsterTsunamiEditModeTests
         Assert.That(walk.WalkPoint.name, Is.EqualTo("monsterWalkPoint"));
         Assert.That(walk.AfterEventPoint, Is.Not.Null);
         Assert.That(walk.AfterEventPoint.name, Is.EqualTo("monsterWalkAfterEventPoint"));
-        Assert.That(Vector3.Distance(tsunami.transform.InverseTransformPoint(walk.AfterEventPoint.position),
-            new Vector3(2.61f, 0.76f, 6.8f)), Is.LessThan(0.0001f), "Preserve the authored departure point in both scenes.");
+        var departure = tsunami.transform.InverseTransformPoint(walk.AfterEventPoint.position);
+        Assert.That(departure.x, Is.EqualTo(.006f).Within(.0001f));
+        Assert.That(departure.y, Is.EqualTo(.046f).Within(.0001f));
+        Assert.That(departure.z - tsunami.CityBounds.max.z, Is.InRange(.85f, .88f),
+            "The departure point must keep its clearance beyond the current map's back edge.");
         var earthquake = scene.GetRootGameObjects().SelectMany(root => root.GetComponentsInChildren<EarthquakeTestController>()).Single();
         var earthquakeData = new SerializedObject(earthquake);
         var navigation = scene.GetRootGameObjects().SelectMany(root => root.GetComponentsInChildren<CityCameraController>()).Single();

@@ -227,7 +227,11 @@ namespace CivilGameJam.Cards
                     var slot = Indicator(i);
                     if (slot == null || !slot.AnimateExit(educated)) educated.FlyFrom(card.Rect.position, educated.Rect.position);
                 }
-                if (graduated && progressFeedback != null) progressFeedback.Complete();
+                if (graduated)
+                {
+                    card.GetComponent<CardFeedback>()?.PlayWorkComplete();
+                    if (progressFeedback != null) progressFeedback.Complete();
+                }
             }
             else if (card.Kind == CardKind.ResearchCenter && WorkerCount > 0 && game.HasUndiscoveredBlueprints)
             {
@@ -257,6 +261,7 @@ namespace CivilGameJam.Cards
         public void FinishResearch()
         {
             if (!AwaitingBlueprint) return;
+            card.GetComponent<CardFeedback>()?.PlayWorkComplete();
             AwaitingBlueprint = false;
             ResearchProgress = 0f;
             System.Array.Clear(researchContributions, 0, Capacity);

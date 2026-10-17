@@ -13,6 +13,7 @@ namespace CivilGameJam.Cards
         [SerializeField] private bool startExpanded = true;
         [Min(0.01f)] [SerializeField] private float slideSeconds = 0.32f;
         [Min(1f)] [SerializeField] private float collapsedHeight = 497.112f;
+        [Min(0f)] [SerializeField] private float collapsedReferenceHeight;
         private Canvas canvas;
         private Vector2 expandedPosition;
         private float expansion = 1f;
@@ -25,7 +26,9 @@ namespace CivilGameJam.Cards
         public float Expansion => expansion;
         public bool IsCityPresentationActive => cityPresentation;
         public RectTransform ActivationArea => activationArea;
-        public float CollapsedCanvasHeight => panel == null ? 0f : Mathf.Min(collapsedHeight, panel.rect.height) * Mathf.Abs(panel.localScale.y);
+        private float PeekHeight => collapsedReferenceHeight > 0f
+            ? collapsedHeight * panel.rect.height / collapsedReferenceHeight : collapsedHeight;
+        public float CollapsedCanvasHeight => panel == null ? 0f : Mathf.Min(PeekHeight, panel.rect.height) * Mathf.Abs(panel.localScale.y);
 
         private void Awake()
         {
@@ -119,7 +122,7 @@ namespace CivilGameJam.Cards
         {
             var dragged = game.DraggedCard;
             Vector3 dragPosition = dragged != null ? dragged.Rect.position : Vector3.zero;
-            float offset = Mathf.Min(0f, collapsedHeight - panel.rect.height) * panel.localScale.y;
+            float offset = Mathf.Min(0f, PeekHeight - panel.rect.height) * panel.localScale.y;
             panel.anchoredPosition = expandedPosition + Vector2.up * (offset * (1f - expansion));
             if (game.Sidebar != null) game.Sidebar.RefreshLayout();
             if (dragged != null) dragged.Rect.position = dragPosition;

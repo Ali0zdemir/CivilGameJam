@@ -6,7 +6,7 @@ using UnityEngine.UI;
 namespace CivilGameJam.Cards
 {
     public sealed class HouseUpgradeSlot : MonoBehaviour, IPointerDownHandler, IPointerClickHandler,
-        IBeginDragHandler, IDragHandler, IEndDragHandler
+        IBeginDragHandler, IDragHandler, IEndDragHandler, ICanvasRaycastFilter
     {
         [SerializeField] private HouseUpgrades house;
         [SerializeField] private UpgradeKind kind;
@@ -27,6 +27,8 @@ namespace CivilGameJam.Cards
         public bool IsInstalling => installPreview != null && installPreview.gameObject.activeSelf;
         public bool IsAnimating => reveal != null;
         public RectTransform VisibleIcon => IsInstalling ? installPreview.rectTransform : icon.rectTransform;
+        public bool IsRaycastLocationValid(Vector2 screenPoint, Camera eventCamera) =>
+            house != null && house.GetInstalled(kind) != null;
         public void ShowFilled(bool filled, bool animate = true)
         {
             if (!scaleCached)

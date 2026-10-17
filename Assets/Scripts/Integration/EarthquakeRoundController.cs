@@ -135,7 +135,8 @@ namespace CivilGameJam
                 else
                 {
                     foreach (var house in houses)
-                        if (house.eligible && house.tsunamiDamage != null && house.tsunamiDamage.HasCollapsed)
+                        if (house.eligible && (house.tsunamiDamage != null && house.tsunamiDamage.HasCollapsed ||
+                            house.damage != null && house.damage.UsesAuthoredAnimation && house.damage.IsDestroyed))
                             house.link.House.SetDestroyed(true);
                     if (!damageApplied && (earthquake.IsRunning && earthquake.NormalizedProgress >= damageAtEarthquakeProgress ||
                         sequence.Stage == MonsterSequenceStage.WalkingToSecondPoint || sequence.Stage == MonsterSequenceStage.Complete)) ApplyDamage();
@@ -177,7 +178,7 @@ namespace CivilGameJam
             foreach (var house in houses)
                 // Later saved routes also shake the city; they use seismic protection, not the current stage's card.
                 if (house.eligible && !house.link.House.IsDestroyed && house.link.House.GetInstalled(UpgradeKind.RailSystem) == null &&
-                    house.damage != null && house.damage.Collapse())
+                    house.damage != null && !house.damage.UsesAuthoredAnimation && house.damage.Collapse())
                     house.link.House.SetDestroyed(true);
         }
 
@@ -216,13 +217,20 @@ namespace CivilGameJam
         private void CompleteRound(bool survived)
         {
             LastRoundSurvived = survived;
+            int destroyedHouses = 0, totalHouses = 0;
+            foreach (var house in houses)
+                if (house.link != null && house.link.House != null)
+                {
+                    totalHouses++;
+                    if (house.link.House.IsDestroyed || sequence.WasHouseBurnt(house.link.Building)) destroyedHouses++;
+                }
             LastProtectedHouseCount = 0;
             foreach (var house in houses)
                 if (house.eligible && house.protectedAtStart && !house.link.House.IsDestroyed) LastProtectedHouseCount++;
             LastSurvivalReward = LastProtectedHouseCount * Mathf.Max(0,
                 SequenceNumber == 3 ? firePointsPerProtectedHouse : SequenceNumber == 2 ? tsunamiPointsPerProtectedHouse : pointsPerProtectedHouse);
-            // Failed earthquake turns lose their new discoveries and manufactured seismic items.
-            if (!survived && SequenceNumber == 1) game.DiscardUpgrades(UpgradeKind.RailSystem);
+            // Failed earthquake and fire attempts lose that stage's manufactured systems.
+            if (!survived && (SequenceNumber == 1 || SequenceNumber == 3)) game.DiscardUpgrades(CurrentProtection);
             game.EndBlueprintTurn(discardNewDiscoveries: !survived && SequenceNumber == 1);
             if (survived && SequenceNumber < 3)
             {
@@ -235,8 +243,10 @@ namespace CivilGameJam
             RoundNumber++;
             Phase = EarthquakeRoundPhase.NextRoundPreparation;
             ResetHouseDamage();
+            if (fire != null) fire.StopFire();
             abilityPoints.AddPoints(LastSurvivalReward + LastRoundGrant);
             game.ResetTurnPeople();
+            sequence.ShowRoundResults(destroyedHouses, totalHouses, LastSurvivalReward + LastRoundGrant, LastProtectedHouseCount);
             abilityPoints.SetActionsLocked(false);
             RestoreDebugButtons();
             if (dock != null) dock.EndCityPresentation();

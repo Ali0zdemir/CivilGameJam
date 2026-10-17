@@ -39,6 +39,10 @@ namespace CivilGameJam.Upgrades
         private Transform AuthoredHead => apartmentModel != null ? apartmentModel.SprinklerHead(apartmentIndex) : null;
         private HouseSprinklerUpgrade[] partUpgrades;
         private bool managedExternally;
+        private Transform collapseStateBuilding;
+        private ApartmentTsunamiCollapse tsunamiCollapse;
+        private ApartmentEarthquakeAnimation earthquakeAnimation;
+        private BuildingCollapseFeedback collapseFeedback;
         private Mesh cylinderMesh;
         private Mesh jointMesh;
         private Mesh jetMesh;
@@ -74,8 +78,27 @@ namespace CivilGameJam.Upgrades
             ? model.IsResidential : building.Find("Second_Floor") != null && building.Find("Roof/Roof_Ridge") != null);
         public bool IsInstalled { get; private set; }
         public bool IsSpraying { get; private set; }
-        public float FireMultiplier => IsInstalled && isActiveAndEnabled ? Mathf.Clamp01(fireIntensityMultiplier) : 1f;
+        public bool IsOperational => IsInstalled && isActiveAndEnabled && !IsBuildingCollapsed;
+        public float FireMultiplier => IsOperational ? Mathf.Clamp01(fireIntensityMultiplier) : 1f;
         public event Action<HouseSprinklerUpgrade> StateChanged;
+
+        private bool IsBuildingCollapsed
+        {
+            get
+            {
+                if (building == null) return true;
+                if (collapseStateBuilding != building)
+                {
+                    collapseStateBuilding = building;
+                    tsunamiCollapse = building.GetComponentInParent<ApartmentTsunamiCollapse>();
+                    earthquakeAnimation = building.GetComponentInParent<ApartmentEarthquakeAnimation>();
+                    collapseFeedback = building.GetComponentInParent<BuildingCollapseFeedback>();
+                }
+                return tsunamiCollapse != null && tsunamiCollapse.HasCollapsed ||
+                    earthquakeAnimation != null && earthquakeAnimation.HasCollapsed ||
+                    collapseFeedback != null && collapseFeedback.Reported;
+            }
+        }
 
         public void SetInstalled(bool installed)
         {
@@ -237,6 +260,12 @@ namespace CivilGameJam.Upgrades
 
         private void Update() { if (!managedExternally) AdvanceSprinkler(Time.unscaledDeltaTime); }
 
+        private void LateUpdate()
+        {
+            // Collapse animations can advance after the water's Update in the same frame.
+            if (IsSpraying && !IsOperational) StopSpray();
+        }
+
         private void AdvanceSprinkler(float deltaTime)
         {
             if (partUpgrades != null)
@@ -245,7 +274,7 @@ namespace CivilGameJam.Upgrades
                 foreach (var part in partUpgrades) { part.AdvanceSprinkler(deltaTime); IsSpraying |= part.IsSpraying; }
                 return;
             }
-            if(!IsInstalled || fire==null || !fire.IsRunning || waterMaterial==null || sprayMaterial==null) { StopSpray(); return; }
+            if(!IsOperational || fire==null || !fire.SprinklersActive || waterMaterial==null || sprayMaterial==null) { StopSpray(); return; }
             if (!wallRunoff.RefreshVisibility()) { StopSpray(); return; }
             waterGravity = Mathf.Max(.1f, -Physics.gravity.y * WaterGravityMultiplier);
             if(!IsSpraying)

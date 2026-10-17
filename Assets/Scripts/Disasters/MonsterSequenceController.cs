@@ -17,6 +17,7 @@ namespace CivilGameJam.Disasters
         [SerializeField] private EarthquakeTestController earthquake;
         [SerializeField] private FireTestController fire;
         [SerializeField] private CityCameraController navigation;
+        [SerializeField] private MonsterSequenceResults results;
 
         [Header("Sequence camera")]
         [SerializeField, Range(1f, 1.6f)] private float cameraZoomFactor = 1.3f;
@@ -38,11 +39,19 @@ namespace CivilGameJam.Disasters
         private float departureLimit, departureElapsed;
         private bool monsterDeparted;
         private bool expanded;
+        private bool waveCameraActive;
 
         public bool IsRunning { get; private set; }
         public int SelectedSequence => Mathf.Clamp(selectedSequence, 1, 3);
         public int ActiveSequence { get; private set; }
         public MonsterSequenceStage Stage { get; private set; }
+
+        public bool WasHouseBurnt(Transform house) => fire != null && fire.WasHouseBurnt(house);
+
+        public void ShowRoundResults(int destroyed, int total, int earnedPoints, int protectedHouses = -1)
+        {
+            if (results != null) results.ShowRound(destroyed, total, earnedPoints, protectedHouses);
+        }
 
         private void Awake() => RefreshMenu();
 
@@ -71,6 +80,7 @@ namespace CivilGameJam.Disasters
             if (!Application.isPlaying || !isActiveAndEnabled || IsRunning) return;
             if (monster == null || walk == null || walk.WalkPoint == null || walk.AfterEventPoint == null ||
                 tsunami == null || earthquake == null || fire == null) return;
+            if (results != null) results.Hide();
             fire.StopFire();
             earthquake.StopEarthquake();
             tsunami.StopTsunami();
@@ -102,7 +112,10 @@ namespace CivilGameJam.Disasters
         private void LateUpdate()
         {
             // Individual events may finish during a sequence; their buttons stay reserved until its end.
-            if (IsRunning) SetIndividualButtons(false);
+            if (!IsRunning) return;
+            SetIndividualButtons(false);
+            if (tsunami.IsWaveCameraActive) waveCameraActive = true;
+            else if (waveCameraActive) FocusCity(Stage == MonsterSequenceStage.Fire ? monster.Model : null);
         }
 
         private void AdvanceSequence(float deltaTime)
@@ -116,8 +129,8 @@ namespace CivilGameJam.Disasters
                         riseElapsed += Mathf.Max(0f, deltaTime);
                         monster.SetEmergenceTime(riseElapsed);
                     }
-                    else if (!tsunami.IsRunning && monster.EmergenceProgress < 1f) { StopSequence(); return; }
-                    if (monster.EmergenceProgress < 1f) return;
+                    else if (!tsunami.IsRunning && !monster.HasFinishedEmerging) { StopSequence(); return; }
+                    if (!monster.HasFinishedEmerging) return;
                     earthquake.StartSequenceEarthquake();
                     Stage = MonsterSequenceStage.WalkingToFirstPoint;
                     break;
@@ -165,6 +178,8 @@ namespace CivilGameJam.Disasters
                     Stage = MonsterSequenceStage.Complete;
                     ReturnCamera();
                     SetIndividualButtons(true);
+                    // Playable rounds snapshot damage and rewards before rebuilding the next turn.
+                    if (departureLimit <= 0f && results != null) results.Show();
                     break;
             }
             RefreshMenu();
@@ -172,6 +187,7 @@ namespace CivilGameJam.Disasters
 
         public void StopSequence()
         {
+            if (results != null) results.Hide();
             if (!IsRunning) return;
             IsRunning = false;
             if (fire != null) fire.StopFire();
@@ -189,6 +205,8 @@ namespace CivilGameJam.Disasters
 
         private void FocusCity(Transform context)
         {
+            if (tsunami.IsWaveCameraActive) return;
+            waveCameraActive = false;
             if (navigation != null)
                 navigation.BeginEventFrame(this, new[] { tsunami.BuildingsRoot, tsunami.GroundSurface }, context,
                     cameraZoomFactor, cameraZoomSeconds);
@@ -196,6 +214,7 @@ namespace CivilGameJam.Disasters
 
         private void ReturnCamera()
         {
+            waveCameraActive = false;
             if (navigation == null) return;
             navigation.EndEventFocus(this, cameraReturnSeconds);
             navigation.ReleaseEventInputLock(this);

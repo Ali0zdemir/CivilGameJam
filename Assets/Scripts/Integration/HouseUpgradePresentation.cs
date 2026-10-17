@@ -12,10 +12,11 @@ namespace CivilGameJam
         [SerializeField] private CardGameController game;
         [SerializeField] private CardDock dock;
         [SerializeField] private CityCameraController navigation;
-        [SerializeField, Range(1f, 1.3f)] private float zoomFactor = 1.12f;
-        [SerializeField, Min(0.01f)] private float zoomSeconds = 0.4f;
-        [SerializeField, Min(0f)] private float holdSeconds = 0.55f;
-        [SerializeField, Min(0.01f)] private float returnSeconds = 0.35f;
+        [SerializeField, Range(1f, 4f)] private float zoomFactor = 2.2f;
+        [SerializeField, Range(1f, 2f)] private float closeupMagnification = 1.5f;
+        [SerializeField, Min(0.01f)] private float zoomSeconds = 0.9f;
+        [SerializeField, Min(0f)] private float holdSeconds = 1.1f;
+        [SerializeField, Min(0.01f)] private float returnSeconds = 1.2f;
 
         private sealed class Installation
         {
@@ -31,7 +32,8 @@ namespace CivilGameJam
         private Installation current;
         private Coroutine presentation;
         public bool IsPresenting => presentation != null;
-        private bool Interrupted => game == null || game.IsDraggingAnyCard || game.IsChoosingBlueprint;
+        private bool QueuingUpgrade => game != null && game.DraggedCard != null && game.DraggedCard.Kind == CardKind.Upgrade;
+        private bool Interrupted => game == null || game.IsChoosingBlueprint || game.IsDraggingAnyCard && !QueuingUpgrade;
 
         public bool QueueInstallation(HouseCityUpgradeLink link, UpgradeKind kind, DraggableCard product)
         {
@@ -55,7 +57,7 @@ namespace CivilGameJam
             yield return null;
             // Show the item entering its saved socket and the socket's flash before
             // sliding the house row off screen for the city upgrade presentation.
-            while (!Interrupted && HasPendingCardAnimation()) yield return null;
+            while (!Interrupted && (QueuingUpgrade || HasPendingCardAnimation())) yield return null;
             if (!Interrupted && dock != null) dock.BeginCityPresentation();
             do
             {
@@ -64,12 +66,13 @@ namespace CivilGameJam
                     current = pending[0];
                     pending.RemoveAt(0);
                     if (!current.IsValid) { current = null; continue; }
-                    while (dock != null && dock.isActiveAndEnabled && dock.Expansion > 0.001f &&
-                           current.IsValid && !Interrupted) yield return null;
+                    while (current.IsValid && !Interrupted &&
+                           (QueuingUpgrade || current.Link.House.IsInstalling ||
+                            dock != null && dock.isActiveAndEnabled && dock.Expansion > 0.001f)) yield return null;
                     if (Interrupted) break;
                     if (!current.IsValid) { current = null; continue; }
-                    bool focused = navigation != null && navigation.BeginPresentationFocus(
-                        BuildingCenter(current.Link.Building), zoomFactor, zoomSeconds);
+                    bool focused = navigation != null && navigation.BeginPresentationFrame(
+                        current.Link.Building, zoomFactor, zoomSeconds, current.Kind == UpgradeKind.Breakwater, closeupMagnification);
                     while (focused && navigation != null && navigation.isActiveAndEnabled &&
                            navigation.IsPresenting && !navigation.IsFocusReady && current.IsValid && !Interrupted)
                         yield return null;
@@ -85,11 +88,25 @@ namespace CivilGameJam
                     if (Interrupted) break;
                     current = null;
                 }
-                // A fresh player action takes priority, but an accepted product must still be applied.
+                // Other card actions keep their priority. Product drags extend this same camera tour.
                 if (Interrupted) ApplyRemaining();
+                while (!Interrupted && QueuingUpgrade) yield return null;
+                if (pending.Count > 0 && !Interrupted) continue;
                 if (navigation != null) navigation.EndPresentationFocus(returnSeconds);
                 while (navigation != null && navigation.isActiveAndEnabled && navigation.IsPresenting && pending.Count == 0)
+                {
+                    // A late product drag may begin during the final return. Keep the original
+                    // home view, pause at the rendered pose and continue directly to its house.
+                    if (!Interrupted && QueuingUpgrade)
+                    {
+                        navigation.HoldPresentationFocus();
+                        while (!Interrupted && QueuingUpgrade) yield return null;
+                        if (pending.Count > 0 && !Interrupted) break;
+                        if (Interrupted) ApplyRemaining();
+                        navigation.EndPresentationFocus(returnSeconds);
+                    }
                     yield return null;
+                }
             } while (pending.Count > 0);
             current = null;
             if (dock != null) dock.EndCityPresentation();
@@ -101,16 +118,6 @@ namespace CivilGameJam
             foreach (var item in pending)
                 if (item.IsValid && item.Link.House.IsInstalling) return true;
             return false;
-        }
-
-        private static Vector3 BuildingCenter(Transform building)
-        {
-            if (building == null) return Vector3.zero;
-            var renderers = building.GetComponentsInChildren<MeshRenderer>();
-            if (renderers.Length == 0) return building.position;
-            Bounds bounds = renderers[0].bounds;
-            for (int i = 1; i < renderers.Length; i++) bounds.Encapsulate(renderers[i].bounds);
-            return bounds.center;
         }
 
         private void ApplyRemaining()

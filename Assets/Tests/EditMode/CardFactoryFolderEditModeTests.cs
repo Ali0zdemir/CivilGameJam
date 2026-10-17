@@ -12,15 +12,15 @@ public sealed class CardFactoryFolderEditModeTests
     public void FactoryPresentationIsAuthoredWithoutInstructionsAndInheritedByTheSavedScene()
     {
         var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/FactoryCard.prefab");
-        Check(prefab.GetComponent<FactoryFolderPresentation>());
+        Check(prefab.GetComponent<FactoryFolderPresentation>(), new Vector2(-21.3f, -9f));
         var scene = EditorSceneManager.OpenScene("Assets/2DCardScene.unity");
         var view = scene.GetRootGameObjects().SelectMany(root => root.GetComponentsInChildren<FactoryFolderPresentation>(true))
             .Single(item => item.gameObject.activeInHierarchy);
-        Check(view);
+        Check(view, new Vector2(-9f, -5f));
         Assert.That(PrefabUtility.GetCorrespondingObjectFromSource(view), Is.SameAs(prefab.GetComponent<FactoryFolderPresentation>()));
     }
 
-    private static void Check(FactoryFolderPresentation view)
+    private static void Check(FactoryFolderPresentation view, Vector2 savedHintPosition)
     {
         Assert.That(view, Is.Not.Null);
         var data = new SerializedObject(view);
@@ -34,7 +34,7 @@ public sealed class CardFactoryFolderEditModeTests
         Assert.That(hint.gameObject.activeSelf, Is.True, "Keep the guide visible for editing; Initialize hides it until a usable order needs a worker.");
         Assert.That(hint.alpha, Is.EqualTo(1f));
         var hintRect = (RectTransform)hint.transform;
-        Assert.That(hintRect.anchoredPosition, Is.EqualTo(new Vector2(-21.3f, -9f)));
+        Assert.That(hintRect.anchoredPosition, Is.EqualTo(savedHintPosition));
         Assert.That(hintRect.sizeDelta, Is.EqualTo(new Vector2(80f, 112f)));
         Assert.That(hintRect.localScale, Is.EqualTo(Vector3.one * 1.6f));
         Assert.That(view.StoredBlueprint.gameObject.activeSelf, Is.False);

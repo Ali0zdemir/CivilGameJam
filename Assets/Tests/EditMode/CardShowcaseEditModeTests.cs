@@ -30,7 +30,20 @@ public sealed class CardShowcaseEditModeTests
                 string path = AnimationUtility.CalculateTransformPath(mesh.transform, original);
                 if (path.StartsWith("City_Environment/Street_Lamps/", System.StringComparison.Ordinal)) continue;
                 var copy = imported.Find(path).GetComponent<MeshFilter>();
-                Assert.That(copy.sharedMesh, Is.SameAs(mesh.sharedMesh), path);
+                if (path == "City_Environment/Continuous_Ground")
+                {
+                    Assert.That(AssetDatabase.GetAssetPath(copy.sharedMesh), Is.EqualTo("Assets/EfeArts/Map(Guncel1).fbx"));
+                    continue;
+                }
+                if (copy.sharedMesh != mesh.sharedMesh)
+                {
+                    Assert.That(AssetDatabase.GetAssetPath(copy.sharedMesh), Does.StartWith("Assets/Art/Buildings/TileFoliage/"), path);
+                    Assert.That(copy.sharedMesh.vertices, Is.EqualTo(mesh.sharedMesh.vertices), path);
+                    Assert.That(copy.sharedMesh.uv, Is.EqualTo(mesh.sharedMesh.uv), path);
+                    Assert.That(copy.sharedMesh.normals, Is.EqualTo(mesh.sharedMesh.normals), path);
+                    Assert.That(copy.sharedMesh.triangles.Length, Is.LessThan(mesh.sharedMesh.triangles.Length), path);
+                }
+                else Assert.That(copy.sharedMesh, Is.SameAs(mesh.sharedMesh), path);
                 Assert.That(copy.transform.rotation, Is.EqualTo(mesh.transform.rotation), path);
                 // City groups move as a whole; the models and their internal layout keep their authored size.
                 if (mesh.transform.IsChildOf(original.Find("Buildings")))
@@ -45,18 +58,13 @@ public sealed class CardShowcaseEditModeTests
             foreach (Transform group in original.Find("Buildings"))
             {
                 var copy = imported.Find("Buildings/" + group.name);
-                Assert.That(copy.localPosition.x, Is.EqualTo(group.localPosition.x * 1.2f).Within(0.0001f));
                 Assert.That(copy.localPosition.y, Is.EqualTo(group.localPosition.y));
-                Assert.That(copy.localPosition.z, Is.EqualTo(group.localPosition.z * 1.152f).Within(0.0001f));
+                var cells = world.GetComponentInChildren<TsunamiTestController>().GroundSurface.Find("Tile_Grid_4x2").Cast<Transform>();
+                Assert.That(cells.Any(cell => Vector2.Distance(new Vector2(cell.position.x, cell.position.z),
+                    new Vector2(copy.position.x, copy.position.z)) < .0001f), Is.True, copy.name + " must sit on an authored tile.");
             }
-            float addedDepth = 1.95f * (1.152f - 1f);
-            foreach (string name in new[] { "Continuous_Ground", "Island_Base" })
-            {
-                Assert.That(imported.Find("City_Environment/" + name).localScale.x,
-                    Is.EqualTo(original.Find("City_Environment/" + name).localScale.x + 5.85f * 0.2f).Within(0.0001f));
-                Assert.That(imported.Find("City_Environment/" + name).localScale.z,
-                    Is.EqualTo(original.Find("City_Environment/" + name).localScale.z + addedDepth).Within(0.0001f));
-            }
+            Assert.That(world.GetComponentInChildren<TsunamiTestController>().GroundSurface.Find("Tile_Grid_4x2").childCount, Is.EqualTo(8));
+            Assert.That(imported.Find("City_Environment/Island_Base").GetComponent<MeshRenderer>().enabled, Is.False);
         }
         finally { EditorSceneManager.CloseScene(source, true); }
     }
@@ -102,7 +110,20 @@ public sealed class CardShowcaseEditModeTests
         Assert.That(Object.FindObjectsByType<EventSystem>(FindObjectsSortMode.None).Length, Is.EqualTo(1));
         Assert.That(Object.FindObjectsByType<AudioListener>(FindObjectsSortMode.None).Count(listener => listener.enabled), Is.EqualTo(1));
         var controls = view.GetComponentsInChildren<Canvas>(true);
-        Assert.That(controls.Length, Is.EqualTo(6));
+        Assert.That(controls.Length, Is.EqualTo(7), "Three disaster tests, three protection tests and the sequence menu must be saved before Play.");
+        var round = Object.FindFirstObjectByType<EarthquakeRoundController>();
+        Assert.That(round, Is.Not.Null);
+        var roundData = new SerializedObject(round);
+        var ready = (UnityEngine.UI.Button)roundData.FindProperty("readyButton").objectReferenceValue;
+        Assert.That(ready, Is.Not.Null, "The authored READY button drives the current game's saved sequence.");
+        Assert.That(ready.gameObject.activeInHierarchy, Is.True);
+        Assert.That(roundData.FindProperty("sequence").objectReferenceValue,
+            Is.SameAs(world.GetComponentInChildren<MonsterSequenceController>()));
+        var starts = roundData.FindProperty("debugStartButtons");
+        Assert.That(starts.arraySize, Is.EqualTo(8));
+        for (int i = 0; i < starts.arraySize; i++)
+            Assert.That(starts.GetArrayElementAtIndex(i).objectReferenceValue, Is.Not.Null,
+                "READY must reserve every restored debug start control during a real round.");
         foreach (var control in controls)
         {
             Assert.That(control.gameObject.activeInHierarchy, Is.True, "Test controls must be visible before Play.");

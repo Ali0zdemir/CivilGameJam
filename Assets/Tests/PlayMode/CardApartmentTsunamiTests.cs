@@ -21,6 +21,8 @@ public sealed partial class CardGamePlayModeTests
         Assert.That(collapses.All(collapse => collapse != null), Is.True);
         var normal = links[0].Building.Find("Apartment_Motion/Apartments_Normal");
         var bodies = Enumerable.Range(1, 6).Select(i => normal.Find("Apartment" + i)).ToArray();
+        var renderers = normal.GetComponentsInChildren<Renderer>(true);
+        var originalRenderingOff = renderers.Select(renderer => renderer.forceRenderingOff).ToArray();
         var positions = bodies.Select(body => body.localPosition).ToArray();
         var rotations = bodies.Select(body => body.localRotation).ToArray();
         var head = normal.Find("Sprinkler1");
@@ -33,7 +35,12 @@ public sealed partial class CardGamePlayModeTests
         tsunami.StartTsunami();
         InvokeCity(tsunami, "AdvanceTsunami", .1f);
         Assert.That(collapses.Any(collapse => collapse.HasCollapsed), Is.False, "Wait for actual flood contact.");
-        for (int step = 0; step < 45 && tsunami.IsRunning; step++) InvokeCity(tsunami, "AdvanceTsunami", .1f);
+        var shoreArrival = (ControlField<float>(tsunami, "shorelineDistance") - ControlField<float>(tsunami, "startDistance")) /
+            ControlField<float>(tsunami, "waveSpeed");
+        var beforeArrival = Object.FindFirstObjectByType<SeaMonsterEmergence>().WaveReleaseDelay + shoreArrival - .1f;
+        InvokeCity(tsunami, "AdvanceTsunami", beforeArrival - ControlField<float>(tsunami, "sequenceElapsed"));
+        Assert.That(collapses.Any(collapse => collapse.HasCollapsed), Is.False, "Slowing the wave must also delay its first building contact.");
+        InvokeCity(tsunami, "AdvanceTsunami", 1.4f);
         Assert.That(collapses[1].HasCollapsed, Is.False, "Elevator protection survives the tsunami.");
         foreach (int i in new[] { 0, 2, 3 }) Assert.That(collapses[i].HasCollapsed, Is.True, "Reached apartment " + i);
         for (int i = 0; i < 6; i++)
@@ -43,15 +50,38 @@ public sealed partial class CardGamePlayModeTests
         Assert.That(bodies.Any(body => Quaternion.Angle(body.localRotation, Quaternion.identity) > 15f), Is.True);
         Assert.That(Vector3.Distance(head.position, bodies[0].TransformPoint(headInBody)), Is.LessThan(.001f), "The native sprinkler follows its falling apartment.");
         CaptureAuthoredApartmentSprinklers(links[0].Building, "tsunami-collapse-moving");
-        InvokeCity(collapses[0], "AdvanceCollapse", 10f);
+        InvokeCity(collapses[0], "AdvanceCollapse", collapses[0].Duration * .4f + .001f);
         Assert.That(collapses[0].IsPlaying, Is.False);
         Assert.That(collapses[0].HasCollapsed, Is.True);
+        Assert.That(collapses[0].HasDisappeared, Is.False);
         CaptureAuthoredApartmentSprinklers(links[0].Building, "tsunami-collapse-finished");
+        var finalPositions = bodies.Select(body => body.localPosition).ToArray();
+        var finalRotations = bodies.Select(body => body.localRotation).ToArray();
+        InvokeCity(collapses[0], "AdvanceCollapse", 1.95f);
+        Assert.That(collapses[0].HasDisappeared, Is.False, "Hold the final collapsed pose for two full seconds.");
+        Assert.That(bodies.Select(body => body.localPosition), Is.EqualTo(finalPositions));
+        Assert.That(bodies.Select(body => body.localRotation), Is.EqualTo(finalRotations));
+        Assert.That(renderers.Select(renderer => renderer.forceRenderingOff), Is.EqualTo(originalRenderingOff));
+        InvokeCity(collapses[0], "AdvanceCollapse", .06f);
+        Assert.That(collapses[0].HasDisappeared, Is.True);
+        Assert.That(renderers.All(renderer => renderer.forceRenderingOff), Is.True);
+        Assert.That(normal.gameObject.activeInHierarchy && links[0].Building.gameObject.activeInHierarchy, Is.True,
+            "Keep the house and upgrade bindings available to results and reset.");
+        Assert.That(ground.GetComponent<MeshRenderer>().forceRenderingOff, Is.False);
+        CaptureAuthoredApartmentSprinklers(links[0].Building, "tsunami-collapse-disappeared");
         InvokeCity(tsunami, "AdvanceTsunami", 100f);
-        Assert.That(collapses[0].HasCollapsed, Is.True, "Keep the final pose after the water drains.");
+        Assert.That(collapses[0].HasCollapsed && collapses[0].HasDisappeared, Is.True, "The vanished house remains destroyed after the water drains.");
         Assert.That(ground.position, Is.EqualTo(groundPosition));
+        var fire = Object.FindFirstObjectByType<FireTestController>();
+        fire.StartFire();
+        var sites = ControlField<IList>(fire, "sites").Cast<object>();
+        Assert.That(sites.Any(site => SiteField<Transform>(site, "Building").IsChildOf(links[0].Building)), Is.False,
+            "Subsequent fire must not ignite a house that has disappeared.");
+        fire.StopFire();
         tsunami.StopTsunami();
         Assert.That(collapses.Any(collapse => collapse.HasCollapsed), Is.False);
+        Assert.That(collapses[0].HasDisappeared, Is.False);
+        Assert.That(renderers.Select(renderer => renderer.forceRenderingOff), Is.EqualTo(originalRenderingOff));
         for (int i = 0; i < 6; i++)
         {
             Assert.That(bodies[i].localPosition, Is.EqualTo(positions[i]));

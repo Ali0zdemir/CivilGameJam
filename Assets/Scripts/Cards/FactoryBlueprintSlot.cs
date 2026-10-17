@@ -4,10 +4,12 @@ using UnityEngine.EventSystems;
 namespace CivilGameJam.Cards
 {
     public sealed class FactoryBlueprintSlot : MonoBehaviour, IPointerClickHandler, IPointerDownHandler, IPointerUpHandler,
-        IBeginDragHandler, IDragHandler, IEndDragHandler
+        IBeginDragHandler, IDragHandler, IEndDragHandler, ICanvasRaycastFilter
     {
         [SerializeField] private FactoryProduction factory;
         private DraggableCard dragged;
+        public bool IsRaycastLocationValid(Vector2 screenPoint, Camera eventCamera) =>
+            factory != null && factory.PendingBlueprint != null;
         public void OnPointerDown(PointerEventData data) { }
         public void OnPointerUp(PointerEventData data) => dragged?.OnPointerUp(data);
         public void OnPointerClick(PointerEventData data)

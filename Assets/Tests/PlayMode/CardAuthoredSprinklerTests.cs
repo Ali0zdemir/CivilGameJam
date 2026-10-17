@@ -63,6 +63,7 @@ public sealed partial class CardGamePlayModeTests
         link.House.TryInstall(fireProduct);
         var fire = Object.FindFirstObjectByType<FireTestController>();
         fire.StartFire();
+        AdvanceMonsterFireTo(fire, fire.SprinklerStartTime + .05f);
         yield return null;
         Assert.That(link.FireProtection.IsSpraying, Is.True);
         foreach (bool elevated in new[] { true, false })

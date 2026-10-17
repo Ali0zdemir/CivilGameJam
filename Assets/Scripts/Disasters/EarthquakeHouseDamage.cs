@@ -30,13 +30,27 @@ namespace CivilGameJam.Disasters
         [SerializeField, Range(40f, 90f)] private float fallAngle = 78f;
         [SerializeField, Min(0f)] private float settlingDepth = .06f;
         private float elapsed;
-        public bool IsDestroyed { get; private set; }
-        public bool IsPlaying => IsDestroyed && elapsed < Duration;
+        private ApartmentEarthquakeAnimation authored;
+        private bool destroyed, manualAuthoredCollapse;
+        private ApartmentEarthquakeAnimation Authored
+        {
+            get { if (authored == null) TryGetComponent(out authored); return authored; }
+        }
+        public bool UsesAuthoredAnimation => Authored != null;
+        public bool IsDestroyed { get => destroyed || Authored != null && Authored.HasCollapseStarted; private set => destroyed = value; }
+        public bool IsPlaying => UsesAuthoredAnimation ? Authored.IsRunning && IsDestroyed : IsDestroyed && elapsed < Duration;
         public float Duration => Mathf.Max(.2f, collapseSeconds) + Mathf.Max(0, towers.Length - 1) * Mathf.Max(0f, towerDelay);
 
         public bool Collapse()
         {
             if (!Application.isPlaying || !isActiveAndEnabled || IsDestroyed || apartment == null || apartment.HasSeismic || towers.Length == 0) return false;
+            if (UsesAuthoredAnimation)
+            {
+                if (Authored.IsRunning || !Authored.BeginEarthquake()) return false;
+                manualAuthoredCollapse = true;
+                elapsed = 0f; IsDestroyed = true;
+                return true;
+            }
             foreach (var tower in towers)
                 if (tower == null || tower.normalBody == null || tower.elevatedBody == null || tower.surface == null) return false;
             foreach (var tower in towers)
@@ -65,6 +79,17 @@ namespace CivilGameJam.Disasters
 
         private void AdvanceCollapse(float seconds)
         {
+            if (UsesAuthoredAnimation)
+            {
+                // EarthquakeTestController owns sequence timing; only explicit standalone calls use this clock.
+                if (manualAuthoredCollapse && Authored.IsRunning)
+                {
+                    elapsed = Mathf.Min(Duration, elapsed + Mathf.Max(0f, seconds));
+                    Authored.SetEarthquakeProgress(elapsed / Duration);
+                    if (elapsed >= Duration) Authored.FinishEarthquake();
+                }
+                return;
+            }
             if (!IsDestroyed) return;
             elapsed = Mathf.Min(Duration, elapsed + Mathf.Max(0f, seconds));
             ApplyPose();
@@ -88,6 +113,13 @@ namespace CivilGameJam.Disasters
 
         public void ResetDamage()
         {
+            if (UsesAuthoredAnimation)
+            {
+                Authored.ResetEarthquake();
+                manualAuthoredCollapse = false;
+                IsDestroyed = false; elapsed = 0f;
+                return;
+            }
             if (IsDestroyed)
                 foreach (var tower in towers)
                 {

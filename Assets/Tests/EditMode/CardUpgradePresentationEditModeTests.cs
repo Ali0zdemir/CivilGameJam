@@ -17,7 +17,8 @@ public sealed class CardUpgradePresentationEditModeTests
         Assert.That(data.FindProperty("game").objectReferenceValue, Is.SameAs(Object.FindFirstObjectByType<CardGameController>()));
         Assert.That(data.FindProperty("dock").objectReferenceValue, Is.SameAs(Object.FindFirstObjectByType<CardDock>()));
         Assert.That(data.FindProperty("navigation").objectReferenceValue, Is.SameAs(Object.FindFirstObjectByType<CityCameraController>()));
-        Assert.That(data.FindProperty("zoomFactor").floatValue, Is.EqualTo(1.12f).Within(0.0001f));
+        Assert.That(data.FindProperty("zoomFactor").floatValue, Is.EqualTo(2.2f).Within(0.0001f));
+        Assert.That(data.FindProperty("closeupMagnification").floatValue, Is.EqualTo(1.5f));
         foreach (var link in Object.FindObjectsByType<HouseCityUpgradeLink>(FindObjectsSortMode.None))
         {
             Assert.That(new SerializedObject(link).FindProperty("presentation").objectReferenceValue, Is.SameAs(presentation));

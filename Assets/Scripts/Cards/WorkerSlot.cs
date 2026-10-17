@@ -7,7 +7,7 @@ using UnityEngine.UI;
 namespace CivilGameJam.Cards
 {
     public sealed class WorkerSlot : MonoBehaviour, IPointerDownHandler, IPointerUpHandler, IPointerClickHandler,
-        IBeginDragHandler, IDragHandler, IEndDragHandler, IPointerEnterHandler, IPointerExitHandler
+        IBeginDragHandler, IDragHandler, IEndDragHandler, IPointerEnterHandler, IPointerExitHandler, ICanvasRaycastFilter
     {
         [SerializeField] private BuildingStation station;
         [SerializeField] private int index;
@@ -46,6 +46,10 @@ namespace CivilGameJam.Cards
         public Image Portrait => portrait;
         public Image EntryImage => entryImage;
         public RectTransform VisibleWorkerRect => IsAnimating ? entryImage.rectTransform : portrait != null ? portrait.rectTransform : null;
+
+        // Empty saved pockets pass pointer input to the building underneath them.
+        public bool IsRaycastLocationValid(Vector2 screenPoint, Camera eventCamera) =>
+            station != null && station.GetWorker(index) != null;
 
         private void SavePortraitPosition()
         {

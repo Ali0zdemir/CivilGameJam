@@ -200,7 +200,8 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(bank.TrySpend(0), Is.False); Invoke(round, "LateUpdate");
         foreach (var button in Field<Button[]>(round, "debugStartButtons")) Assert.That(button.interactable, Is.False);
         Until(() => houses[2].House.IsDestroyed);
-        round.AdvanceRound(round.NextTurnAfterCollapseSeconds - .01f);
+        float elapsedSinceFirstCollapse = Field<float>(round, "collapseElapsed");
+        round.AdvanceRound(Mathf.Max(0f, round.NextTurnAfterCollapseSeconds - elapsedSinceFirstCollapse - .01f));
         Assert.That(round.RoundNumber, Is.EqualTo(1)); Assert.That(bank.CurrentPoints, Is.Zero);
         round.AdvanceRound(.02f);
         Assert.That(round.Phase, Is.EqualTo(EarthquakeRoundPhase.NextRoundPreparation));
@@ -303,11 +304,20 @@ public sealed partial class CardAbilityPointsPlayModeTests
         var ground = house.Building.Find("Apartment_Ground"); var position = ground.position;
         var elevatedBodies = house.Building.Find("Apartment_Motion/Apartments_Elevated").GetComponentsInChildren<MeshFilter>().Where(mesh => mesh.name.StartsWith("Apartment") && mesh.name.IndexOf("Support", StringComparison.OrdinalIgnoreCase) < 0).ToArray();
         var rotations = elevatedBodies.Select(body => body.transform.rotation).ToArray();
+        var positions = elevatedBodies.Select(body => body.transform.position).ToArray();
         Assert.That(damage.Collapse(), Is.True); Invoke(damage, "AdvanceCollapse", damage.Duration);
         Assert.That(ground.position, Is.EqualTo(position));
-        Assert.That(elevatedBodies.Where((body, i) => Quaternion.Angle(body.transform.rotation, rotations[i]) > 40f).Count(), Is.GreaterThanOrEqualTo(4));
+        var authored = house.Building.GetComponent<ApartmentEarthquakeAnimation>();
+        Assert.That(authored.HasCollapsed && damage.IsDestroyed, Is.True);
+        Assert.That(authored.ActiveClip.name, Is.EqualTo("Apartment_Earthquake_Elevated_Collapse"));
+        Assert.That(elevatedBodies.Where((body, i) => Vector3.Distance(body.transform.position, positions[i]) > .15f).Count(),
+            Is.EqualTo(elevatedBodies.Length), "Every tower must collapse using the imported motion; it need not use the old procedural fall angle.");
         damage.ResetDamage();
-        for (int i = 0; i < rotations.Length; i++) Assert.That(Quaternion.Angle(elevatedBodies[i].transform.rotation, rotations[i]), Is.LessThan(.001f));
+        for (int i = 0; i < rotations.Length; i++)
+        {
+            Assert.That(Quaternion.Angle(elevatedBodies[i].transform.rotation, rotations[i]), Is.LessThan(.001f));
+            Assert.That(Vector3.Distance(elevatedBodies[i].transform.position, positions[i]), Is.LessThan(.001f));
+        }
     }
 
     [UnityTest]

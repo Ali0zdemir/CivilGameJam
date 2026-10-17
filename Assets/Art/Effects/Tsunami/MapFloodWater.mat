@@ -1,0 +1,37 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: MapFloodWater
+  m_Shader: {fileID: 4800000, guid: d75e7c842eb44a0d9828288fafad9d91, type: 3}
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords: []
+  m_InvalidKeywords: []
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 0
+  m_DoubleSidedGI: 1
+  m_CustomRenderQueue: 3000
+  stringTagMap:
+    RenderType: Transparent
+  disabledShaderPasses: []
+  m_LockedProperties: 
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs: []
+    m_Ints: []
+    m_Floats:
+    - _FacetedLighting: 1
+    - _Fade: 1
+    - _Opacity: 1
+    m_Colors:
+    - _DeepColor: {r: 0.22781575, g: 0.5786385, b: 0.57379395, a: 1}
+    - _FoamColor: {r: 0.66345656, g: 0.8401935, b: 0.7602958, a: 0.6}
+    - _ShallowColor: {r: 0.35048577, g: 0.8036645, b: 0.7650586, a: 0.6}
+  m_BuildTextureStacks: []
+  m_AllowLocking: 1

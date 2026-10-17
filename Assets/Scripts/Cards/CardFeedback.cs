@@ -22,6 +22,9 @@ namespace CivilGameJam.Cards
         [Min(0.02f)] [SerializeField] private float tiltSmoothSeconds = 0.11f;
         [Range(0f, 0.08f)] [SerializeField] private float placementSquash = 0.035f;
         [Min(0.1f)] [SerializeField] private float placementSeconds = 0.34f;
+        [Header("Work completion motion")]
+        [Range(0f, 2f)] [SerializeField] private float workCompletionDegrees = 0.65f;
+        [Min(0.1f)] [SerializeField] private float workCompletionSeconds = 0.32f;
         private Coroutine feedbackRoutine;
         private float scale = 1f;
         private float lift;
@@ -34,8 +37,10 @@ namespace CivilGameJam.Cards
         private bool dragging;
         private float tilt, tiltVelocity, targetTilt, lastDragInput;
         private float placementTime = float.PositiveInfinity;
+        private float workCompletionTime = float.PositiveInfinity;
 
         public Vector3 LayoutScale => initialized ? layoutScale : rect.localScale;
+        public bool IsWorkCompleting => workCompletionTime < Mathf.Max(0.1f, workCompletionSeconds);
         private float RestScale => hovered ? hoverScale : 1f;
         private float RestLift => hovered ? 0.55f : 0f;
 
@@ -58,6 +63,7 @@ namespace CivilGameJam.Cards
 
         public void BeginDragMotion()
         {
+            workCompletionTime = float.PositiveInfinity;
             dragging = true;
             targetTilt = 0f;
             lastDragInput = Time.unscaledTime;
@@ -80,6 +86,12 @@ namespace CivilGameJam.Cards
         }
 
         public void Punch() => placementTime = 0f;
+
+        public void PlayWorkComplete()
+        {
+            if (!initialized || !isActiveAndEnabled || dragging || held) return;
+            workCompletionTime = 0f;
+        }
 
         public void Reveal(float seconds)
         {
@@ -108,7 +120,11 @@ namespace CivilGameJam.Cards
             tilt = Mathf.SmoothDamp(tilt, targetTilt, ref tiltVelocity, tiltSmoothSeconds,
                 Mathf.Infinity, Time.unscaledDeltaTime);
             if (Mathf.Abs(tilt) < 0.005f && Mathf.Abs(tiltVelocity) < 0.05f) { tilt = 0f; tiltVelocity = 0f; }
-            Quaternion rotation = layoutRotation * Quaternion.Euler(0f, 0f, tilt);
+            workCompletionTime += Time.unscaledDeltaTime;
+            float completion = Mathf.Clamp01(workCompletionTime / Mathf.Max(0.1f, workCompletionSeconds));
+            float completionTilt = completion >= 1f ? 0f :
+                Mathf.Sin(completion * Mathf.PI * 4f) * (1f - Smooth(completion)) * workCompletionDegrees;
+            Quaternion rotation = layoutRotation * Quaternion.Euler(0f, 0f, tilt + completionTilt);
             if (!rect.localRotation.Equals(rotation)) rect.localRotation = rotation;
             placementTime += Time.unscaledDeltaTime;
             ApplyScale();
@@ -133,6 +149,7 @@ namespace CivilGameJam.Cards
         public void PickUp()
         {
             if (held) return;
+            workCompletionTime = float.PositiveInfinity;
             held = true;
             StopAnimation();
             feedbackRoutine = StartCoroutine(Lift(PickupSeconds, false));
@@ -215,6 +232,7 @@ namespace CivilGameJam.Cards
             dragging = false;
             tilt = tiltVelocity = targetTilt = 0f;
             placementTime = float.PositiveInfinity;
+            workCompletionTime = float.PositiveInfinity;
             if (rect != null) rect.localRotation = layoutRotation;
             if (rect != null && shadow != null) Apply(1f, 0f);
         }

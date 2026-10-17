@@ -39,6 +39,31 @@ public sealed partial class CardGamePlayModeTests
                 rig.Sequence.StartSelectedSequence();
                 Assert.That(navigation.PanOffset, Is.EqualTo(homePan), "Starting the cinematic cannot cut to another camera position.");
                 Assert.That(ControlField<float>(navigation, "currentZoom"), Is.EqualTo(homeZoom));
+                if (number >= 2)
+                {
+                    var wave = ControlField<AuthoredTsunamiWave>(rig.Tsunami, "authoredWave");
+                    rig.For(rig.Monster.WaveReleaseDelay + .2f);
+                    AssertOpaqueWaveAtPlayerZoom(camera, wave, navigation);
+                    rig.Until(() =>
+                    {
+                        if (rig.Tsunami.IsRunning && wave.IsVisible)
+                            AssertOpaqueWaveAtPlayerZoom(camera, wave, navigation);
+                        return !rig.Sequence.IsRunning;
+                    });
+                    Assert.That(navigation.IsEventCameraActive && navigation.InputBlocked, Is.True);
+                    var farZoom = ControlField<float>(navigation, "currentZoom");
+                    var seconds = ControlField<float>(rig.Sequence, "cameraReturnSeconds");
+                    InvokeCity(navigation, "AdvanceNavigation", seconds * .5f);
+                    Assert.That(ControlField<float>(navigation, "currentZoom"),
+                        Is.InRange(Mathf.Min(farZoom, homeZoom), Mathf.Max(farZoom, homeZoom)));
+                    Assert.That(navigation.InputBlocked, Is.True);
+                    InvokeCity(navigation, "AdvanceNavigation", seconds);
+                    Assert.That(navigation.IsEventCameraActive || navigation.InputBlocked, Is.False);
+                    Assert.That(navigation.PanOffset, Is.EqualTo(homePan));
+                    Assert.That(ControlField<float>(navigation, "currentZoom"), Is.EqualTo(homeZoom));
+                    Assert.That(Vector3.Distance(camera.transform.position, homeCameraPosition), Is.LessThan(.0001f));
+                    continue;
+                }
                 var cityPan = ControlField<Vector2>(navigation, "targetPan");
                 var cityZoom = ControlField<float>(navigation, "targetZoom");
                 var zoomSeconds = ControlField<float>(rig.Sequence, "cameraZoomSeconds");
@@ -53,15 +78,21 @@ public sealed partial class CardGamePlayModeTests
                 Assert.That(navigation.PanOffset, Is.EqualTo(cityPan));
                 Assert.That(ControlField<float>(navigation, "currentZoom"), Is.EqualTo(cityZoom));
                 Capture("02-city-zoom");
+                var cityDepth = Vector3.Dot(rig.Tsunami.transform.TransformPoint(rig.Tsunami.CityBounds.center) - camera.transform.position, camera.transform.forward);
+                var cityAnchor = camera.ViewportToWorldPoint(new Vector3(0.5f, 0.5f, cityDepth));
                 rig.Until(() =>
                 {
                     if (!rig.Sequence.IsRunning) return true;
-                    AssertCityViewportCenter(camera, rig.Tsunami, 0.025f);
                     if (number < 3)
                     {
+                        // Collapsing meshes change their bounds; the held camera keeps the original city location centred.
+                        var anchored = camera.WorldToViewportPoint(cityAnchor);
+                        Assert.That(anchored.x, Is.EqualTo(0.5f).Within(0.025f));
+                        Assert.That(anchored.y, Is.EqualTo(0.5f).Within(0.025f));
                         Assert.That(navigation.PanOffset, Is.EqualTo(cityPan), "The sequence holds its city framing until the return.");
                         Assert.That(ControlField<float>(navigation, "currentZoom"), Is.EqualTo(cityZoom));
                     }
+                    else AssertCityViewportCenter(camera, rig.Tsunami, 0.025f);
                     return false;
                 });
                 Assert.That(navigation.IsEventCameraActive && navigation.InputBlocked, Is.True);
@@ -99,7 +130,6 @@ public sealed partial class CardGamePlayModeTests
                 var homePan = navigation.PanOffset;
                 var homeZoom = ControlField<float>(navigation, "currentZoom");
                 rig.Sequence.SelectSequence(1); rig.Sequence.StartSelectedSequence();
-                var cityZoom = ControlField<float>(navigation, "targetZoom");
                 rig.For(1f);
                 rig.Sequence.StopSequence();
                 InvokeCity(navigation, "AdvanceNavigation", 0.35f);
@@ -109,8 +139,8 @@ public sealed partial class CardGamePlayModeTests
                 Assert.That(navigation.PanOffset, Is.EqualTo(interruptedPan));
                 Assert.That(ControlField<float>(navigation, "currentZoom"), Is.EqualTo(interruptedZoom));
                 rig.For(3f);
-                Assert.That(ControlField<float>(navigation, "currentZoom"), Is.EqualTo(cityZoom).Within(0.0001f),
-                    "Restarting during the return must not accumulate zoom or lose the original player view.");
+                var wave = ControlField<AuthoredTsunamiWave>(rig.Tsunami, "authoredWave");
+                AssertOpaqueWaveAtPlayerZoom(camera, wave, navigation);
                 rig.Sequence.enabled = false;
                 Assert.That(navigation.IsEventCameraActive && navigation.InputBlocked, Is.True);
                 InvokeCity(navigation, "AdvanceNavigation", 2f);

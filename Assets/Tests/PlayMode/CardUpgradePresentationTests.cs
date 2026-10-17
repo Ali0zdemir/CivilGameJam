@@ -274,9 +274,14 @@ public sealed partial class CardGamePlayModeTests
         Assert.That(sawCollapse && sawSmoothZoom, Is.True);
         Assert.That(link.RailSystem.IsInstalled, Is.True);
         Assert.That(navigation.IsFocusReady, Is.True);
-        Assert.That(city.WorldCamera.orthographicSize, Is.EqualTo(zoomBefore / 1.12f).Within(0.01f));
+        Assert.That(city.WorldCamera.orthographicSize, Is.LessThan(zoomBefore * .85f), "The installation close-up must be noticeably stronger than the old 1.12x zoom.");
+        AssertHouseCloseup(navigation, link.Building, true);
         timeout = Time.realtimeSinceStartup + 3f;
-        while (link.RailSystem.IsTransitioning && Time.realtimeSinceStartup < timeout) yield return null;
+        while (link.RailSystem.IsTransitioning && Time.realtimeSinceStartup < timeout)
+        {
+            AssertHouseCloseup(navigation, link.Building, false);
+            yield return null;
+        }
         Assert.That(link.RailSystem.IsTransitioning, Is.False);
         Assert.That(navigation.IsFocusReady, Is.True, "Keep the camera close until the pistons have seated the house.");
         string path = Path.GetFullPath(Path.Combine(Application.dataPath, "../Library/CardGameTestResults/house-upgrade-focused.png"));
@@ -329,6 +334,12 @@ public sealed partial class CardGamePlayModeTests
             Assert.That(CityHasUpgrade(pair.link, pair.kind), Is.True);
             Assert.That(navigation.IsFocusReady, Is.True);
             Assert.That(dock.Expansion, Is.LessThan(0.001f));
+            AssertHouseCloseup(navigation, pair.link.Building, false);
+            while (pair.kind == UpgradeKind.Breakwater && pair.link.FloodProtection.IsTransitioning && Time.realtimeSinceStartup < timeout)
+            {
+                AssertHouseCloseup(navigation, pair.link.Building, false);
+                yield return null;
+            }
         }
         yield return FinishHousePresentation(presentation);
         Assert.That(links[0].RailSystem.IsInstalled, Is.False);
@@ -361,41 +372,77 @@ public sealed partial class CardGamePlayModeTests
     }
 
     [Test]
-    public void HouseFocusStaysAnchoredAndRestoresThePlayerViewAtWideAndTallAspects()
+    public void HouseFocusCentersEdgeBuildingsAndRestoresThePlayerViewAtWideAndTallAspects()
     {
         var navigation = Object.FindFirstObjectByType<CityCameraController>();
         var camera = Object.FindFirstObjectByType<CityViewport>().WorldCamera;
         float oldAspect = camera.aspect;
         try
         {
-            foreach (float aspect in new[] { 16f / 9f, 4f / 3f, 0.75f })
+            foreach (float aspect in new[] { 16f / 9f, 4f / 3f, .75f })
+            foreach (var link in CityHouseLinks())
             {
                 camera.aspect = aspect;
-                PresentationField(navigation, "targetPan", new Vector2(0.2f, -0.3f));
-                PresentationField(navigation, "targetZoom", 2.5f);
+                PresentationField(navigation, "targetPan", new Vector2(.2f, -.3f));
+                PresentationField(navigation, "targetZoom", 4.5f);
                 InvokeCity(navigation, "AdvanceNavigation", 2f);
                 Vector2 homePan = navigation.PanOffset;
                 float homeZoom = camera.orthographicSize;
-                Vector3 target = CityHouseLinks()[1].Building.position + Vector3.up * 0.4f;
-                Vector2 screenBefore = camera.WorldToViewportPoint(target);
-                Assert.That(navigation.BeginPresentationFocus(target, 1.12f, 0.4f), Is.True);
-                InvokeCity(navigation, "AdvanceNavigation", 0.2f);
-                Assert.That(camera.orthographicSize, Is.LessThan(homeZoom).And.GreaterThan(homeZoom / 1.12f));
+                Assert.That(navigation.BeginPresentationFrame(link.Building, 2.2f, .4f), Is.True);
+                InvokeCity(navigation, "AdvanceNavigation", .2f);
+                Assert.That(camera.orthographicSize, Is.LessThan(homeZoom));
                 Assert.That(navigation.IsFocusReady, Is.False);
-                InvokeCity(navigation, "AdvanceNavigation", 0.2f);
+                InvokeCity(navigation, "AdvanceNavigation", .2f);
                 Assert.That(navigation.IsFocusReady, Is.True);
-                Vector2 screenAfter = camera.WorldToViewportPoint(target);
-                Assert.That(Vector2.Distance(screenBefore, screenAfter), Is.LessThan(0.0001f), "Aspect: " + aspect);
-                navigation.EndPresentationFocus(0.3f);
-                InvokeCity(navigation, "AdvanceNavigation", 0.15f);
+                Assert.That(camera.orthographicSize, Is.LessThan(homeZoom * .85f));
+                AssertHouseCloseup(navigation, link.Building, true);
+                var report = Path.GetFullPath("Library/CardGameTestResults/UpgradeFocus");
+                Directory.CreateDirectory(report);
+                File.AppendAllText(Path.Combine(report, "framing.txt"), link.Building.name + " aspect=" + aspect +
+                    " magnification=" + (homeZoom / camera.orthographicSize) + "\n");
+                navigation.EndPresentationFocus(.3f);
+                InvokeCity(navigation, "AdvanceNavigation", .15f);
                 Assert.That(navigation.IsPresenting, Is.True);
-                InvokeCity(navigation, "AdvanceNavigation", 0.15f);
+                InvokeCity(navigation, "AdvanceNavigation", .15f);
                 Assert.That(navigation.IsPresenting, Is.False);
                 Assert.That(navigation.PanOffset, Is.EqualTo(homePan));
-                Assert.That(camera.orthographicSize, Is.EqualTo(homeZoom).Within(0.0001f));
+                Assert.That(camera.orthographicSize, Is.EqualTo(homeZoom).Within(.0001f));
             }
         }
         finally { camera.aspect = oldAspect; }
+    }
+
+    private static void AssertHouseCloseup(CityCameraController navigation, Transform building, bool centered)
+    {
+        var camera = ControlField<Camera>(navigation, "controlledCamera");
+        var surfaces = new System.Collections.Generic.List<MeshRenderer>();
+        building.GetComponent<BuildingModelGeometry>().AppendRenderers(surfaces);
+        var minimum = Vector2.positiveInfinity; var maximum = Vector2.negativeInfinity;
+        foreach (var surface in surfaces)
+        {
+            var bounds = surface.localBounds;
+            for (int corner = 0; corner < 8; corner++)
+            {
+                var world = surface.transform.TransformPoint(bounds.center + Vector3.Scale(bounds.extents,
+                    new Vector3((corner & 1) == 0 ? -1f : 1f, (corner & 2) == 0 ? -1f : 1f, (corner & 4) == 0 ? -1f : 1f)));
+                Vector3 point = camera.WorldToViewportPoint(world);
+                Assert.That(point.z, Is.InRange(camera.nearClipPlane, camera.farClipPlane));
+                minimum = Vector2.Min(minimum, point); maximum = Vector2.Max(maximum, point);
+            }
+        }
+        var safe = navigation.OverviewViewportRect;
+        var presentation = Object.FindFirstObjectByType<HouseUpgradePresentation>();
+        if (presentation != null && presentation.IsPresenting)
+        {
+            float magnification = ControlField<float>(presentation, "closeupMagnification");
+            safe = new Rect(safe.center - safe.size * magnification * .5f, safe.size * magnification);
+        }
+        Assert.That(minimum.x, Is.GreaterThanOrEqualTo(safe.xMin - .001f));
+        Assert.That(minimum.y, Is.GreaterThanOrEqualTo(safe.yMin - .001f));
+        Assert.That(maximum.x, Is.LessThanOrEqualTo(safe.xMax + .001f));
+        Assert.That(maximum.y, Is.LessThanOrEqualTo(safe.yMax + .001f));
+        if (centered) Assert.That(Vector2.Distance((minimum + maximum) * .5f, safe.center), Is.LessThan(.001f),
+            building.name + " must be centered in the visible city area, including edge houses.");
     }
 
     [TestCase(false)]
