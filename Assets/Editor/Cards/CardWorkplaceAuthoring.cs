@@ -232,13 +232,7 @@ namespace CivilGameJam.Cards.Editor
 
         private static void BuildWorkplace(GameObject root, GameObject template)
         {
-            // Keep the existing factory controls and their serialized gameplay references
-            // when this authoring pass is reapplied to an already folded card.
-            foreach (string name in new[] { "BlueprintInput", "ProductionStatus" })
-            {
-                var control = root.transform.Find("FolderArt/" + name);
-                if (control != null) control.SetParent(root.transform, false);
-            }
+            CardBuildingInfoAuthoring.RemoveFactoryInstructions(root);
             foreach (var old in root.GetComponentsInChildren<WorkerSlot>(true)) Object.DestroyImmediate(old.gameObject);
             var oldFolder = root.transform.Find("FolderArt");
             if (oldFolder != null) Object.DestroyImmediate(oldFolder.gameObject);
@@ -263,29 +257,10 @@ namespace CivilGameJam.Cards.Editor
             Place(status.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, -137f),
                 new Vector2(252f, 26f), new Vector2(0.5f, 0.5f));
             status.color = Ink; Font(status, 17f);
-            var caption = Text("WorkerCaption", folder, "WORKERS", 15f, Ink);
+            var caption = Text("WorkerCaption", folder, string.Empty, 15f, Ink);
             Place(caption.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, -167f),
                 new Vector2(250f, 24f), new Vector2(0.5f, 0.5f));
             caption.transform.SetAsLastSibling();
-            if (card.Kind == CardKind.Factory)
-            {
-                var input = (RectTransform)(root.transform.Find("BlueprintInput") ?? folder.Find("BlueprintInput"));
-                input.SetParent(folder, false);
-                input.SetSiblingIndex(folder.Find("WorkerPockets").GetSiblingIndex());
-                Place(input, new Vector2(0.5f, 0.5f), new Vector2(0f, 70f), new Vector2(224f, 94f), new Vector2(0.5f, 0.5f));
-                input.GetComponent<Image>().color = new Color(0.83f, 0.88f, 0.84f);
-                var icon = (RectTransform)input.Find("BlueprintIcon");
-                Place(icon, new Vector2(0f, 0.5f), new Vector2(12f, 0f), new Vector2(66f, 88f), new Vector2(0f, 0.5f));
-                var label = input.Find("BlueprintLabel").GetComponent<TextMeshProUGUI>();
-                Place(label.rectTransform, new Vector2(1f, 0.5f), new Vector2(-9f, 0f), new Vector2(128f, 90f), new Vector2(1f, 0.5f));
-                label.color = Ink; Font(label, 18f);
-                var production = (root.transform.Find("ProductionStatus") ?? folder.Find("ProductionStatus")).GetComponent<TextMeshProUGUI>();
-                production.transform.SetParent(folder, false);
-                production.transform.SetSiblingIndex(folder.Find("WorkerPockets").GetSiblingIndex());
-                Place(production.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, -1f), new Vector2(248f, 40f), new Vector2(0.5f, 0.5f));
-                production.color = Ink; Font(production, 15f);
-                Font(status, 17f);
-            }
             root.GetComponent<Image>().color = Color.clear;
             BindWorkplace(root);
             root.transform.Find("HoverDetails").SetAsLastSibling();

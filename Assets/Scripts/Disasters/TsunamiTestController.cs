@@ -1,3 +1,5 @@
+using TMPro;
+using CivilGameJam.Presentation;
 using System.Collections.Generic;
 using CivilGameJam.Upgrades;
 using UnityEngine;
@@ -52,8 +54,9 @@ namespace CivilGameJam.Disasters
 
         [Header("Test panel")]
         [SerializeField] private Button testButton;
-        [SerializeField] private Text statusLabel;
+        [SerializeField] private TMP_Text statusLabel;
         [SerializeField] private Image progressFill;
+        [SerializeField] private ProgressBarFeedback progressFeedback;
 
         private static readonly int FadeProperty = Shader.PropertyToID("_Fade");
         private readonly List<ImpactSite> impactSites = new List<ImpactSite>();
@@ -92,6 +95,7 @@ namespace CivilGameJam.Disasters
             public Transform Building;
             public Bounds LocalBounds;
             public Bounds Footprint;
+            public ApartmentTsunamiCollapse Collapse;
             public bool Hit;
         }
 
@@ -122,6 +126,7 @@ namespace CivilGameJam.Disasters
 
         private void Awake()
         {
+            if (progressFeedback == null && progressFill != null) progressFeedback = progressFill.GetComponentInParent<ProgressBarFeedback>(true);
             CacheCityLayout();
             ResetTest(false);
         }
@@ -140,7 +145,11 @@ namespace CivilGameJam.Disasters
 
             EnsureVisuals();
             BuildSurface();
-            foreach (var site in impactSites) site.Hit = false;
+            foreach (var site in impactSites)
+            {
+                site.Hit = false;
+                if (site.Collapse != null) site.Collapse.ResetCollapse();
+            }
             flood.Clear();
             transmittedFlow.Clear();
             RefreshFloodObstacles();
@@ -152,6 +161,7 @@ namespace CivilGameJam.Disasters
             growth = 0f;
             drain = 1f;
             IsRunning = true;
+            if (progressFeedback != null) progressFeedback.Begin();
             visuals.SetActive(true);
             waterRenderer.enabled = true;
             if (spray != null) spray.Play(true);
@@ -195,7 +205,8 @@ namespace CivilGameJam.Disasters
             var runoffFade = 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(TestDuration - 0.35f, TestDuration, elapsed));
             flood.UpdateMesh(FloodWaterLevel - groundLevel, runoffFade);
             transmittedFlow.Update(breakwater, flood, front, elapsed, waveSpeed, floodPulseDuration, runoffFade);
-            if (progressFill != null) progressFill.fillAmount = Mathf.Floor(elapsed / TestDuration * 10f + 0.00001f) * 0.1f;
+            if (progressFeedback != null) progressFeedback.SetProgress(elapsed / TestDuration, true);
+            else if (progressFill != null) progressFill.fillAmount = Mathf.Clamp01(elapsed / TestDuration);
             if (statusLabel != null)
                 statusLabel.text = elapsed < ShoreArrivalTime ? "Wave approaching" :
                     elapsed < ShoreArrivalTime + floodPulseDuration ? "Water flowing through streets" : "Water draining";
@@ -432,7 +443,8 @@ namespace CivilGameJam.Disasters
                 }
                 if (!found) continue;
                 if (!foundationFound) footprint = bounds;
-                impactSites.Add(new ImpactSite { Building = building, LocalBounds = bounds, Footprint = footprint });
+                impactSites.Add(new ImpactSite { Building = building, LocalBounds = bounds, Footprint = footprint,
+                    Collapse = building.GetComponent<ApartmentTsunamiCollapse>() });
                 if (building.name.IndexOf("House", System.StringComparison.OrdinalIgnoreCase) < 0) continue;
                 houseTotal += bounds.size.y; houseCount++;
             }
@@ -527,16 +539,18 @@ namespace CivilGameJam.Disasters
 
         private void EmitBuildingSplashes()
         {
-            if (spray == null || sprayAmount <= 0f) return;
             foreach (var site in impactSites)
             {
                 var bounds = site.LocalBounds;
-                if (site.Hit) continue;
+                if (site.Building == null || !site.Building.gameObject.activeInHierarchy) continue;
                 if (Mathf.Abs(bounds.center.x) > waveWidth * 0.5f) continue;
                 var footprint = site.Footprint;
                 var waterDepth = flood.SampleDepth(footprint.center.x, footprint.min.z - 0.17f);
                 if (waterDepth < 0.03f) continue;
+                if (site.Collapse != null) site.Collapse.TryCollapse();
+                if (site.Hit) continue;
                 site.Hit = true;
+                if (spray == null || sprayAmount <= 0f) continue;
                 var splashFloor = groundLevel + waterDepth * 0.65f;
                 var splashCeiling = Mathf.Min(bounds.max.y, groundLevel + waterDepth + 0.09f);
                 var count = Mathf.RoundToInt(48f * sprayAmount);
@@ -580,12 +594,18 @@ namespace CivilGameJam.Disasters
         private void ResetTest(bool completed)
         {
             IsRunning = false;
+            if (!completed)
+                foreach (var site in impactSites) if (site.Collapse != null) site.Collapse.ResetCollapse();
             if (flood != null) flood.Clear();
             if (transmittedFlow != null) transmittedFlow.Clear();
             if (spray != null) spray.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
             if (visuals != null) visuals.SetActive(false);
             if (testButton != null) testButton.interactable = true;
-            if (progressFill != null) progressFill.fillAmount = 0f;
+            if (progressFeedback != null)
+            {
+                if (completed) progressFeedback.Complete(); else progressFeedback.ResetPresentation();
+            }
+            else if (progressFill != null) progressFill.fillAmount = 0f;
             if (statusLabel != null) statusLabel.text = completed ? "Completed · ready" : "Ready";
         }
 

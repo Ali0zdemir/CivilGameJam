@@ -129,8 +129,8 @@ public sealed class CardSceneEditModeTests
         Assert.That(hover.Details, Is.Not.Null);
         bool product = card.Kind == CardKind.Upgrade;
         Assert.That(hover.Details.localScale, Is.EqualTo(Vector3.one * (product ? 1f : card.IsPerson ? 0.7176f : 0.8f)));
-        Assert.That(hover.Details.GetComponentsInChildren<Image>(true).Length, Is.EqualTo(product ? 0 : 2));
-        Assert.That(hover.Details.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true).Length, Is.EqualTo(product ? 1 : 4));
+        Assert.That(hover.Details.GetComponentsInChildren<Image>(true).Length, Is.EqualTo(product ? 0 : card.IsBuilding ? 1 : 2));
+        Assert.That(hover.Details.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true).Length, Is.EqualTo(product ? 1 : card.Kind == CardKind.House ? 8 : card.IsBuilding ? 2 : 4));
         Assert.That(hover.Details.GetComponent<CanvasGroup>().blocksRaycasts, Is.False);
         var motion = new SerializedObject(prefab.GetComponent<CardFeedback>());
         Assert.That(motion.FindProperty("dragTiltDegrees").floatValue, Is.EqualTo(4f));
@@ -161,10 +161,8 @@ public sealed class CardSceneEditModeTests
             var production = new SerializedObject(prefab.GetComponent<FactoryProduction>());
             Assert.That(production.FindProperty("educatedWorkerMultiplier").floatValue, Is.EqualTo(1.8f));
             var folder = prefab.transform.Find("FolderArt");
-            Assert.That(folder.Find("ProductionStatus"), Is.Not.Null);
-            Assert.That(folder.Find("BlueprintInput"), Is.Not.Null);
-            Assert.That(folder.Find("ProductionStatus").GetSiblingIndex(), Is.LessThan(folder.Find("WorkerPockets").GetSiblingIndex()));
-            Assert.That(folder.Find("BlueprintInput").GetSiblingIndex(), Is.LessThan(folder.Find("WorkerPockets").GetSiblingIndex()));
+            Assert.That(folder.Find("ProductionStatus"), Is.Null);
+            Assert.That(folder.Find("BlueprintInput"), Is.Null);
         }
         if (card.Kind == CardKind.Factory || card.Kind == CardKind.ResearchCenter)
         {

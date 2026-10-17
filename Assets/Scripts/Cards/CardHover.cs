@@ -12,6 +12,7 @@ namespace CivilGameJam.Cards
         [SerializeField] private CardFeedback feedback;
         [SerializeField] private RectTransform details;
         [SerializeField] private Image hoverOutline;
+        [SerializeField] private bool keepDetailsOnRight;
         private RectTransform viewport;
         private Transform originalParent;
         private Vector2 originalPosition;
@@ -93,7 +94,13 @@ namespace CivilGameJam.Cards
             RestoreDetailsPlacement();
             Rect bounds = BoundsInViewport(details);
             Rect area = viewport.rect;
-            if (bounds.xMax > area.xMax - 8f || bounds.xMin < area.xMin + 8f)
+            if (keepDetailsOnRight)
+            {
+                // Move the card and its saved panel together instead of flipping a building's information.
+                float overflow = Mathf.Max(0f, bounds.xMax - (area.xMax - 8f));
+                Preview.position -= viewport.TransformVector(new Vector3(overflow, 0f));
+            }
+            else if (bounds.xMax > area.xMax - 8f || bounds.xMin < area.xMin + 8f)
             {
                 details.anchorMin = new Vector2(1f - detailMax.x, detailMin.y);
                 details.anchorMax = new Vector2(1f - detailMin.x, detailMax.y);

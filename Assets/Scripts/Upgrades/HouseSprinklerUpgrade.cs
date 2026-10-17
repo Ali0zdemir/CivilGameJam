@@ -34,6 +34,9 @@ namespace CivilGameJam.Upgrades
         private readonly Vector3[] nozzleMouths = new Vector3[4];
         private float waterGravity = 3.924f;
         private bool importedModel;
+        private ApartmentUpgradeModel apartmentModel;
+        private int apartmentIndex = -1;
+        private Transform AuthoredHead => apartmentModel != null ? apartmentModel.SprinklerHead(apartmentIndex) : null;
         private HouseSprinklerUpgrade[] partUpgrades;
         private bool managedExternally;
         private Mesh cylinderMesh;
@@ -81,10 +84,11 @@ namespace CivilGameJam.Upgrades
             if (building.TryGetComponent<BuildingModelGeometry>(out var model) && model.IsCollection)
             {
                 EnsureParts(model);
+                if (apartmentModel != null) apartmentModel.SetFireProtection(true);
                 foreach (var part in partUpgrades) part.SetInstalled(true);
                 IsInstalled = true; StateChanged?.Invoke(this); return;
             }
-            if (metalMaterial == null || darkMaterial == null || bodyMaterial == null || nozzleMaterial == null) return;
+            if (AuthoredHead == null && (metalMaterial == null || darkMaterial == null || bodyMaterial == null || nozzleMaterial == null)) return;
             EnsureVisuals();
             wallRunoff?.Rebuild();
             sprinklerVisuals.SetActive(true);
@@ -96,6 +100,20 @@ namespace CivilGameJam.Upgrades
         private void EnsureVisuals()
         {
             if (sprinklerVisuals != null) return;
+            if (AuthoredHead != null)
+            {
+                importedModel = true;
+                nozzleOutwardSlope = .12f;
+                groundRenderer = GameObject.Find("Continuous_Ground")?.GetComponent<Renderer>();
+                sprinklerVisuals = new GameObject("Sprinkler_Water_Effects");
+                sprinklerVisuals.transform.SetParent(building, false);
+                rotor = new GameObject("Sprinkler_Water_Emitter").transform;
+                rotor.SetParent(sprinklerVisuals.transform, false);
+                jointMesh = CreateOctahedron();
+                PositionAuthoredEmitter();
+                EnsureWater();
+                return;
+            }
             var mountedHeight = mastHeight;
             groundRenderer = GameObject.Find("Continuous_Ground")?.GetComponent<Renderer>();
             if (building.TryGetComponent<BuildingModelGeometry>(out var model))
@@ -145,6 +163,28 @@ namespace CivilGameJam.Upgrades
                 Tube(rotor,"Nozzle_Opening_"+head,center+direction*.076f,direction,.006f,.028f,darkMaterial);
             }
             EnsureWater();
+        }
+
+        private void PositionAuthoredEmitter()
+        {
+            var head = AuthoredHead;
+            if (head == null || sprinklerVisuals == null) return;
+            var renderer = head.GetComponent<MeshRenderer>();
+            if (renderer == null) return;
+            Bounds bounds = renderer.localBounds;
+            Vector3 outlet = bounds.center; outlet.y = bounds.max.y;
+            roofAnchor = building.InverseTransformPoint(head.TransformPoint(outlet));
+            var width = Vector3.Scale(bounds.size, head.lossyScale);
+            sprinklerScale = Mathf.Clamp(Mathf.Min(Mathf.Abs(width.x), Mathf.Abs(width.z)) / .374f, .15f, 1f);
+            sprinklerVisuals.transform.localPosition = roofAnchor;
+            var scale = building.lossyScale;
+            sprinklerVisuals.transform.localScale = new Vector3(sprinklerScale / Mathf.Abs(scale.x), sprinklerScale / Mathf.Abs(scale.y), sprinklerScale / Mathf.Abs(scale.z));
+            for (int index = 0; index < JetCount; index++)
+            {
+                var radial = JetDirection(index);
+                nozzleAims[index] = (radial * nozzleOutwardSlope - Vector3.up).normalized;
+                nozzleMouths[index] = radial * .187f + Vector3.up * .012f + nozzleAims[index] * .079f;
+            }
         }
 
         private void EnsureWater()
@@ -371,6 +411,7 @@ namespace CivilGameJam.Upgrades
 
         public void ResetUpgrade()
         {
+            if (apartmentModel != null && apartmentIndex < 0) apartmentModel.SetFireProtection(false);
             if (partUpgrades != null) foreach (var part in partUpgrades) if (part != null) part.ResetUpgrade();
             var changed=IsInstalled; IsInstalled=false; StopSpray();
             if(sprinklerVisuals!=null)sprinklerVisuals.SetActive(false);
@@ -422,12 +463,14 @@ namespace CivilGameJam.Upgrades
         private void EnsureParts(BuildingModelGeometry model)
         {
             if (partUpgrades != null) return;
+            apartmentModel = building.GetComponent<ApartmentUpgradeModel>();
             partUpgrades = new HouseSprinklerUpgrade[model.Parts.Length];
             for (var i = 0; i < partUpgrades.Length; i++)
             {
                 var child = new GameObject("Sprinkler_" + model.Parts[i].name); child.transform.SetParent(transform, false);
                 var part = child.AddComponent<HouseSprinklerUpgrade>(); part.managedExternally = true;
                 part.building = model.Parts[i].transform; part.fire = fire;
+                part.apartmentModel = apartmentModel; part.apartmentIndex = i;
                 part.metalMaterial = metalMaterial; part.darkMaterial = darkMaterial; part.bodyMaterial = bodyMaterial;
                 part.nozzleMaterial = nozzleMaterial; part.waterMaterial = waterMaterial; part.sprayMaterial = sprayMaterial;
                 part.installationDustMaterial = installationDustMaterial; part.mastHeight = mastHeight;
@@ -436,7 +479,11 @@ namespace CivilGameJam.Upgrades
         }
         private void OnHouseGeometryChanged(HouseColumnUpgrade upgrade)
         {
-            if(upgrade.Building==building)wallRunoff?.Rebuild();
+            if(upgrade.Building==building || building != null && upgrade.Building != null && building.IsChildOf(upgrade.Building))
+            {
+                PositionAuthoredEmitter();
+                wallRunoff?.Rebuild();
+            }
         }
         private void OnDisable()
         {

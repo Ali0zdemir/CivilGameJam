@@ -10,7 +10,13 @@ namespace CivilGameJam
         [SerializeField] private BuildingModelDefinition definition;
         [SerializeField] private MeshFilter modelMesh;
         [SerializeField] private BuildingModelGeometry[] parts = new BuildingModelGeometry[0];
+        [SerializeField] private Upgrades.ApartmentUpgradeModel apartmentModel;
+        [SerializeField] private BuildingModelDefinition elevatedDefinition;
+        [SerializeField] private MeshFilter elevatedMesh;
         private bool groundFloorOpen;
+
+        private BuildingModelDefinition Surface => apartmentModel != null && apartmentModel.IsElevated ? elevatedDefinition : definition;
+        private MeshFilter VisibleMesh => apartmentModel != null && apartmentModel.IsElevated ? elevatedMesh : modelMesh;
 
         public bool IsCollection => parts.Length > 0;
         public BuildingModelGeometry[] Parts => parts;
@@ -18,7 +24,7 @@ namespace CivilGameJam
         {
             get
             {
-                if (!IsCollection) return definition != null && definition.IsResidential;
+                if (!IsCollection) return Surface != null && Surface.IsResidential;
                 foreach (var part in parts) if (part == null || !part.IsResidential) return false;
                 return true;
             }
@@ -27,30 +33,31 @@ namespace CivilGameJam
         {
             get
             {
-                if (!IsCollection) return IsResidential && modelMesh != null && definition.OpenGroundFloorMesh != null;
+                if (!IsCollection) return apartmentModel != null || IsResidential && modelMesh != null && Surface.OpenGroundFloorMesh != null;
                 foreach (var part in parts) if (part == null || !part.CanOpenGroundFloor) return false;
                 return true;
             }
         }
-        public Bounds FoundationBounds => IsCollection ? CollectionBounds(1) : definition.FoundationBounds;
-        public Bounds RoofBounds => IsCollection ? CollectionBounds(2) : definition.RoofBounds;
-        public Vector3 SprinklerAnchor => IsCollection ? transform.InverseTransformPoint(parts[0].transform.TransformPoint(parts[0].SprinklerAnchor)) : definition.SprinklerAnchor;
-        public float GroundFloorHeight => IsCollection ? parts[0].GroundFloorHeight : definition.GroundFloorHeight;
+        public Bounds FoundationBounds => IsCollection ? CollectionBounds(1) : Surface.FoundationBounds;
+        public Bounds RoofBounds => IsCollection ? CollectionBounds(2) : Surface.RoofBounds;
+        public Vector3 SprinklerAnchor => IsCollection ? transform.InverseTransformPoint(parts[0].transform.TransformPoint(parts[0].SprinklerAnchor)) : Surface.SprinklerAnchor;
+        public float GroundFloorHeight => IsCollection ? parts[0].GroundFloorHeight : Surface.GroundFloorHeight;
         public Bounds BodyBounds
         {
             get
             {
                 if (IsCollection) return CollectionBounds(0);
-                var bounds = definition.BodyBounds;
+                var bounds = Surface.BodyBounds;
                 if (groundFloorOpen) bounds.SetMinMax(bounds.min + Vector3.up * GroundFloorHeight, bounds.max);
                 return bounds;
             }
         }
-        public Bounds WorldBounds => TransformBounds(transform.localToWorldMatrix, IsCollection ? CollectionBounds(0) : definition.BodyBounds);
+        public Bounds WorldBounds => TransformBounds(transform.localToWorldMatrix, IsCollection ? CollectionBounds(0) : Surface.BodyBounds);
         public Bounds WorldFoundationBounds => TransformBounds(transform.localToWorldMatrix, FoundationBounds);
 
         public void SetGroundFloorOpen(bool open)
         {
+            if (apartmentModel != null) { apartmentModel.SetElevated(open); return; }
             if (IsCollection) { foreach (var part in parts) part.SetGroundFloorOpen(open); return; }
             if (!CanOpenGroundFloor) return;
             modelMesh.sharedMesh = open ? definition.OpenGroundFloorMesh : definition.ClosedMesh;
@@ -72,7 +79,7 @@ namespace CivilGameJam
                 }
                 return found;
             }
-            var triangles = definition.RoofTriangles;
+            var triangles = Surface.RoofTriangles;
             var highest = float.NegativeInfinity;
             normal = Vector3.up;
             for (var i = 0; i + 2 < triangles.Length; i += 3)
@@ -95,7 +102,7 @@ namespace CivilGameJam
         public void AppendRenderers(List<MeshRenderer> output)
         {
             if (IsCollection) { foreach (var part in parts) part.AppendRenderers(output); return; }
-            if (modelMesh != null && modelMesh.TryGetComponent<MeshRenderer>(out var renderer)) output.Add(renderer);
+            if (VisibleMesh != null && VisibleMesh.TryGetComponent<MeshRenderer>(out var renderer)) output.Add(renderer);
         }
 
         public void AppendFoundationBounds(Transform relativeTo, List<Bounds> output)

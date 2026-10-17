@@ -65,9 +65,9 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: Breakwater
+  m_text: Elevator
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
+  m_fontAsset: {fileID: 11400000, guid: 60e75f4c2ff43464d882249013bc23d0, type: 2}
   m_sharedMaterial: {fileID: 2100000, guid: 8cbbfd81d3294624d96e38e101b991e3, type: 2}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}

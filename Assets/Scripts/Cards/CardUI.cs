@@ -10,8 +10,7 @@ namespace CivilGameJam.Cards
 
         public static void SetProgress(RectTransform fill, float progress)
         {
-            // Work timers stay continuous; only the displayed bar advances in ten fixed steps.
-            float amount = Mathf.Floor(Mathf.Clamp01(progress) * 10f + 0.00001f) / 10f;
+            float amount = Mathf.Clamp01(progress);
             Stretch(fill, Vector2.zero, new Vector2(amount, 1f));
         }
 

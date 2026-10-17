@@ -77,7 +77,7 @@ namespace CivilGameJam.Upgrades
         {
             var ready = tsunami != null && concreteMaterial != null && capMaterial != null && houses.Length > 0;
             foreach (var house in houses)
-                if (house == null || !house.isActiveAndEnabled || !house.IsInstalled) { ready = false; break; }
+                if (house == null || house.UsesElevatedApartment || !house.isActiveAndEnabled || !house.IsInstalled) { ready = false; break; }
             if (ready) EnsureVisuals();
             IsActive = ready && visuals != null;
             if (visuals != null) visuals.SetActive(IsActive);

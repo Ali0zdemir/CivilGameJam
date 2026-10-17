@@ -1,6 +1,6 @@
 {
     "name": "CivilGameJam.Cards.EditModeTests",
-    "references": ["CivilGameJam.Cards", "CivilGameJam.World", "CivilGameJam.Integration", "UnityEngine.UI", "Unity.TextMeshPro", "UnityEngine.TestRunner", "UnityEditor.TestRunner"],
+    "references": ["CivilGameJam.Cards", "CivilGameJam.World", "CivilGameJam.Integration", "CivilGameJam.Presentation", "UnityEngine.UI", "Unity.TextMeshPro", "UnityEngine.TestRunner", "UnityEditor.TestRunner"],
     "includePlatforms": ["Editor"],
     "overrideReferences": true,
     "precompiledReferences": ["nunit.framework.dll"],

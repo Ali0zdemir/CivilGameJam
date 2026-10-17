@@ -1,3 +1,5 @@
+using TMPro;
+using CivilGameJam.Presentation;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -40,8 +42,9 @@ namespace CivilGameJam.Disasters
 
         [Header("Test panel")]
         [SerializeField] private Button testButton;
-        [SerializeField] private Text statusLabel;
+        [SerializeField] private TMP_Text statusLabel;
         [SerializeField] private Image progressFill;
+        [SerializeField] private ProgressBarFeedback progressFeedback;
 
         private Vector3 cameraPosition;
         private Quaternion cameraRotation;
@@ -58,7 +61,11 @@ namespace CivilGameJam.Disasters
         public bool IsRunning { get; private set; }
         public float NormalizedProgress => IsRunning ? Mathf.Clamp01(elapsed / Mathf.Max(3f, duration)) : 0f;
 
-        private void Awake() => ResetTest();
+        private void Awake()
+        {
+            if (progressFeedback == null && progressFill != null) progressFeedback = progressFill.GetComponentInParent<ProgressBarFeedback>(true);
+            ResetTest();
+        }
 
         [ContextMenu("Start earthquake test (Play Mode)")]
         public void StartEarthquake()
@@ -76,6 +83,7 @@ namespace CivilGameJam.Disasters
             joltAge = JoltDuration;
             joltRotation = Vector3.zero;
             IsRunning = true;
+            if (progressFeedback != null) progressFeedback.Begin();
             if (testButton != null) testButton.interactable = false;
             if (statusLabel != null) statusLabel.text = "Earthquake started";
         }
@@ -112,10 +120,11 @@ namespace CivilGameJam.Disasters
 
             UpdateJolt(deltaTime, progress);
             ShakeCamera(energy);
-            if (progressFill != null) progressFill.fillAmount = Mathf.Floor(progress * 10f + 0.00001f) * 0.1f;
+            if (progressFeedback != null) progressFeedback.SetProgress(progress, true);
+            else if (progressFill != null) progressFill.fillAmount = Mathf.Clamp01(progress);
             if (statusLabel != null)
                 statusLabel.text = progress < 0.30f ? "Light tremors" : progress < 0.72f ? "Shaking intensifies" : "Shaking subsides";
-            if (elapsed >= testDuration) ResetTest();
+            if (elapsed >= testDuration) ResetTest(true);
         }
 
         private void UpdateJolt(float deltaTime, float progress)
@@ -181,14 +190,18 @@ namespace CivilGameJam.Disasters
             if (poseCaptured || IsRunning) ResetTest();
         }
 
-        private void ResetTest()
+        private void ResetTest(bool completed = false)
         {
             IsRunning = false;
             if (poseCaptured && cameraTransform != null)
                 cameraTransform.SetLocalPositionAndRotation(cameraPosition, cameraRotation);
             poseCaptured = false;
             if (testButton != null) testButton.interactable = true;
-            if (progressFill != null) progressFill.fillAmount = 0f;
+            if (progressFeedback != null)
+            {
+                if (completed) progressFeedback.Complete(); else progressFeedback.ResetPresentation();
+            }
+            else if (progressFill != null) progressFill.fillAmount = 0f;
             if (statusLabel != null) statusLabel.text = "Ready";
         }
 

@@ -1,3 +1,4 @@
+using TMPro;
 using System;
 using System.Linq;
 using CivilGameJam.Disasters;
@@ -34,7 +35,7 @@ namespace CivilGameJam.Cards.Editor
             ConfigureDisaster(world.GetComponentInChildren<TsunamiTestController>(), viewport.ViewRect, 2, "TSUNAMI");
             ConfigureUpgrades(world.GetComponentInChildren<RailSystemTestPanel>(), viewport.ViewRect, 0, "RAIL SYSTEM");
             ConfigureUpgrades(world.GetComponentInChildren<HouseSprinklerTestPanel>(), viewport.ViewRect, 1, "FIRE PROTECTION");
-            ConfigureUpgrades(world.GetComponentInChildren<HouseColumnsTestPanel>(), viewport.ViewRect, 2, "FLOOD PROTECTION");
+            ConfigureUpgrades(world.GetComponentInChildren<HouseColumnsTestPanel>(), viewport.ViewRect, 2, "ELEVATOR");
 
             var controls = viewport.GetComponent<CanvasGroup>();
             if (controls == null) controls = viewport.gameObject.AddComponent<CanvasGroup>();
@@ -74,19 +75,19 @@ namespace CivilGameJam.Cards.Editor
             var panel = (RectTransform)button.transform.parent;
             Stretch(panel);
             panel.GetComponent<Image>().color = new Color(0.045f, 0.07f, 0.085f, 0.94f);
-            var heading = panel.Find("Heading").GetComponent<Text>();
-            heading.text = title; heading.fontSize = 28; heading.alignment = TextAnchor.UpperLeft;
+            var heading = panel.Find("Heading").GetComponent<TMP_Text>();
+            heading.text = title; heading.fontSize = 28; heading.alignment = TextAlignmentOptions.TopLeft;
             heading.color = new Color(0.96f, 0.72f, 0.35f);
             Top(heading.rectTransform, 12f, 34f, 16f, 172f);
-            var status = (Text)data.FindProperty("statusLabel").objectReferenceValue;
-            status.text = "Ready"; status.fontSize = 21; status.alignment = TextAnchor.UpperLeft;
+            var status = (TMP_Text)data.FindProperty("statusLabel").objectReferenceValue;
+            status.text = "Ready"; status.fontSize = 21; status.alignment = TextAlignmentOptions.TopLeft;
             Top(status.rectTransform, 50f, 30f, 16f, 172f);
             var rect = (RectTransform)button.transform;
             rect.anchorMin = rect.anchorMax = Vector2.one; rect.pivot = new Vector2(1f, 0.5f);
             rect.sizeDelta = new Vector2(140f, 64f); rect.anchoredPosition = new Vector2(-16f, -48f);
             rect.localScale = Vector3.one;
-            var label = button.GetComponentInChildren<Text>(true);
-            label.text = "TEST"; label.fontSize = 26; label.alignment = TextAnchor.MiddleCenter;
+            var label = button.GetComponentInChildren<TMP_Text>(true);
+            label.text = "TEST"; label.fontSize = 26; label.alignment = TextAlignmentOptions.Center;
             Stretch(label.rectTransform);
             Top((RectTransform)panel.Find("Progress_Track"), 92f, 5f, 16f, 16f);
             canvas.gameObject.SetActive(true);
@@ -105,10 +106,10 @@ namespace CivilGameJam.Cards.Editor
             data.ApplyModifiedPropertiesWithoutUndo();
             var header = (RectTransform)panel.Find("Collapse_Expand");
             Top(header, 0f, 60f);
-            var heading = (Text)data.FindProperty("headerLabel").objectReferenceValue;
+            var heading = (TMP_Text)data.FindProperty("headerLabel").objectReferenceValue;
             heading.text = title + "  [+]"; heading.fontSize = 24;
             Top(heading.rectTransform, 6f, 28f, 16f, 16f);
-            var status = (Text)data.FindProperty("statusLabel").objectReferenceValue;
+            var status = (TMP_Text)data.FindProperty("statusLabel").objectReferenceValue;
             status.text = "0 / 4 installed"; status.fontSize = 18;
             Top(status.rectTransform, 35f, 20f, 16f, 16f);
             Top((RectTransform)body.transform, 60f, 194f);
@@ -116,9 +117,9 @@ namespace CivilGameJam.Cards.Editor
             for (int i = 0; i < rows.arraySize; i++)
             {
                 var row = rows.GetArrayElementAtIndex(i);
-                var name = (Text)row.FindPropertyRelative("buildingLabel").objectReferenceValue;
+                var name = (TMP_Text)row.FindPropertyRelative("buildingLabel").objectReferenceValue;
                 var button = (Button)row.FindPropertyRelative("toggleButton").objectReferenceValue;
-                var action = (Text)row.FindPropertyRelative("buttonLabel").objectReferenceValue;
+                var action = (TMP_Text)row.FindPropertyRelative("buttonLabel").objectReferenceValue;
                 name.text = "House " + (i + 1); name.fontSize = 22;
                 Top(name.rectTransform, 8f + i * 32f, 28f, 16f, 150f);
                 var rect = (RectTransform)button.transform;
@@ -129,7 +130,7 @@ namespace CivilGameJam.Cards.Editor
             }
             var reset = (Button)data.FindProperty("resetButton").objectReferenceValue;
             Top((RectTransform)reset.transform, 146f, 32f, 16f, 16f);
-            var resetLabel = reset.GetComponentInChildren<Text>(true);
+            var resetLabel = reset.GetComponentInChildren<TMP_Text>(true);
             resetLabel.text = "REMOVE ALL"; resetLabel.fontSize = 20;
             Stretch(resetLabel.rectTransform);
             body.SetActive(false);
@@ -148,12 +149,12 @@ namespace CivilGameJam.Cards.Editor
             rect.anchoredPosition = new Vector2(0f, -top); rect.localScale = Vector3.one;
             rect.localRotation = Quaternion.identity;
             foreach (var child in canvas.GetComponentsInChildren<Transform>(true)) child.gameObject.layer = city.gameObject.layer;
-            foreach (var text in canvas.GetComponentsInChildren<Text>(true))
+            foreach (var text in canvas.GetComponentsInChildren<TMP_Text>(true))
             {
                 text.raycastTarget = false;
-                text.resizeTextForBestFit = false;
-                text.horizontalOverflow = HorizontalWrapMode.Wrap;
-                text.verticalOverflow = VerticalWrapMode.Truncate;
+                text.enableAutoSizing = false;
+                text.textWrappingMode = TextWrappingModes.Normal;
+                text.overflowMode = TextOverflowModes.Truncate;
             }
         }
 

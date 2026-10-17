@@ -108,7 +108,9 @@ public sealed partial class CardGamePlayModeTests
         var cardPositions = game.Cards.ToDictionary(card => card, card => card.Rect.position);
         earthquake.StartEarthquake();
         Assert.That(earthquake.IsRunning, Is.True);
-        InvokeCity(earthquake, "AdvanceShake", 2f);
+        InvokeCity(earthquake, "AdvanceShake", 2.137f);
+        Assert.That(ControlField<UnityEngine.UI.Image>(earthquake, "progressFill").fillAmount,
+            Is.EqualTo(earthquake.NormalizedProgress).Within(0.00001f));
         float movement = Vector3.Distance(camera.localPosition, position) + Quaternion.Angle(camera.localRotation, rotation);
         Assert.That(movement, Is.GreaterThan(0.00001f));
         var shakingPose = camera.localPosition;
@@ -133,12 +135,16 @@ public sealed partial class CardGamePlayModeTests
         var fire = world.GetComponentInChildren<FireTestController>();
         fire.StartFire();
         Assert.That(fire.IsRunning, Is.True);
-        InvokeCity(fire, "AdvanceFire", 1f);
+        InvokeCity(fire, "AdvanceFire", 0.137f);
+        Assert.That(ControlField<UnityEngine.UI.Image>(fire, "progressFill").fillAmount,
+            Is.EqualTo(fire.NormalizedProgress).Within(0.00001f));
         fire.StopFire();
         var tsunami = world.GetComponentInChildren<TsunamiTestController>();
         tsunami.StartTsunami();
         Assert.That(tsunami.IsRunning, Is.True);
-        InvokeCity(tsunami, "AdvanceTsunami", 1f);
+        InvokeCity(tsunami, "AdvanceTsunami", 0.137f);
+        Assert.That(ControlField<UnityEngine.UI.Image>(tsunami, "progressFill").fillAmount,
+            Is.EqualTo(tsunami.NormalizedProgress).Within(0.00001f));
         Assert.That(tsunami.NormalizedProgress, Is.GreaterThan(0f));
         tsunami.StopTsunami();
         rails[0].ResetUpgrade(); columns[1].ResetUpgrade(); sprinklers[2].ResetUpgrade();

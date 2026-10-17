@@ -1,3 +1,4 @@
+using TMPro;
 using System;
 using UnityEngine;
 using UnityEngine.UI;
@@ -12,14 +13,14 @@ namespace CivilGameJam.Upgrades
         {
             public HouseColumnUpgrade upgrade;
             public Button toggleButton;
-            public Text buttonLabel;
-            public Text buildingLabel;
+            public TMP_Text buttonLabel;
+            public TMP_Text buildingLabel;
         }
 
         [SerializeField] private HouseRow[] buildings = Array.Empty<HouseRow>();
-        [SerializeField] private Text statusLabel;
+        [SerializeField] private TMP_Text statusLabel;
         [SerializeField] private Button resetButton;
-        [SerializeField] private Text headerLabel;
+        [SerializeField] private TMP_Text headerLabel;
         [SerializeField] private RectTransform panelRect;
         [SerializeField] private GameObject panelBody;
         [SerializeField] private bool expanded = true;
@@ -70,7 +71,7 @@ namespace CivilGameJam.Upgrades
         {
             if (panelBody != null) panelBody.SetActive(expanded);
             if (panelRect != null) panelRect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, expanded ? 254f : 60f);
-            if (headerLabel != null) headerLabel.text = expanded ? "FLOOD PROTECTION  [-]" : "FLOOD PROTECTION  [+]";
+            if (headerLabel != null) headerLabel.text = expanded ? "ELEVATOR  [-]" : "ELEVATOR  [+]";
         }
 
         private void OnUpgradeChanged(HouseColumnUpgrade _) => Refresh();

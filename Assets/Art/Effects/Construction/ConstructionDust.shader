@@ -49,7 +49,7 @@ Shader "CivilGameJam/ConstructionDust"
             {
                 clip(input.color.a - 0.005);
                 float diffuse = floor(saturate(dot(normalize(input.normalWS), GetMainLight().direction)) * 3.0) / 3.0;
-                half3 color = input.color.rgb * (0.8 + diffuse * 0.2);
+                half3 color = input.color.rgb * (0.92 + diffuse * 0.08);
                 return half4(MixFog(color, input.fog), input.color.a);
             }
             ENDHLSL

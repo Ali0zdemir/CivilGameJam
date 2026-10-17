@@ -38,6 +38,7 @@ namespace CivilGameJam.Cards
         private Coroutine exit;
         private DraggableCard returningWorker;
         private float entryProgress;
+        public int Index => index;
         public bool IsEntering => entry != null;
         public bool IsReturning => exit != null;
         public bool IsAnimating => IsEntering || IsReturning;
@@ -88,7 +89,7 @@ namespace CivilGameJam.Cards
             }
             background.color = worker == null ? emptyColor :
                 worker.Kind == CardKind.Person ? normalColor : educatedColor;
-            label.text = worker == null ? "–" : worker.Kind == CardKind.Person ? "N" : "E";
+            label.text = worker == null ? "-" : worker.Kind == CardKind.Person ? "N" : "E";
         }
 
         public void AnimateEntry(DraggableCard worker, Vector3 origin, Vector3 worldScale, Vector2 sourceSize, Quaternion rotation)

@@ -76,7 +76,7 @@ namespace CivilGameJam
                     if (railSystem != null) railSystem.SetInstalled(installed);
                     break;
                 case UpgradeKind.Breakwater:
-                    // The showcase's per-house flood defence also feeds its shared coastal breakwater.
+                    // The serialized flood card now selects the elevated apartment variant.
                     if (floodProtection != null) floodProtection.SetInstalled(installed);
                     break;
                 case UpgradeKind.Fire:

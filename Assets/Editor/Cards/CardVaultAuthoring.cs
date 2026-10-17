@@ -11,7 +11,7 @@ namespace CivilGameJam.Cards.Editor
 {
     public static class CardVaultAuthoring
     {
-        private static readonly string[] Titles = { "Rail System", "Breakwater", "Fire Protection" };
+        private static readonly string[] Titles = { "Rail System", "Elevator", "Fire Protection" };
         private static readonly Color Ink = new Color(0.055f, 0.10f, 0.12f);
         private static readonly Color Paper = new Color(0.89f, 0.95f, 0.93f);
         private static readonly Color Muted = new Color(0.57f, 0.72f, 0.73f);
@@ -58,7 +58,7 @@ namespace CivilGameJam.Cards.Editor
                     var label = prefab.transform.Find("HoverDetails/Properties/Description").GetComponent<TextMeshProUGUI>();
                     label.text = name == "FactoryCard"
                         ? "Each blueprint: 2 items\nWorkers are kept."
-                        : "1 plan → 2 items";
+                        : "1 plan -> 2 items";
                     PrefabUtility.SaveAsPrefabAsset(prefab, path);
                 }
                 finally { PrefabUtility.UnloadPrefabContents(prefab); }

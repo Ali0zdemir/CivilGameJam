@@ -1,0 +1,6 @@
+{
+    "name": "CivilGameJam.Presentation",
+    "rootNamespace": "CivilGameJam.Presentation",
+    "references": ["UnityEngine.UI"],
+    "autoReferenced": true
+}

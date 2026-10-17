@@ -592,7 +592,7 @@ namespace CivilGameJam.Upgrades
         private bool IsEquipmentOrRoof(Transform part)
         {
             for (var parent = part; parent != null && parent != building; parent = parent.parent)
-                if (parent.name == "Roof_Sprinkler" || parent.name == "Roof" || parent.name == "Rail_System" || parent.name == "Open_Ground_Floor") return true;
+                if (parent.name == "Roof_Sprinkler" || parent.name == "Sprinkler_Water_Effects" || parent.name == "Roof" || parent.name == "Rail_System" || parent.name == "Open_Ground_Floor") return true;
             return false;
         }
 

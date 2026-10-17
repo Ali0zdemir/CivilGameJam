@@ -14,7 +14,7 @@ namespace CivilGameJam.Cards.Editor
     {
         private static readonly string[] Plans = { "RaylıSistemBlueprint", "DalgaKıranBlueprint", "YangınBlueprint" };
         private static readonly string[] Products = { "RaylıSistemCard", "DalgaKıranCard", "YangınCard" };
-        private static readonly string[] Titles = { "Rail System", "Breakwater", "Fire Protection" };
+        private static readonly string[] Titles = { "Rail System", "Elevator", "Fire Protection" };
         private static readonly Color Ink = new Color(0.22f, 0.19f, 0.14f);
         private static readonly Color Gold = new Color(0.85f, 0.64f, 0.26f);
         private const string FactoryWorkerInfo = "Workers combine effort.\nEducated workers are faster.\nWorkers are kept.";
@@ -126,7 +126,7 @@ namespace CivilGameJam.Cards.Editor
             var footer = Text("Usage", rect, plan ? "Fabrikaya bırak" : "Ev yuvasına tak", 17f, Ink);
             Stretch(footer.rectTransform, new Vector2(0.05f, 0.06f), new Vector2(0.95f, 0.22f));
             SetInfo(root, Titles[index], plan ? "A plan to manufacture\nat a staffed factory." : "Drop this manufactured item\ninto its matching house slot.",
-                plan ? "1 plan → 2 items" : "Manufactured item.\nOne slot per type in each house.");
+                plan ? "1 plan -> 2 items" : "Manufactured item.\nOne slot per type in each house.");
         }
 
         private static void StyleFactory(GameObject root)
@@ -136,18 +136,8 @@ namespace CivilGameJam.Cards.Editor
             var title = root.transform.Find("Text (TMP)").GetComponent<TextMeshProUGUI>();
             Stretch(title.rectTransform, new Vector2(0.05f, 0.75f), new Vector2(0.95f, 0.86f));
             title.text = "FACTORY"; title.fontStyle = FontStyles.Bold;
-            var slot = Box("BlueprintInput", root.transform, new Color(0.85f, 0.91f, 0.91f),
-                new Vector2(0.07f, 0.43f), new Vector2(0.93f, 0.69f), true);
-            var slotHandler = slot.GetComponent<FactoryBlueprintSlot>() ?? slot.gameObject.AddComponent<FactoryBlueprintSlot>();
-            Refs(slotHandler, ("factory", factory));
-            var icon = Icon("BlueprintIcon", slot, UpgradeKind.RailSystem, new Vector2(0.04f, 0.18f), new Vector2(0.27f, 0.82f));
-            icon.gameObject.SetActive(false);
-            var label = Text("BlueprintLabel", slot, "Drop a blueprint", 20f, Ink);
-            Stretch(label.rectTransform, new Vector2(0.30f, 0.08f), new Vector2(0.97f, 0.92f));
-            var status = Text("ProductionStatus", root.transform, "Requires a blueprint\nand at least 1 worker", 19f, new Color(0.22f, 0.35f, 0.35f));
-            Stretch(status.rectTransform, new Vector2(0.06f, 0.29f), new Vector2(0.94f, 0.41f));
-            Refs(factory, ("station", station), ("productionStatus", status), ("blueprintLabel", label),
-                ("blueprintIcon", icon), ("progressRoot", root.transform.Find("ProgressBar")),
+            CardBuildingInfoAuthoring.RemoveFactoryInstructions(root);
+            Refs(factory, ("station", station), ("progressRoot", root.transform.Find("ProgressBar")),
                 ("progressFill", root.transform.Find("ProgressBar/BlueProgress").GetComponent<Image>()), ("outline", root.GetComponent<Outline>()));
             SetInfo(root, "Production", "Requires a blueprint\nand at least one worker.", FactoryWorkerInfo);
         }

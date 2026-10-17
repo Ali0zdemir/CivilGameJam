@@ -19,7 +19,7 @@ namespace CivilGameJam.Cards.Editor
         private static readonly Color NormalColor = new Color(0.94f, 0.63f, 0.18f);
         private static readonly Color EducatedColor = new Color(0.18f, 0.63f, 0.94f);
         private static readonly Color EmptyColor = new Color(0.23f, 0.27f, 0.31f);
-        private static readonly string[] BlueprintNames = { "Rail System", "Breakwater", "Fire Protection" };
+        private static readonly string[] BlueprintNames = { "Rail System", "Elevator", "Fire Protection" };
         private static readonly string[] BlueprintPaths = { "RaylıSistemBlueprint", "DalgaKıranBlueprint", "YangınBlueprint" };
         private static readonly string[] ProductPaths = { "RaylıSistemCard", "DalgaKıranCard", "YangınCard" };
 
@@ -198,7 +198,7 @@ namespace CivilGameJam.Cards.Editor
                 rect.anchorMin = rect.anchorMax = new Vector2(i == 0 ? 0.23f : 0.77f, 0.1f);
                 rect.anchoredPosition = Vector2.zero;
                 rect.sizeDelta = new Vector2(32f, 26f);
-                var label = rect.Find("WorkerType")?.GetComponent<TextMeshProUGUI>() ?? Label("WorkerType", rect, "–", 20f, Color.white);
+                var label = rect.Find("WorkerType")?.GetComponent<TextMeshProUGUI>() ?? Label("WorkerType", rect, "-", 20f, Color.white);
                 slots[i] = image.GetComponent<WorkerSlot>() ?? image.gameObject.AddComponent<WorkerSlot>();
                 SetObjects(slots[i], ("station", station), ("background", image), ("label", label));
                 SetInt(slots[i], "index", i);
@@ -210,7 +210,7 @@ namespace CivilGameJam.Cards.Editor
             Stretch(fill.rectTransform, Vector2.zero, new Vector2(0f, 1f));
             track.gameObject.SetActive(false);
             var status = root.transform.Find("WorkStatus")?.GetComponent<TextMeshProUGUI>() ??
-                Label("WorkStatus", root.transform, "0 / 2 kişi", 18f, new Color(0.15f, 0.2f, 0.25f));
+                Label("WorkStatus", root.transform, string.Empty, 18f, new Color(0.15f, 0.2f, 0.25f));
             Stretch(status.rectTransform, new Vector2(0.03f, 0.16f), new Vector2(0.97f, 0.28f));
             SetObjects(card, ("station", station));
             SetObjects(station, ("card", card), ("progressFill", fill), ("progressRoot", track.rectTransform),

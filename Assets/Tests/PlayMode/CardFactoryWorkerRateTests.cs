@@ -96,11 +96,11 @@ public sealed partial class CardGamePlayModeTests
     [TestCase(2, 0, 2f)]
     [TestCase(1, 1, 2.8f)]
     [TestCase(0, 2, 3.6f)]
-    public void AcceleratedFactoryBarsStillAdvanceInTenSteps(int normalWorkers, int educatedWorkers, float rate)
+    public void AcceleratedFactoryBarsAdvanceContinuously(int normalWorkers, int educatedWorkers, float rate)
     {
         var factory = FactoryWithWorkers(normalWorkers, educatedWorkers);
         float stepDuration = factory.ProductionSeconds / rate / 10f;
-        AssertTenStepBar(Station(CardKind.Factory).Card, factory.AdvanceWork, stepDuration);
+        AssertContinuousBar(Station(CardKind.Factory).Card, factory.AdvanceWork, stepDuration);
         Assert.That(factory.PendingBlueprint, Is.Not.Null);
         AssertNoTimingText(game.GetComponentInParent<UnityEngine.Canvas>());
         factory.AdvanceWork(stepDuration + 0.001f);

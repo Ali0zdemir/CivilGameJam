@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace CivilGameJam.Upgrades
 {
-    /// <summary>Opens one house's ground floor while retaining its upper floor and roof.</summary>
+    /// <summary>Selects the authored elevated apartment, with support for legacy open ground floors.</summary>
     [DisallowMultipleComponent]
     public sealed class HouseColumnUpgrade : MonoBehaviour
     {
@@ -33,11 +33,15 @@ namespace CivilGameJam.Upgrades
         private Mesh dustMesh;
         private float floorHeight;
         private bool initialized;
+        private ApartmentUpgradeModel apartmentModel;
+        private ApartmentConstructionDust apartmentDust;
         private HouseColumnUpgrade[] partUpgrades;
 
         public Transform Building => building;
         public bool IsInstalled { get; private set; }
         public bool IsAvailable => Initialize();
+        public bool IsTransitioning => apartmentModel != null && apartmentModel.IsTransitioning;
+        public bool UsesElevatedApartment => building != null && building.GetComponent<ApartmentUpgradeModel>() != null;
         public event Action<HouseColumnUpgrade> StateChanged;
         public static event Action<HouseColumnUpgrade> GeometryChanged;
 
@@ -47,6 +51,13 @@ namespace CivilGameJam.Upgrades
         {
             if (initialized) return building != null && (walls != null || modelGeometry != null);
             if (building == null) return false;
+            if (building.TryGetComponent(out apartmentModel))
+            {
+                modelGeometry = building.GetComponent<BuildingModelGeometry>();
+                groundFloorParts = Array.Empty<GameObject>();
+                initialized = true;
+                return true;
+            }
             if (building.TryGetComponent(out modelGeometry))
             {
                 if (!modelGeometry.CanOpenGroundFloor) return false;
@@ -83,6 +94,14 @@ namespace CivilGameJam.Upgrades
         public void SetInstalled(bool installed)
         {
             if (!Application.isPlaying || !isActiveAndEnabled || installed == IsInstalled || !Initialize()) return;
+            if (apartmentModel != null)
+            {
+                IsInstalled = installed;
+                if (!installed) apartmentDust?.Stop();
+                apartmentModel.SetElevated(installed);
+                StateChanged?.Invoke(this);
+                return;
+            }
             if (!installed) { ResetUpgrade(); return; }
             if (partUpgrades != null)
             {
@@ -154,6 +173,7 @@ namespace CivilGameJam.Upgrades
         public void AppendColumnBounds(Transform relativeTo, List<Bounds> output)
         {
             if (!IsInstalled) return;
+            if (apartmentModel != null) { apartmentModel.AppendSupports(relativeTo, output); return; }
             if (partUpgrades != null) { foreach (var part in partUpgrades) part.AppendColumnBounds(relativeTo, output); return; }
             foreach (var column in columns)
             {
@@ -171,16 +191,25 @@ namespace CivilGameJam.Upgrades
         private void PlayInstallationDust()
         {
             if (installationDustMaterial == null || dustAmount <= 0f) return;
+            if (apartmentModel != null)
+            {
+                if (apartmentDust == null) apartmentDust = new ApartmentConstructionDust(transform, modelGeometry, installationDustMaterial);
+                apartmentDust.Emit(dustAmount, dustSize, dustLifetime, building.position - apartmentModel.MotionRoot.position);
+                return;
+            }
             if (installationDust == null)
                 installationDust = ConstructionDustPuff.Create(transform, installationDustMaterial, out dustMesh);
-            ConstructionDustPuff.Emit(installationDust, building, new Bounds(originalWallPosition, originalWallScale),
+            var bounds = apartmentModel != null ? modelGeometry.FoundationBounds : new Bounds(originalWallPosition, originalWallScale);
+            ConstructionDustPuff.Emit(installationDust, building, bounds,
                 dustAmount, dustSize, dustLifetime, dustRandom, Vector3.zero, columnFeet);
         }
 
         public void ResetUpgrade()
         {
             var changed = IsInstalled;
-            if (partUpgrades != null)
+            apartmentDust?.Stop();
+            if (apartmentModel != null) apartmentModel.SetElevated(false, false);
+            else if (partUpgrades != null)
             {
                 foreach (var part in partUpgrades) if (part != null) part.ResetUpgrade();
             }
@@ -199,7 +228,24 @@ namespace CivilGameJam.Upgrades
             GeometryChanged?.Invoke(this);
         }
 
-        private void OnDisable() => ResetUpgrade();
+        private void OnModelChanged() => GeometryChanged?.Invoke(this);
+        private void OnInstallationCompleted() { if (IsInstalled) PlayInstallationDust(); }
+        private void OnEnable()
+        {
+            Initialize();
+            if (apartmentModel == null) return;
+            apartmentModel.ModelChanged += OnModelChanged;
+            apartmentModel.InstallationCompleted += OnInstallationCompleted;
+        }
+        private void OnDisable()
+        {
+            if (apartmentModel != null)
+            {
+                apartmentModel.ModelChanged -= OnModelChanged;
+                apartmentModel.InstallationCompleted -= OnInstallationCompleted;
+            }
+            ResetUpgrade();
+        }
         private void EnsureParts()
         {
             if (partUpgrades != null) return;
@@ -215,7 +261,9 @@ namespace CivilGameJam.Upgrades
         }
         private void OnDestroy()
         {
-            ResetUpgrade();
+            // OnDisable already restored authored variants; do not reactivate a hierarchy being destroyed.
+            if (apartmentModel == null) ResetUpgrade();
+            apartmentDust?.Dispose();
             if (columnVisuals != null) Destroy(columnVisuals);
             if (dustMesh != null) Destroy(dustMesh);
             if (partUpgrades != null) foreach (var part in partUpgrades) if (part != null) Destroy(part.gameObject);

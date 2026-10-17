@@ -11,6 +11,7 @@ namespace CivilGameJam.Cards.Editor
     public static class CardCitySpacingAuthoring
     {
         private const float RowSpacing = 1.152f;
+        private const float ColumnSpacing = 1.2f;
 
         [MenuItem("Tools/Card Game/Save City Front To Back Row Spacing")]
         public static void SaveForBatch()
@@ -57,6 +58,10 @@ namespace CivilGameJam.Cards.Editor
                 var target = world.transform.Find("Buildings_3D");
                 var buildings = target.Find("Buildings");
                 var groups = originalBuildings.Cast<Transform>().ToArray();
+                float left = groups.Min(group => group.localPosition.x);
+                float right = groups.Max(group => group.localPosition.x);
+                float horizontalCenter = (left + right) * 0.5f;
+                float addedWidth = (right - left) * (ColumnSpacing - 1f);
                 float front = groups.Min(group => group.localPosition.z);
                 float back = groups.Max(group => group.localPosition.z);
                 float center = (front + back) * 0.5f;
@@ -65,6 +70,7 @@ namespace CivilGameJam.Cards.Editor
                 {
                     var copy = buildings.Find(group.name);
                     var position = group.localPosition;
+                    position.x = horizontalCenter + (position.x - horizontalCenter) * ColumnSpacing;
                     position.z = center + (position.z - center) * RowSpacing;
                     copy.localPosition = position;
                     PrefabUtility.RecordPrefabInstancePropertyModifications(copy);
@@ -74,6 +80,7 @@ namespace CivilGameJam.Cards.Editor
                     var ground = original.Find("City_Environment/" + name);
                     var copy = target.Find("City_Environment/" + name);
                     var scale = ground.localScale;
+                    scale.x += addedWidth;
                     scale.z += addedDepth;
                     copy.localScale = scale;
                 }
@@ -82,7 +89,10 @@ namespace CivilGameJam.Cards.Editor
                     foreach (Transform lamp in lamps)
                     {
                         var copy = target.Find("City_Environment/Street_Lamps/" + lamp.name);
+                        if (copy == null) continue;
                         var position = lamp.localPosition;
+                        float column = Mathf.Clamp(position.x, left, right);
+                        position.x += (column - horizontalCenter) * (ColumnSpacing - 1f);
                         float row = Mathf.Clamp(position.z, front, back);
                         position.z += (row - center) * (RowSpacing - 1f);
                         copy.localPosition = position;
@@ -93,7 +103,7 @@ namespace CivilGameJam.Cards.Editor
                 var tsunamiSettings = new SerializedObject(tsunami);
                 var originalTsunamiSettings = new SerializedObject(originalTsunami);
                 tsunamiSettings.FindProperty("waveWidth").floatValue =
-                    originalTsunamiSettings.FindProperty("waveWidth").floatValue;
+                    originalTsunamiSettings.FindProperty("waveWidth").floatValue + addedWidth;
                 // Keep the incoming wave and shoreline outside the extended front edge.
                 foreach (string field in new[] { "shorelineDistance", "startDistance" })
                     tsunamiSettings.FindProperty(field).floatValue =

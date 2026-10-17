@@ -1,6 +1,6 @@
 {
     "name": "CivilGameJam.World",
     "rootNamespace": "CivilGameJam",
-    "references": ["UnityEngine.UI", "Unity.InputSystem"],
+    "references": ["UnityEngine.UI", "Unity.InputSystem", "Unity.TextMeshPro", "CivilGameJam.Presentation"],
     "autoReferenced": true
 }

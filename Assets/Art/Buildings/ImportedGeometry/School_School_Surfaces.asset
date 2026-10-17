@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: School_School_Surfaces
   m_EditorClassIdentifier: 
   residential: 0
-  closedMesh: {fileID: -4592447116114263935, guid: 122910a9c5dc29e499971ea7e941e741, type: 3}
+  closedMesh: {fileID: -4592447116114263935, guid: a0e08e5d4ac1a6043979032bd9eb2f40, type: 3}
   openGroundFloorMesh: {fileID: 0}
   bodyBounds:
     m_Center: {x: -0.19899487, y: 0.15240905, z: 0.19899474}

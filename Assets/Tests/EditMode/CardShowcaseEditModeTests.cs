@@ -23,11 +23,12 @@ public sealed class CardShowcaseEditModeTests
         {
             var original = source.GetRootGameObjects().Single(root => root.name == "Buildings_3D").transform;
             var imported = world.Find("Buildings_3D");
-            Assert.That(imported.GetComponentsInChildren<Renderer>(true).Length,
-                Is.EqualTo(original.GetComponentsInChildren<Renderer>(true).Length));
+            Assert.That(imported.Find("City_Environment/Street_Lamps"), Is.Null,
+                "The card scene must preserve the user's removal of the street lamps.");
             foreach (var mesh in original.GetComponentsInChildren<MeshFilter>(true))
             {
                 string path = AnimationUtility.CalculateTransformPath(mesh.transform, original);
+                if (path.StartsWith("City_Environment/Street_Lamps/", System.StringComparison.Ordinal)) continue;
                 var copy = imported.Find(path).GetComponent<MeshFilter>();
                 Assert.That(copy.sharedMesh, Is.SameAs(mesh.sharedMesh), path);
                 Assert.That(copy.transform.rotation, Is.EqualTo(mesh.transform.rotation), path);
@@ -39,11 +40,12 @@ public sealed class CardShowcaseEditModeTests
                 }
                 Assert.That(copy.GetComponent<Renderer>().sharedMaterials, Is.EqualTo(mesh.GetComponent<Renderer>().sharedMaterials), path);
             }
-            Assert.That(imported.Find("Buildings").childCount, Is.EqualTo(7));
+            Assert.That(imported.Find("Buildings").childCount, Is.GreaterThanOrEqualTo(original.Find("Buildings").childCount),
+                "Keep the original city buildings as well as the user's added models.");
             foreach (Transform group in original.Find("Buildings"))
             {
                 var copy = imported.Find("Buildings/" + group.name);
-                Assert.That(copy.localPosition.x, Is.EqualTo(group.localPosition.x));
+                Assert.That(copy.localPosition.x, Is.EqualTo(group.localPosition.x * 1.2f).Within(0.0001f));
                 Assert.That(copy.localPosition.y, Is.EqualTo(group.localPosition.y));
                 Assert.That(copy.localPosition.z, Is.EqualTo(group.localPosition.z * 1.152f).Within(0.0001f));
             }
@@ -51,7 +53,7 @@ public sealed class CardShowcaseEditModeTests
             foreach (string name in new[] { "Continuous_Ground", "Island_Base" })
             {
                 Assert.That(imported.Find("City_Environment/" + name).localScale.x,
-                    Is.EqualTo(original.Find("City_Environment/" + name).localScale.x));
+                    Is.EqualTo(original.Find("City_Environment/" + name).localScale.x + 5.85f * 0.2f).Within(0.0001f));
                 Assert.That(imported.Find("City_Environment/" + name).localScale.z,
                     Is.EqualTo(original.Find("City_Environment/" + name).localScale.z + addedDepth).Within(0.0001f));
             }

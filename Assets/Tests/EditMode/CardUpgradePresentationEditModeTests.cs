@@ -23,8 +23,10 @@ public sealed class CardUpgradePresentationEditModeTests
             Assert.That(new SerializedObject(link).FindProperty("presentation").objectReferenceValue, Is.SameAs(presentation));
             var rail = new SerializedObject(link.RailSystem);
             Assert.That(rail.FindProperty("peakLiftMultiplier").floatValue, Is.EqualTo(2f));
-            Assert.That(rail.FindProperty("dustMultiplier").floatValue, Is.EqualTo(1.5f));
+            Assert.That(rail.FindProperty("dustMultiplier").floatValue, Is.EqualTo(2.25f));
             Assert.That(rail.FindProperty("transitionDuration").floatValue, Is.GreaterThan(0.8f));
+            Assert.That(rail.FindProperty("settlingDuration").floatValue, Is.EqualTo(.7f).Within(.0001f));
+            Assert.That(rail.FindProperty("dustLightening").floatValue, Is.EqualTo(.28f).Within(.0001f));
         }
     }
 
@@ -43,6 +45,11 @@ public sealed class CardUpgradePresentationEditModeTests
                 Assert.That(data.FindProperty("hoverSeconds").floatValue, Is.EqualTo(0.16f).Within(0.0001f));
                 Assert.That(slot.Portrait, Is.Not.Null);
                 Assert.That(slot.EntryImage, Is.Not.Null);
+                var padding = slot.GetComponent<UnityEngine.UI.Image>().raycastPadding;
+                Assert.That(padding.x, Is.GreaterThan(-10f), "Transparent left margins must not steal the adjacent portrait's hover.");
+                Assert.That(padding.z, Is.LessThan(-1f), "Cover the visible right edge outside the original slot.");
+                Assert.That(padding.w, Is.LessThanOrEqualTo(-24f), "Keep the raised artwork interactive.");
+                Assert.That(padding.y, Is.Zero, "The pocket must not take clicks below its folder flap.");
             }
         }
     }

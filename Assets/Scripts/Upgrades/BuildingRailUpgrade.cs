@@ -14,6 +14,7 @@ namespace CivilGameJam.Upgrades
         [SerializeField, Range(0f, 0.3f)] private float endExtension = 0.12f;
         [SerializeField, Range(0.35f, 0.8f)] private float railSpacing = 0.58f;
         [SerializeField, Range(0.2f, 2f)] private float transitionDuration = 1.05f;
+        [SerializeField, Min(.1f)] private float settlingDuration = .7f;
         [SerializeField, Range(1f, 3f)] private float peakLiftMultiplier = 2f;
         [SerializeField, Min(0.1f)] private float removalDuration = 0.35f;
         [SerializeField] private Material railMaterial;
@@ -22,7 +23,8 @@ namespace CivilGameJam.Upgrades
         [Header("Installation dust")]
         [SerializeField] private Material installationDustMaterial;
         [SerializeField, Range(0f, 2f)] private float dustAmount = 1f;
-        [SerializeField, Range(0f, 3f)] private float dustMultiplier = 1.5f;
+        [SerializeField, Range(0f, 3f)] private float dustMultiplier = 2.25f;
+        [SerializeField, Range(0f, 1f)] private float dustLightening = .28f;
         [SerializeField, Range(0.1f, 0.5f)] private float dustSize = 0.24f;
         [SerializeField, Range(0.3f, 1.2f)] private float dustLifetime = 0.7f;
 
@@ -32,7 +34,10 @@ namespace CivilGameJam.Upgrades
         private float currentLift;
         private float startingLift;
         private float transitionAge;
+        private float peakLift;
         private bool initialized;
+        private ApartmentUpgradeModel apartmentModel;
+        private ApartmentConstructionDust apartmentDust;
         private ParticleSystem installationDust;
         private Mesh dustMesh;
         private readonly System.Random dustRandom = new System.Random();
@@ -49,7 +54,7 @@ namespace CivilGameJam.Upgrades
             ? model.IsResidential : building.Find("Second_Floor") != null);
         public bool IsInstalled { get; private set; }
         public bool IsTransitioning { get; private set; }
-        public float CurrentLift => currentLift;
+        public float CurrentLift => apartmentModel != null ? apartmentModel.SeismicOffset : currentLift;
         public event Action<BuildingRailUpgrade> StateChanged;
 
         private void Awake() => Initialize();
@@ -60,6 +65,12 @@ namespace CivilGameJam.Upgrades
             if (initialized) return building != null;
             if (building == null) return false;
             originalLocalPosition = building.localPosition;
+            if (building.TryGetComponent(out apartmentModel))
+            {
+                foundationBounds = building.GetComponent<BuildingModelGeometry>().FoundationBounds;
+                initialized = true;
+                return true;
+            }
             if (building.TryGetComponent<BuildingModelGeometry>(out var model))
             {
                 if (model.IsCollection)
@@ -105,7 +116,8 @@ namespace CivilGameJam.Upgrades
                 IsInstalled = installed; IsTransitioning = true;
                 StateChanged?.Invoke(this); return;
             }
-            if (installed)
+            if (apartmentModel != null) apartmentModel.SetSeismic(installed);
+            else if (installed)
             {
                 if (railMaterial == null || supportMaterial == null)
                 {
@@ -118,7 +130,15 @@ namespace CivilGameJam.Upgrades
             else if (installationDust != null)
                 installationDust.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
             IsInstalled = installed;
+            if (!installed) apartmentDust?.Stop();
             startingLift = currentLift;
+            if (apartmentModel != null)
+            {
+                startingLift = apartmentModel.SeismicOffset - apartmentModel.SeismicCompensation;
+                currentLift = startingLift;
+            }
+            peakLift = Mathf.Max(startingLift, Mathf.Max(.04f, liftHeight) * peakLiftMultiplier -
+                (apartmentModel != null ? apartmentModel.SeismicCompensation : 0f));
             transitionAge = 0f;
             IsTransitioning = true;
             StateChanged?.Invoke(this);
@@ -143,16 +163,22 @@ namespace CivilGameJam.Upgrades
             }
             if (building == null) { ResetUpgrade(); return; }
             transitionAge += Mathf.Max(0f, deltaTime);
-            var duration = IsInstalled ? transitionDuration : removalDuration;
+            var rise = transitionDuration * .5f;
+            var descentStarts = transitionDuration * .6f;
+            var duration = IsInstalled ? descentStarts + settlingDuration : removalDuration;
             var progress = Mathf.Clamp01(transitionAge / Mathf.Max(0.1f, duration));
             float height = Mathf.Max(0.04f, liftHeight);
-            float peak = Mathf.Max(startingLift, height * peakLiftMultiplier);
             if (!IsInstalled) currentLift = Mathf.Lerp(startingLift, 0f, Smooth(progress));
-            else if (progress < 0.5f) currentLift = Mathf.Lerp(startingLift, peak, Smooth(progress / 0.5f));
-            else if (progress < 0.6f) currentLift = peak;
-            else currentLift = Mathf.Lerp(peak, height, Smooth((progress - 0.6f) / 0.4f));
+            else if (transitionAge < rise) currentLift = Mathf.Lerp(startingLift, peakLift, Smooth(transitionAge / rise));
+            else if (transitionAge < descentStarts) currentLift = peakLift;
+            else currentLift = Mathf.Lerp(peakLift, height, Smooth(Mathf.Clamp01((transitionAge - descentStarts) / settlingDuration)));
             var localOffset = building.parent != null ? building.parent.InverseTransformVector(Vector3.up * currentLift) : Vector3.up * currentLift;
-            building.localPosition = originalLocalPosition + localOffset;
+            if (apartmentModel != null)
+            {
+                apartmentModel.SetSeismicLift(currentLift, height);
+                if (IsInstalled) apartmentModel.SetSeismicApproach((transitionAge - rise * .45f) / apartmentModel.MagneticPullSeconds);
+            }
+            else building.localPosition = originalLocalPosition + localOffset;
             // Compensate for the lift: the rails stay on the ground below the rising building.
             if (railVisuals != null) railVisuals.transform.localPosition = -building.InverseTransformVector(Vector3.up * currentLift);
             UpdatePistons();
@@ -247,19 +273,31 @@ namespace CivilGameJam.Upgrades
         private void PlayInstallationDust()
         {
             if (installationDustMaterial == null || dustAmount <= 0f) return;
+            if (apartmentModel != null)
+            {
+                if (apartmentDust == null) apartmentDust = new ApartmentConstructionDust(transform, building.GetComponent<BuildingModelGeometry>(), installationDustMaterial);
+                apartmentDust.Emit(dustAmount * dustMultiplier, dustSize, dustLifetime, building.position - apartmentModel.MotionRoot.position, dustLightening);
+                return;
+            }
             if (installationDust == null)
                 installationDust = ConstructionDustPuff.Create(transform, installationDustMaterial, out dustMesh);
             ConstructionDustPuff.Emit(installationDust, building, foundationBounds, dustAmount * dustMultiplier, dustSize,
-                dustLifetime, dustRandom, -Vector3.up * currentLift);
+                dustLifetime, dustRandom, -Vector3.up * currentLift, lightening: dustLightening);
         }
 
         public void ResetUpgrade()
         {
             if (partUpgrades != null) foreach (var part in partUpgrades) if (part != null) part.ResetUpgrade();
-            if (initialized && building != null) building.localPosition = originalLocalPosition;
+            if (apartmentModel != null)
+            {
+                apartmentModel.SetSeismic(false);
+                apartmentModel.SetSeismicLift(0f);
+            }
+            else if (initialized && building != null) building.localPosition = originalLocalPosition;
             IsInstalled = false;
             IsTransitioning = false;
             currentLift = 0f;
+            apartmentDust?.Stop();
             if (installationDust != null) installationDust.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
             if (railVisuals != null)
             {
@@ -281,15 +319,18 @@ namespace CivilGameJam.Upgrades
                 part.building = model.Parts[i].transform; part.liftHeight = liftHeight; part.railWidth = railWidth;
                 part.endExtension = endExtension; part.railSpacing = railSpacing; part.transitionDuration = transitionDuration;
                 part.peakLiftMultiplier = peakLiftMultiplier; part.removalDuration = removalDuration;
+                part.settlingDuration = settlingDuration;
                 part.railMaterial = railMaterial; part.supportMaterial = supportMaterial;
                 part.installationDustMaterial = installationDustMaterial; part.dustAmount = dustAmount;
                 part.dustMultiplier = dustMultiplier;
+                part.dustLightening = dustLightening;
                 part.dustSize = dustSize; part.dustLifetime = dustLifetime; partUpgrades[i] = part;
             }
         }
         private void OnDestroy()
         {
             ResetUpgrade();
+            apartmentDust?.Dispose();
             if (railVisuals != null) Destroy(railVisuals);
             if (dustMesh != null) Destroy(dustMesh);
             if (partUpgrades != null) foreach (var part in partUpgrades) if (part != null) Destroy(part.gameObject);

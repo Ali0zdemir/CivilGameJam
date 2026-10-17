@@ -1,6 +1,6 @@
-using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using CivilGameJam.Presentation;
 
 namespace CivilGameJam.Cards
 {
@@ -11,11 +11,9 @@ namespace CivilGameJam.Cards
         [Tooltip("An educated worker contributes this many normal workers of production effort.")]
         [Min(1f)] [SerializeField] private float educatedWorkerMultiplier = 1.8f;
         [SerializeField] private BuildingStation station;
-        [SerializeField] private TextMeshProUGUI productionStatus;
-        [SerializeField] private TextMeshProUGUI blueprintLabel;
-        [SerializeField] private UpgradeIcon blueprintIcon;
         [SerializeField] private RectTransform progressRoot;
         [SerializeField] private Image progressFill;
+        [SerializeField] private ProgressBarFeedback progressFeedback;
         [SerializeField] private Outline outline;
         private CardGameController game;
         private DraggableCard card;
@@ -39,7 +37,15 @@ namespace CivilGameJam.Cards
         }
 
         public void Initialize(CardGameController owner, DraggableCard building)
-        { game = owner; card = building; Refresh(); }
+        {
+            game = owner;
+            card = building;
+            if (station == null) station = GetComponent<BuildingStation>();
+            if (progressRoot == null) progressRoot = transform.Find("ProgressBar") as RectTransform;
+            if (progressFill == null && progressRoot != null) progressFill = progressRoot.Find("BlueProgress")?.GetComponent<Image>();
+            if (progressFeedback == null && progressRoot != null) progressFeedback = progressRoot.GetComponent<ProgressBarFeedback>();
+            Refresh();
+        }
 
         public bool CanAccept(DraggableCard blueprint) => game != null && !game.IsChoosingBlueprint &&
             PendingBlueprint == null && blueprint != null && blueprint.Kind == CardKind.Blueprint &&
@@ -55,6 +61,7 @@ namespace CivilGameJam.Cards
             blueprint.StoredAtFactory = this;
             blueprint.gameObject.SetActive(false);
             Progress = 0f;
+            if (progressFeedback != null) progressFeedback.Begin();
             Refresh();
             return true;
         }
@@ -80,6 +87,7 @@ namespace CivilGameJam.Cards
                 Progress = Mathf.Min(1f, Progress + seconds * workRate / ProductionSeconds);
                 if (Progress >= 1f)
                 {
+                    if (progressFeedback != null) progressFeedback.Complete();
                     var blueprint = PendingBlueprint;
                     PendingBlueprint = null;
                     blueprint.StoredAtFactory = null;
@@ -94,6 +102,7 @@ namespace CivilGameJam.Cards
 
         public void Preview(DraggableCard blueprint)
         {
+            if (outline == null) return;
             outline.enabled = blueprint != null;
             if (blueprint != null) outline.effectColor = CanAccept(blueprint) ? new Color(0.2f, 0.9f, 0.45f) : Color.red;
         }
@@ -101,14 +110,12 @@ namespace CivilGameJam.Cards
         private void Refresh()
         {
             bool pending = PendingBlueprint != null;
-            blueprintIcon.gameObject.SetActive(pending);
-            if (pending) blueprintIcon.Kind = PendingBlueprint.UpgradeType;
-            blueprintLabel.text = pending ? game.RecipeFor(PendingBlueprint.UpgradeType).title + " plan" : "Drop a blueprint";
-            productionStatus.text = !pending ? "Requires a blueprint\nand at least 1 worker" : station.WorkerCount == 0
-                ? "WORKER REQUIRED\nAssign at least 1 person" : "Producing";
-            productionStatus.color = pending && station.WorkerCount == 0 ? new Color(0.95f, 0.4f, 0.24f) : new Color(0.22f, 0.35f, 0.35f);
-            progressRoot.gameObject.SetActive(pending);
-            CardUI.SetProgress(progressFill.rectTransform, Progress);
+            if (progressFeedback != null) progressFeedback.SetProgress(Progress, pending);
+            else
+            {
+                if (progressRoot != null) progressRoot.gameObject.SetActive(pending);
+                if (progressFill != null) CardUI.SetProgress(progressFill.rectTransform, Progress);
+            }
         }
     }
 }

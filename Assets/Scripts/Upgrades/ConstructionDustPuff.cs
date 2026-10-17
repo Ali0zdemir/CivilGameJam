@@ -55,7 +55,7 @@ namespace CivilGameJam.Upgrades
         }
 
         public static void Emit(ParticleSystem particles, Transform building, Bounds bounds, float amount,
-            float size, float lifetime, Random random, Vector3 worldOffset, IReadOnlyList<Vector3> origins = null)
+            float size, float lifetime, Random random, Vector3 worldOffset, IReadOnlyList<Vector3> origins = null, float lightening = 0f)
         {
             particles.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
             particles.Play(true);
@@ -94,6 +94,9 @@ namespace CivilGameJam.Upgrades
                 var direction = building.TransformDirection(outward).normalized;
                 var position = building.TransformPoint(point) + worldOffset + Vector3.up * 0.04f + direction * 0.025f;
                 var particleSize = size * sizeFactor * Range(random, 0.8f, 1.35f);
+                var tint = (float)random.NextDouble() < .28f
+                    ? Color.Lerp(new Color(.78f, .72f, .90f), new Color(.88f, .83f, .95f), Range(random, 0f, 1f))
+                    : Color.Lerp(new Color(.78f, .76f, .80f), new Color(.88f, .86f, .88f), Range(random, 0f, 1f));
                 particles.Emit(new ParticleSystem.EmitParams
                 {
                     position = position,
@@ -101,7 +104,7 @@ namespace CivilGameJam.Upgrades
                     startLifetime = Mathf.Max(0.3f, lifetime) * Range(random, 0.85f, 1.15f),
                     startSize3D = new Vector3(particleSize * 1.15f, particleSize * 0.75f, particleSize),
                     rotation3D = new Vector3(Range(random, 0f, 360f), Range(random, 0f, 360f), Range(random, 0f, 360f)),
-                    startColor = Color.Lerp(new Color(0.66f, 0.59f, 0.46f), new Color(0.87f, 0.81f, 0.68f), Range(random, 0f, 1f))
+                    startColor = Color.Lerp(tint, new Color(.98f, .96f, .99f), Mathf.Clamp01(lightening))
                 }, 1);
             }
         }
@@ -128,5 +131,41 @@ namespace CivilGameJam.Upgrades
         }
 
         private static float Range(Random random, float minimum, float maximum) => Mathf.Lerp(minimum, maximum, (float)random.NextDouble());
+    }
+
+    /// <summary>Keeps the original per-apartment dust density when a whole plot shares one model switch.</summary>
+    internal sealed class ApartmentConstructionDust : System.IDisposable
+    {
+        private readonly BuildingModelGeometry[] parts;
+        private readonly ParticleSystem[] particles;
+        private readonly Mesh[] meshes;
+        private readonly Random random = new Random();
+
+        public ApartmentConstructionDust(Transform parent, BuildingModelGeometry geometry, Material material)
+        {
+            parts = geometry.Parts;
+            particles = new ParticleSystem[parts.Length];
+            meshes = new Mesh[parts.Length];
+            for (int i = 0; i < parts.Length; i++) particles[i] = ConstructionDustPuff.Create(parent, material, out meshes[i]);
+        }
+
+        public void Emit(float amount, float size, float lifetime, Vector3 worldOffset, float lightening = 0f)
+        {
+            for (int i = 0; i < parts.Length; i++)
+                if (parts[i] != null && particles[i] != null)
+                    ConstructionDustPuff.Emit(particles[i], parts[i].transform, parts[i].FoundationBounds, amount, size, lifetime, random, worldOffset, lightening: lightening);
+        }
+
+        public void Stop()
+        {
+            foreach (var puff in particles) if (puff != null) puff.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        }
+
+        public void Dispose()
+        {
+            Stop();
+            foreach (var puff in particles) if (puff != null) Object.Destroy(puff.gameObject);
+            foreach (var mesh in meshes) if (mesh != null) Object.Destroy(mesh);
+        }
     }
 }

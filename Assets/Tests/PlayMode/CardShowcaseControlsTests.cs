@@ -1,3 +1,4 @@
+using TMPro;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
@@ -85,7 +86,7 @@ public sealed partial class CardGamePlayModeTests
         });
         Assert.That(city.GetComponentInParent<Canvas>().GetComponentsInChildren<RectTransform>(true).Select(rect => rect.GetInstanceID()).OrderBy(id => id).ToArray(),
             Is.EqualTo(uiBefore));
-        foreach (var label in city.GetComponentsInChildren<Text>(true))
+        foreach (var label in city.GetComponentsInChildren<TMP_Text>(true))
             Assert.That(System.Text.RegularExpressions.Regex.IsMatch(label.text, "[ıİğĞşŞüÜöÖçÇ]|%|[0-9]+\\s*(seconds?|saniye)"), Is.False, label.text);
     }
 

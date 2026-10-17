@@ -1,3 +1,5 @@
+using TMPro;
+using CivilGameJam.Presentation;
 using System;
 using System.Collections.Generic;
 using CivilGameJam.Upgrades;
@@ -38,8 +40,9 @@ namespace CivilGameJam.Disasters
 
         [Header("Test panel")]
         [SerializeField] private Button testButton;
-        [SerializeField] private Text statusLabel;
+        [SerializeField] private TMP_Text statusLabel;
         [SerializeField] private Image progressFill;
+        [SerializeField] private ProgressBarFeedback progressFeedback;
 
         private readonly List<BurnSite> sites = new List<BurnSite>();
         private readonly System.Random random = new System.Random();
@@ -78,7 +81,11 @@ namespace CivilGameJam.Disasters
         public float TestDuration => Mathf.Max(5f, duration);
         public float NormalizedProgress => IsRunning ? Mathf.Clamp01(elapsed / TestDuration) : 0f;
 
-        private void Awake() => ResetTest(false);
+        private void Awake()
+        {
+            if (progressFeedback == null && progressFill != null) progressFeedback = progressFill.GetComponentInParent<ProgressBarFeedback>(true);
+            ResetTest(false);
+        }
 
         [ContextMenu("Start fire test (Play Mode)")]
         public void StartFire()
@@ -94,13 +101,14 @@ namespace CivilGameJam.Disasters
             EnsureVisuals();
             elapsed = 0f;
             IsRunning = true;
+            if (progressFeedback != null) progressFeedback.Begin();
             visuals.SetActive(true);
             flames.Play(true);
             smoke.Play(true);
             embers.Play(true);
             extinguishSmoke.Play(true);
             if (testButton != null) testButton.interactable = false;
-            if (progressFill != null) progressFill.fillAmount = 0f;
+            if (progressFeedback == null && progressFill != null) progressFill.fillAmount = 0f;
             if (statusLabel != null) statusLabel.text = "Fire started";
         }
 
@@ -153,7 +161,8 @@ namespace CivilGameJam.Disasters
                 EmitSmoke(site, burnStep, strength);
                 EmitEmbers(site, burnStep, strength);
             }
-            if (progressFill != null) progressFill.fillAmount = Mathf.Floor(elapsed / TestDuration * 10f + 0.00001f) * 0.1f;
+            if (progressFeedback != null) progressFeedback.SetProgress(elapsed / TestDuration, true);
+            else if (progressFill != null) progressFill.fillAmount = Mathf.Clamp01(elapsed / TestDuration);
             if (statusLabel != null)
                 statusLabel.text = elapsed >= releaseStart ? "Fire fading" : elapsed < Mathf.Min(spreadTime, releaseStart * 0.7f) + ignitionTime ? "Fire spreading" : "Fire intensified";
             if (elapsed >= TestDuration) ResetTest(true);
@@ -498,7 +507,11 @@ namespace CivilGameJam.Disasters
             if (extinguishAudio != null) extinguishAudio.Stop();
             if (visuals != null) visuals.SetActive(false);
             if (testButton != null) testButton.interactable = true;
-            if (progressFill != null) progressFill.fillAmount = 0f;
+            if (progressFeedback != null)
+            {
+                if (completed) progressFeedback.Complete(); else progressFeedback.ResetPresentation();
+            }
+            else if (progressFill != null) progressFill.fillAmount = 0f;
             if (statusLabel != null) statusLabel.text = completed ? "Completed · ready" : "Ready";
         }
 

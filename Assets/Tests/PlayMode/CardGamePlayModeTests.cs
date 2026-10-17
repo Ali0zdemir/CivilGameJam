@@ -289,12 +289,12 @@ public sealed partial class CardGamePlayModeTests
     }
 
     [Test]
-    public void SchoolResearchAndFactoryBarsAdvanceInTenStepsWithoutTimingLabels()
+    public void SchoolResearchAndFactoryBarsAdvanceContinuouslyWithoutTimingLabels()
     {
         school.TryAssign(People()[0]);
-        AssertTenStepBar(school.Card, school.AdvanceWork, game.EducationSeconds / 10f);
+        AssertContinuousBar(school.Card, school.AdvanceWork, game.EducationSeconds / 10f);
         research.TryAssign(People().First(person => person.AssignedTo == null));
-        AssertTenStepBar(research.Card, research.AdvanceWork, game.NormalResearchSeconds / 10f);
+        AssertContinuousBar(research.Card, research.AdvanceWork, game.NormalResearchSeconds / 10f);
         Object.FindFirstObjectByType<CityStatusPanel>()?.Refresh();
         AssertNoTimingText(game.GetComponentInParent<Canvas>());
         research.AdvanceWork(game.NormalResearchSeconds / 10f + 0.01f);
@@ -307,7 +307,7 @@ public sealed partial class CardGamePlayModeTests
         production.enabled = false;
         factoryStation.TryAssign(People().First(person => person.AssignedTo == null));
         production.TryInsertBlueprint(game.Cards.Last(card => card.Kind == CardKind.Blueprint));
-        AssertTenStepBar(factoryStation.Card, production.AdvanceWork, production.ProductionSeconds / 10f);
+        AssertContinuousBar(factoryStation.Card, production.AdvanceWork, production.ProductionSeconds / 10f);
         Object.FindFirstObjectByType<CityStatusPanel>()?.Refresh();
         AssertNoTimingText(game.GetComponentInParent<Canvas>());
         Assert.That(game.Cards.Count(card => card.Kind == CardKind.Upgrade), Is.Zero);
@@ -321,19 +321,20 @@ public sealed partial class CardGamePlayModeTests
             Assert.That(product.TablePosition.x - product.Rect.rect.width * product.LayoutScale.x / 2f,
                 Is.GreaterThan(gridRight), "Manufactured cards should use the open space to the right of the grid.");
         }
-        Assert.That(((RectTransform)factoryStation.transform.Find("ProgressBar/BlueProgress")).anchorMax.x, Is.Zero);
+        Assert.That(((RectTransform)factoryStation.transform.Find("ProgressBar/BlueProgress")).anchorMax.x, Is.EqualTo(1f),
+            "The completed bar stays full during its visual outro.");
     }
 
-    private static void AssertTenStepBar(DraggableCard card, System.Action<float> advance, float stepDuration)
+    private static void AssertContinuousBar(DraggableCard card, System.Action<float> advance, float stepDuration)
     {
         var fill = (RectTransform)card.transform.Find("ProgressBar/BlueProgress");
         Assert.That(fill.anchorMax.x, Is.Zero);
         for (int step = 1; step < 10; step++)
         {
             advance(stepDuration * 0.45f);
-            Assert.That(fill.anchorMax.x, Is.EqualTo((step - 1) / 10f).Within(0.0001f), card.name + ": hold between steps");
+            Assert.That(fill.anchorMax.x, Is.EqualTo((step - 1 + 0.45f) / 10f).Within(0.0001f), card.name + ": advance between former steps");
             advance(stepDuration * 0.55f);
-            Assert.That(fill.anchorMax.x, Is.EqualTo(step / 10f).Within(0.0001f), card.name + ": next step");
+            Assert.That(fill.anchorMax.x, Is.EqualTo(step / 10f).Within(0.0001f), card.name + ": stay synchronized with work");
         }
     }
 
@@ -505,7 +506,8 @@ public sealed partial class CardGamePlayModeTests
         Assert.That(factory.PendingBlueprint, Is.SameAs(blueprint));
         factory.AdvanceWork(100f);
         Assert.That(factory.Progress, Is.Zero);
-        Assert.That(factory.transform.Find("FolderArt/ProductionStatus").GetComponent<TextMeshProUGUI>().text, Does.Contain("WORKER REQUIRED"));
+        Assert.That(factory.WorkRate, Is.Zero);
+        Assert.That(factory.PendingBlueprint, Is.SameAs(blueprint));
         var worker = People()[0];
         Station(CardKind.Factory).TryAssign(worker);
         factory.AdvanceWork(4.9f);
@@ -625,16 +627,24 @@ public sealed partial class CardGamePlayModeTests
     [UnityTest]
     public IEnumerator CaptureFactoryAndFilledHouseSlots()
     {
+        string directory = Path.GetFullPath(Path.Combine(Application.dataPath, "../Library/CardGameTestResults"));
+        Directory.CreateDirectory(directory);
         var factory = Station(CardKind.Factory).GetComponent<FactoryProduction>();
         factory.enabled = false;
         Station(CardKind.Factory).TryAssign(People()[0]);
         var house = game.Cards.First(c => c.Kind == CardKind.House).GetComponent<HouseUpgrades>();
+        var savedUI = house.GetComponent<CardHover>().Details.GetComponentsInChildren<Graphic>(true)
+            .Select(graphic => graphic.GetInstanceID()).ToArray();
+        yield return CaptureCanvas(Path.Combine(directory, "house-prevention-empty.png"), house.gameObject);
+        Hover(house.gameObject, false);
         for (int i = 0; i < 3; i++)
         {
             var blueprint = ResearchPlan(i);
             factory.TryInsertBlueprint(blueprint);
             factory.AdvanceWork(factory.ProductionSeconds + 0.01f);
             house.TryInstall(game.Cards.First(c => c.Kind == CardKind.Upgrade && c.UpgradeType == (UpgradeKind)(i + 1)));
+            yield return CaptureCanvas(Path.Combine(directory, "house-prevention-installed-" + (i + 1) + ".png"), house.gameObject);
+            Hover(house.gameObject, false);
         }
         Station(CardKind.Factory).ReleaseWorker(0, false);
         factory.TryInsertBlueprint(ResearchPlan(2));
@@ -647,9 +657,17 @@ public sealed partial class CardGamePlayModeTests
         Station(CardKind.Factory).TryAssign(People().First(person => person.AssignedTo == null));
         factory.AdvanceWork(0f);
         yield return new WaitForSecondsRealtime(0.7f);
-        string directory = Path.GetFullPath(Path.Combine(Application.dataPath, "../Library/CardGameTestResults"));
         yield return CaptureCanvas(Path.Combine(directory, "production-house-board.png"));
         yield return CaptureCanvas(Path.Combine(directory, "upgraded-house-inspection.png"), house.gameObject);
+        Hover(house.gameObject, false);
+        foreach (var kind in new[] { UpgradeKind.RailSystem, UpgradeKind.Breakwater, UpgradeKind.Fire })
+        {
+            house.Release(kind, false);
+            yield return CaptureCanvas(Path.Combine(directory, "house-prevention-removed-" + kind + ".png"), house.gameObject);
+            Hover(house.gameObject, false);
+        }
+        CollectionAssert.AreEquivalent(savedUI, house.GetComponent<CardHover>().Details.GetComponentsInChildren<Graphic>(true)
+            .Select(graphic => graphic.GetInstanceID()).ToArray(), "House prevention information must reuse the saved UI.");
     }
 
     private static void Drag(DraggableCard card, Vector3 destination)
@@ -1292,6 +1310,13 @@ public sealed partial class CardGamePlayModeTests
     {
         string directory = Path.GetFullPath(Path.Combine(Application.dataPath, "../Library/CardGameTestResults"));
         Directory.CreateDirectory(directory);
+        foreach (var kind in new[] { CardKind.ResearchCenter, CardKind.Factory, CardKind.School, CardKind.House })
+        {
+            var building = game.Cards.Where(card => card.Kind == kind).OrderBy(card => card.InitialGridCell).Last();
+            yield return CaptureCanvas(Path.Combine(directory, "building-info-" + kind + ".png"), building.gameObject);
+            Hover(building, false);
+            yield return new WaitForSecondsRealtime(0.32f);
+        }
         school.TryAssign(People()[0]);
         school.AdvanceWork(12.5f);
         research.TryAssign(People()[1]);

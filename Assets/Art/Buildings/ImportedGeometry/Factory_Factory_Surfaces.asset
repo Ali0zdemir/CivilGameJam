@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: Factory_Factory_Surfaces
   m_EditorClassIdentifier: 
   residential: 0
-  closedMesh: {fileID: 5542413560607618145, guid: 08cf4891682ea5245bc70507680a2652, type: 3}
+  closedMesh: {fileID: 5542413560607618145, guid: 151db67b8590f774e85b4cd64d2c683a, type: 3}
   openGroundFloorMesh: {fileID: 0}
   bodyBounds:
     m_Center: {x: -0.0000007599592, y: 0.31085336, z: -0.14916062}
@@ -22,10 +22,10 @@ MonoBehaviour:
     m_Center: {x: -0.0000007748604, y: -0.19807927, z: -0.14916062}
     m_Extent: {x: 0.39798868, y: 0.017499998, z: 0.51792186}
   roofBounds:
-    m_Center: {x: -0.0000007748604, y: 0.64088666, z: -0.23404369}
-    m_Extent: {x: 0.39798862, y: 0, z: 0.4330388}
+    m_Center: {x: -0.0000007748604, y: 0.7390863, z: -0.23404369}
+    m_Extent: {x: 0.39798862, y: 0.098199725, z: 0.4330388}
   groundFloorHeight: 0.25
-  sprinklerAnchor: {x: 0.13266207, y: 0.6458866, z: 0.06633198}
+  sprinklerAnchor: {x: -0.13266365, y: 0.6528867, z: -0.066331156}
   roofTriangles:
   - {x: 0.14447442, y: 0.79612356, z: -0.031472627}
   - {x: 0.12690976, y: 0.79612356, z: -0.028574156}

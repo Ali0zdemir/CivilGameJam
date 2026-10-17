@@ -26,6 +26,98 @@ public sealed partial class CardGamePlayModeTests
     }
 
     [UnityTest]
+    public IEnumerator WorkerPortraitUpperRightCornersReceiveHoverInEveryWorkplace()
+    {
+        school.TryAssign(People()[0]);
+        school.AdvanceWork(25.01f);
+        yield return new WaitForSecondsRealtime(.6f);
+        var savedUI = UIIds(game);
+        foreach (var station in new[] { research, school, Station(CardKind.Factory) })
+        {
+            var first = station.Card.Kind == CardKind.Factory ? Educated() : People().First(p => p.AssignedTo == null);
+            Assert.That(station.TryAssign(first), Is.True);
+            var second = station == research ? Educated() : People().First(p => p.AssignedTo == null);
+            Assert.That(station.TryAssign(second), Is.True);
+            yield return new WaitForSecondsRealtime(.6f);
+            foreach (var slot in WorkerSlots(station))
+            {
+                Vector2 rest = slot.Portrait.rectTransform.anchoredPosition;
+                var hit = PortraitUpperRightHit(slot);
+                ExecuteEvents.ExecuteHierarchy(hit.gameObject, new PointerEventData(EventSystem.current), ExecuteEvents.pointerEnterHandler);
+                yield return new WaitForSecondsRealtime(.04f);
+                Assert.That(slot.Portrait.rectTransform.anchoredPosition.y, Is.GreaterThan(rest.y).And.LessThan(rest.y + 24f));
+                yield return new WaitForSecondsRealtime(.55f);
+                Assert.That(slot.Portrait.rectTransform.anchoredPosition.y, Is.EqualTo(rest.y + 24f).Within(.5f));
+                PortraitUpperRightHit(slot);
+                Hover(slot.gameObject, false);
+                yield return new WaitForSecondsRealtime(.55f);
+                Assert.That(Vector2.Distance(slot.Portrait.rectTransform.anchoredPosition, rest), Is.LessThan(.3f));
+            }
+            station.ReleaseWorker(0, false);
+            station.ReleaseWorker(1, false);
+        }
+        Assert.That(UIIds(game), Is.EqualTo(savedUI));
+    }
+
+    private static RaycastResult PortraitUpperRightHit(WorkerSlot slot)
+    {
+        var portrait = slot.Portrait.rectTransform;
+        // The right pocket overlaps the other portrait. Check each visible outer corner,
+        // including the upper-right edge of both the normal and educated artwork.
+        float edge = slot.Index == 0 ? portrait.rect.xMax - 19f : portrait.rect.xMin + 19f;
+        var position = portrait.TransformPoint(new Vector3(edge, portrait.rect.yMax - 35f));
+        var pointer = new PointerEventData(EventSystem.current)
+        { position = RectTransformUtility.WorldToScreenPoint(null, position) };
+        var hits = new System.Collections.Generic.List<RaycastResult>();
+        EventSystem.current.RaycastAll(pointer, hits);
+        Assert.That(hits, Is.Not.Empty, slot.name);
+        Assert.That(hits[0].gameObject.GetComponentInParent<WorkerSlot>(), Is.SameAs(slot),
+            slot.transform.parent.parent.name + " / " + slot.name + ": the visible upper-right corner must reach the worker.");
+        return hits[0];
+    }
+
+    [UnityTest]
+    public IEnumerator ElevatorSupportsEmergeFromBelowAndAttachWithoutLosingOtherProtection()
+    {
+        var link = CityHouseLinks()[0];
+        var model = link.Building.GetComponent<ApartmentUpgradeModel>();
+        var supports = ControlField<Transform>(model, "elevatorSupports");
+        var rest = supports.localPosition;
+        var ground = link.Building.Find("Apartment_Ground");
+        var groundPosition = ground.position;
+        link.RailSystem.SetInstalled(true);
+        yield return new WaitForSecondsRealtime(1.4f);
+        link.FireProtection.SetInstalled(true);
+        var savedUI = UIIds(game);
+        model.SetElevated(true);
+        yield return null;
+        Assert.That(supports.gameObject.activeSelf, Is.False);
+        float timeout = Time.realtimeSinceStartup + 2f;
+        while (model.ElevatorAttachment < .1f && Time.realtimeSinceStartup < timeout) yield return null;
+        Assert.That(model.IsElevated, Is.True);
+        Assert.That(model.ElevatorAttachment, Is.GreaterThan(0f).And.LessThan(1f));
+        Assert.That(supports.gameObject.activeInHierarchy, Is.True);
+        float approachingY = supports.position.y - supports.parent.position.y;
+        CaptureAuthoredApartmentSprinklers(link.Building, "elevator-magnetic-approach");
+        while (model.ElevatorAttachment < .85f && Time.realtimeSinceStartup < timeout) yield return null;
+        Assert.That(supports.position.y - supports.parent.position.y, Is.GreaterThan(approachingY + .05f));
+        yield return new WaitForSecondsRealtime(.5f);
+        Assert.That(model.IsTransitioning, Is.False);
+        Assert.That(model.ElevatorAttachment, Is.EqualTo(1f));
+        Assert.That(Vector3.Distance(supports.localPosition, rest), Is.LessThan(.0001f));
+        Assert.That(model.HasSeismic && model.HasFireProtection, Is.True);
+        Assert.That(ground.position, Is.EqualTo(groundPosition));
+        CaptureAuthoredApartmentSprinklers(link.Building, "elevator-magnetic-attached");
+        model.SetElevated(false);
+        yield return new WaitForSecondsRealtime(.2f);
+        model.SetElevated(true);
+        yield return new WaitForSecondsRealtime(1.15f);
+        Assert.That(model.IsElevated && model.HasSeismic && model.HasFireProtection, Is.True);
+        Assert.That(Vector3.Distance(supports.localPosition, rest), Is.LessThan(.0001f));
+        Assert.That(UIIds(game), Is.EqualTo(savedUI));
+    }
+
+    [UnityTest]
     public IEnumerator GreenAndPurpleWorkersRiseSmoothlyAndReturnWithoutMovingTheirSlots()
     {
         school.TryAssign(People()[0]);
@@ -288,39 +380,76 @@ public sealed partial class CardGamePlayModeTests
         finally { camera.aspect = oldAspect; }
     }
 
-    [Test]
-    public void RailPistonsReachTwiceTheLiftThenSeatTheHouseBeforeOneAndAHalfTimesTheDust()
+    [TestCase(false)]
+    [TestCase(true)]
+    public void SeismicIsolatorsAttachAtTheApexAndShareTheSlowerLandingAndLighterDust(bool elevated)
     {
-        var rail = CityHouseLinks()[0].RailSystem;
-        var parts = ControlField<BuildingRailUpgrade[]>(rail, "partUpgrades");
+        var link = CityHouseLinks()[0];
+        var rail = link.RailSystem;
+        var model = link.Building.GetComponent<ApartmentUpgradeModel>();
+        model.SetElevated(elevated, false);
+        var isolator = ApartmentIsolators(model)[elevated ? 1 : 0];
+        var authoredPosition = isolator.position;
+        var ground = link.Building.Find("Apartment_Ground");
+        var groundPosition = ground.position;
         PresentationField(rail, "managedExternally", true);
         rail.SetInstalled(true);
         float duration = ControlField<float>(rail, "transitionDuration");
-        InvokeCity(rail, "AdvanceTransition", duration * 0.5f);
+        float landing = ControlField<float>(rail, "settlingDuration");
+        Assert.That(isolator.gameObject.activeSelf, Is.False);
+        InvokeCity(rail, "AdvanceTransition", duration * .3f);
+        Assert.That(model.SeismicAttachment, Is.GreaterThan(0f).And.LessThan(1f));
+        var approaching = isolator.position - model.MotionRoot.position;
+        CaptureAuthoredApartmentSprinklers(link.Building, elevated ? "elevated-magnetic-approach" : "normal-magnetic-approach");
+        InvokeCity(rail, "AdvanceTransition", duration * .3f);
+        Assert.That(model.SeismicAttachment, Is.EqualTo(1f));
         float height = ControlField<float>(rail, "liftHeight");
         Assert.That(rail.CurrentLift, Is.EqualTo(height * 2f).Within(0.0001f));
-        var rods = parts.SelectMany(part => ControlField<Transform[]>(part, "pistonRods")).ToArray();
-        var extendedRods = rods.Select(rod => rod.localScale.y).ToArray();
-        var grounds = parts.Select(part => ControlField<GameObject>(part, "railVisuals").transform.position).ToArray();
-        Assert.That(parts.All(part => ControlField<ParticleSystem>(part, "installationDust") == null), Is.True);
-        InvokeCity(rail, "AdvanceTransition", duration * 0.35f);
-        Assert.That(rail.CurrentLift, Is.GreaterThan(height).And.LessThan(height * 2f));
-        Assert.That(parts.All(part => ControlField<ParticleSystem>(part, "installationDust") == null), Is.True,
-            "No construction dust while the house is still descending.");
-        InvokeCity(rail, "AdvanceTransition", duration * 0.2f);
-        Assert.That(rail.CurrentLift, Is.EqualTo(height).Within(0.0001f));
+        Assert.That(isolator.gameObject.activeInHierarchy, Is.True);
+        Vector3 attachedOffset = isolator.position - model.MotionRoot.position;
+        Assert.That(attachedOffset.y - approaching.y, Is.GreaterThan(.05f), "The isolators must rise toward the body before attaching.");
+        CaptureAuthoredApartmentSprinklers(link.Building, elevated ? "elevated-magnetic-attached" : "normal-magnetic-attached");
+        InvokeCity(rail, "AdvanceTransition", landing * .5f);
+        float rest = elevated ? 0f : height;
+        Assert.That(rail.CurrentLift, Is.GreaterThan(rest).And.LessThan(height * 2f));
+        Assert.That(Vector3.Distance(isolator.position - model.MotionRoot.position, attachedOffset), Is.LessThan(.0001f));
+        Assert.That(rail.GetComponentsInChildren<ParticleSystem>().Length, Is.Zero,
+            "Dust starts at landing while the apartment and its attached isolators descend as one.");
+        Assert.That(landing, Is.GreaterThan(duration * .4f));
+        InvokeCity(rail, "AdvanceTransition", landing * .5f + .01f);
+        Assert.That(rail.CurrentLift, Is.EqualTo(rest).Within(0.0001f));
         Assert.That(rail.IsTransitioning, Is.False);
-        for (int i = 0; i < rods.Length; i++) Assert.That(rods[i].localScale.y, Is.LessThan(extendedRods[i]));
-        for (int i = 0; i < parts.Length; i++)
-            Assert.That(Vector3.Distance(ControlField<GameObject>(parts[i], "railVisuals").transform.position, grounds[i]), Is.LessThan(0.0001f));
-        int enhancedDust = parts.Sum(part => ControlField<ParticleSystem>(part, "installationDust").particleCount);
+        Assert.That(Vector3.Distance(isolator.position, authoredPosition), Is.LessThan(.0001f));
+        Assert.That(ground.position, Is.EqualTo(groundPosition));
+        var puffs = rail.GetComponentsInChildren<ParticleSystem>();
+        Assert.That(puffs.Length, Is.EqualTo(6));
+        int enhancedDust = puffs.Sum(puff => puff.particleCount);
         Assert.That(enhancedDust, Is.GreaterThan(0));
+        int lavenderParticles = 0;
+        foreach (var puff in puffs)
+        {
+            var particles = new ParticleSystem.Particle[128];
+            int count = puff.GetParticles(particles);
+            foreach (var particle in particles.Take(count))
+            {
+                Color tint = particle.startColor;
+                Assert.That(tint.r, Is.GreaterThan(.82f).And.LessThan(.94f));
+                Assert.That(tint.g, Is.GreaterThan(.78f));
+                Assert.That(tint.b, Is.GreaterThan(.85f).And.LessThan(1f));
+                if (tint.b > tint.r + .02f) lavenderParticles++;
+            }
+            puff.Simulate(.1f, false, false, false);
+        }
+        Assert.That(lavenderParticles, Is.GreaterThan(0), "Light lavender is mixed into the stone-colored dust.");
+        CaptureAuthoredApartmentSprinklers(link.Building, elevated ? "elevated-seismic-dust" : "normal-seismic-dust", rail.transform);
+        foreach (var puff in puffs) puff.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        CaptureAuthoredApartmentSprinklers(link.Building, elevated ? "elevated-seismic-seated" : "normal-seismic-seated");
         rail.SetInstalled(false);
         InvokeCity(rail, "AdvanceTransition", 0.4f);
-        foreach (var part in parts) PresentationField(part, "dustMultiplier", 1f);
+        PresentationField(rail, "dustMultiplier", 1f);
         rail.SetInstalled(true);
         InvokeCity(rail, "AdvanceTransition", 2f);
-        int baseDust = parts.Sum(part => ControlField<ParticleSystem>(part, "installationDust").particleCount);
-        Assert.That((float)enhancedDust / baseDust, Is.EqualTo(1.5f).Within(0.04f));
+        int baseDust = puffs.Sum(puff => puff.particleCount);
+        Assert.That((float)enhancedDust / baseDust, Is.EqualTo(2.25f).Within(0.04f));
     }
 }

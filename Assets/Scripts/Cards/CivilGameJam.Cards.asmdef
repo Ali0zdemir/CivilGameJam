@@ -1,6 +1,6 @@
 {
     "name": "CivilGameJam.Cards",
     "rootNamespace": "CivilGameJam.Cards",
-    "references": ["Unity.TextMeshPro", "UnityEngine.UI"],
+    "references": ["Unity.TextMeshPro", "UnityEngine.UI", "CivilGameJam.Presentation"],
     "autoReferenced": true
 }

@@ -117,11 +117,15 @@ public sealed partial class CardGamePlayModeTests
         var savedUI = UIIds(game);
         yield return new WaitForSecondsRealtime(0.45f);
         Assert.That(link.RailSystem.CurrentLift, Is.GreaterThan(0f));
-        Assert.That(link.Building.GetComponentsInChildren<Transform>().Any(child => child.name == "Roof_Sprinkler"), Is.True);
+        Assert.That(link.Building.GetComponent<ApartmentUpgradeModel>().HasFireProtection, Is.True);
+        AssertApartmentFireVisibility(link.Building.GetComponent<ApartmentUpgradeModel>(), true);
+        yield return new WaitForSecondsRealtime(1.05f);
+        Assert.That(link.Building.GetComponent<ApartmentUpgradeModel>().IsElevated, Is.True);
         for (int i = 0; i < models.Length; i++)
         {
-            Assert.That(models[i].transform.position.y, Is.GreaterThan(positions[i].y));
-            Assert.That(ControlField<MeshFilter>(models[i], "modelMesh").sharedMesh, Is.Not.SameAs(meshes[i]));
+            Assert.That(models[i].transform.position.y, Is.EqualTo(positions[i].y).Within(.0001f));
+            var renderers = new System.Collections.Generic.List<MeshRenderer>(); models[i].AppendRenderers(renderers);
+            Assert.That(renderers.Single().GetComponent<MeshFilter>().sharedMesh, Is.Not.SameAs(meshes[i]));
         }
         string directory = Path.GetFullPath(Path.Combine(Application.dataPath, "../Library/CardGameTestResults"));
         yield return CaptureCanvas(Path.Combine(directory, "house-city-upgrades-installed.png"));
@@ -133,6 +137,7 @@ public sealed partial class CardGamePlayModeTests
         Assert.That(link.FireProtection.IsInstalled || link.FireProtection.IsSpraying, Is.False);
         Assert.That(link.RailSystem.IsInstalled && link.FloodProtection.IsInstalled, Is.True);
         link.House.Release(UpgradeKind.Breakwater, false);
+        yield return new WaitForSecondsRealtime(1.15f);
         for (int i = 0; i < models.Length; i++)
             Assert.That(ControlField<MeshFilter>(models[i], "modelMesh").sharedMesh, Is.SameAs(meshes[i]));
         Assert.That(link.RailSystem.IsInstalled, Is.True);
@@ -140,13 +145,13 @@ public sealed partial class CardGamePlayModeTests
         yield return new WaitForSecondsRealtime(0.45f);
         for (int i = 0; i < models.Length; i++)
             Assert.That(Vector3.Distance(models[i].transform.position, positions[i]), Is.LessThan(0.0001f));
-        Assert.That(link.Building.GetComponentsInChildren<Transform>().Any(child => child.name == "Roof_Sprinkler"), Is.False);
+        Assert.That(link.Building.GetComponent<ApartmentUpgradeModel>().HasFireProtection, Is.False);
         Assert.That(UIIds(game), Is.EqualTo(savedUI));
         fire.StopFire();
     }
 
     [Test]
-    public void FourHouseFloodCardsActivateTheExistingCoastalBreakwaterAndRemovalDisablesIt()
+    public void ElevatorsProtectOnlyTheirApartmentsWithoutCreatingACoastalBreakwater()
     {
         var links = CityHouseLinks();
         var products = ProduceCityProducts(UpgradeKind.Breakwater, 2);
@@ -154,14 +159,14 @@ public sealed partial class CardGamePlayModeTests
         for (int i = 0; i < links.Length; i++)
         {
             Assert.That(links[i].House.TryInstall(products[i]), Is.True);
-            Assert.That(breakwater.IsActive, Is.EqualTo(i == links.Length - 1));
+            Assert.That(breakwater.IsActive, Is.False);
         }
-        Assert.That(breakwater.Transmission, Is.LessThan(1f));
+        Assert.That(breakwater.Transmission, Is.EqualTo(1f));
         links[2].House.Release(UpgradeKind.Breakwater, false);
         Assert.That(breakwater.IsActive, Is.False);
         Assert.That(breakwater.Transmission, Is.EqualTo(1f));
         Assert.That(links[2].House.TryInstall(products[2]), Is.True);
-        Assert.That(breakwater.IsActive, Is.True);
+        Assert.That(breakwater.IsActive, Is.False);
     }
 
     [Test]

@@ -73,8 +73,9 @@ namespace CivilGameJam
                     if (Interrupted) break;
                     if (!current.IsValid) { current = null; continue; }
                     current.Link.ApplyInstalled(current.Kind, current.Product);
-                    while (current.IsValid && current.Kind == UpgradeKind.RailSystem &&
-                           current.Link.RailSystem != null && current.Link.RailSystem.IsTransitioning && !Interrupted)
+                    while (current.IsValid && !Interrupted &&
+                           (current.Kind == UpgradeKind.RailSystem && current.Link.RailSystem != null && current.Link.RailSystem.IsTransitioning ||
+                            current.Kind == UpgradeKind.Breakwater && current.Link.FloodProtection != null && current.Link.FloodProtection.IsTransitioning))
                         yield return null;
                     for (float age = 0f; age < holdSeconds && current.IsValid && !Interrupted; age += Time.unscaledDeltaTime)
                         yield return null;
