@@ -28,6 +28,9 @@ public sealed partial class CardGamePlayModeTests
         var dock = game.GetComponent<CardDock>();
         dock.enabled = false;
         dock.SetExpanded(true, true);
+        // Mechanics tests advance work directly; presentation timing has its own integration tests.
+        var housePresentation = Object.FindFirstObjectByType<CivilGameJam.HouseUpgradePresentation>();
+        if (housePresentation != null) housePresentation.enabled = false;
         school = Station(CardKind.School);
         research = Station(CardKind.ResearchCenter);
         // Advance the same work loop explicitly so timing assertions do not depend on machine speed.

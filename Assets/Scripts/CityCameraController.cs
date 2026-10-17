@@ -57,11 +57,22 @@ namespace CivilGameJam
         private Vector2 previousPointer;
         private bool dragging;
         private bool initialized;
+        private bool presenting;
+        private bool returningFromPresentation;
+        private Vector2 presentationHomePan;
+        private float presentationHomeZoom;
+        private Vector3 presentationHomeCameraPosition;
+        private Vector2 presentationFromPan;
+        private float presentationFromZoom;
+        private float presentationSeconds;
+        private float presentationElapsed;
         private readonly Vector3[] viewportCorners = new Vector3[4];
 
         public Vector2 PanOffset => currentPan;
         public bool InputBlocked { get; set; }
         public RectTransform InputViewport => inputViewport;
+        public bool IsPresenting => presenting;
+        public bool IsFocusReady => presenting && !returningFromPresentation && presentationElapsed >= presentationSeconds;
         private float ProjectionScale => inputViewport == null ? 1f :
             Mathf.Max(1f, viewportReferenceAspect / Mathf.Max(0.01f, controlledCamera.aspect));
 
@@ -111,7 +122,7 @@ namespace CivilGameJam
         {
             if (!held) dragging = false;
             Rect inputRect = GetInputRect();
-            if (InputBlocked || !inputRect.Contains(position) || IsOverUI(position)) { dragging = false; return; }
+            if (presenting || InputBlocked || !inputRect.Contains(position) || IsOverUI(position)) { dragging = false; return; }
             if (pressed)
             {
                 dragging = !IsOverUI(position);
@@ -179,10 +190,66 @@ namespace CivilGameJam
         {
             targetPan = ClampPan(targetPan);
             targetZoom = ClampZoom(targetZoom);
+            if (presenting)
+            {
+                presentationElapsed += Mathf.Max(0f, deltaTime);
+                float t = Mathf.Clamp01(presentationElapsed / Mathf.Max(0.001f, presentationSeconds));
+                float smooth = t * t * t * (t * (t * 6f - 15f) + 10f);
+                currentPan = ClampPan(Vector2.Lerp(presentationFromPan, targetPan, smooth));
+                currentZoom = ClampZoom(Mathf.Lerp(presentationFromZoom, targetZoom, smooth));
+                ApplyCameraPose();
+                if (t >= 1f && returningFromPresentation) presenting = returningFromPresentation = false;
+                return;
+            }
             var blend = smoothingTime <= 0f ? 1f : 1f - Mathf.Exp(-Mathf.Max(0f, deltaTime) / smoothingTime);
             currentPan = ClampPan(Vector2.Lerp(currentPan, targetPan, blend));
             currentZoom = ClampZoom(Mathf.Lerp(currentZoom, targetZoom, blend));
             ApplyCameraPose();
+        }
+
+        public bool BeginPresentationFocus(Vector3 worldPoint, float zoomFactor, float seconds)
+        {
+            if (!isActiveAndEnabled || !Initialize()) return false;
+            if (!presenting)
+            {
+                presentationHomePan = currentPan;
+                presentationHomeZoom = currentZoom;
+                presentationHomeCameraPosition = controlledCamera.transform.position;
+            }
+            // Anchor a small zoom on the house, preserving the user's view for the return.
+            float zoom = ClampZoom(presentationHomeZoom / Mathf.Max(1f, zoomFactor));
+            float fraction = 1f - zoom / Mathf.Max(0.1f, presentationHomeZoom);
+            Vector3 offset = worldPoint - presentationHomeCameraPosition;
+            Vector3 worldPan = controlledCamera.transform.right * Vector3.Dot(offset, controlledCamera.transform.right) +
+                controlledCamera.transform.up * Vector3.Dot(offset, controlledCamera.transform.up);
+            Vector3 localPan = panRig.parent != null ? panRig.parent.InverseTransformVector(worldPan) : worldPan;
+            targetPan = ClampPan(presentationHomePan + new Vector2(localPan.x, localPan.y) * Mathf.Max(0f, fraction));
+            float alignmentChange = (presentationHomeZoom - zoom) * (ProjectionScale - 1f) *
+                (2f * viewportVerticalAlignment - 1f);
+            targetPan = ClampPan(targetPan - Vector2.up * alignmentChange);
+            targetZoom = zoom;
+            StartPresentationTween(seconds, false);
+            return true;
+        }
+
+        public void EndPresentationFocus(float seconds)
+        {
+            if (!presenting || !Initialize()) return;
+            targetPan = ClampPan(presentationHomePan);
+            targetZoom = ClampZoom(presentationHomeZoom);
+            StartPresentationTween(seconds, true);
+            if (seconds <= 0f) AdvanceNavigation(1f);
+        }
+
+        private void StartPresentationTween(float seconds, bool returning)
+        {
+            dragging = false;
+            presenting = true;
+            returningFromPresentation = returning;
+            presentationFromPan = currentPan;
+            presentationFromZoom = currentZoom;
+            presentationSeconds = Mathf.Max(0.001f, seconds);
+            presentationElapsed = 0f;
         }
 
         private void ApplyCameraPose()
@@ -222,13 +289,18 @@ namespace CivilGameJam
         public void ResetView()
         {
             if (!Application.isPlaying || !Initialize()) return;
+            presenting = returningFromPresentation = false;
             dragging = false;
             currentPan = targetPan = ClampPan(Vector2.zero);
             currentZoom = targetZoom = ClampZoom(homeZoom);
             ApplyCameraPose();
         }
 
-        private void OnDisable() => dragging = false;
+        private void OnDisable()
+        {
+            dragging = false;
+            if (presenting) EndPresentationFocus(0f);
+        }
         private void OnApplicationFocus(bool hasFocus) { if (!hasFocus) dragging = false; }
         private void OnApplicationPause(bool paused) { if (paused) dragging = false; }
 

@@ -7,7 +7,7 @@ using UnityEngine.UI;
 namespace CivilGameJam.Cards
 {
     public sealed class WorkerSlot : MonoBehaviour, IPointerDownHandler, IPointerUpHandler, IPointerClickHandler,
-        IBeginDragHandler, IDragHandler, IEndDragHandler
+        IBeginDragHandler, IDragHandler, IEndDragHandler, IPointerEnterHandler, IPointerExitHandler
     {
         [SerializeField] private BuildingStation station;
         [SerializeField] private int index;
@@ -24,6 +24,14 @@ namespace CivilGameJam.Cards
         [SerializeField] private Sprite normalPortrait;
         [SerializeField] private Sprite educatedPortrait;
         [Min(0.1f)] [SerializeField] private float entrySeconds = 0.5f;
+        [Header("Occupied worker hover")]
+        [Min(0f)] [SerializeField] private float hoverLift = 24f;
+        [Min(0.01f)] [SerializeField] private float hoverSeconds = 0.16f;
+        private Vector2 portraitRestPosition;
+        private float hoverOffset;
+        private float hoverVelocity;
+        private bool portraitPositionSaved;
+        private bool pointerInside;
         private DraggableCard draggedWorker;
         private DraggableCard currentWorker;
         private Coroutine entry;
@@ -38,9 +46,38 @@ namespace CivilGameJam.Cards
         public Image EntryImage => entryImage;
         public RectTransform VisibleWorkerRect => IsAnimating ? entryImage.rectTransform : portrait != null ? portrait.rectTransform : null;
 
+        private void SavePortraitPosition()
+        {
+            if (portraitPositionSaved || portrait == null) return;
+            portraitRestPosition = portrait.rectTransform.anchoredPosition;
+            portraitPositionSaved = true;
+        }
+
+        private void LateUpdate()
+        {
+            SavePortraitPosition();
+            if (!portraitPositionSaved) return;
+            var game = station != null && station.Card != null ? station.Card.Owner : null;
+            bool canHover = pointerInside && currentWorker != null && !IsAnimating && draggedWorker == null &&
+                game != null && !game.IsDraggingAnyCard && !game.IsChoosingBlueprint;
+            hoverOffset = Mathf.SmoothDamp(hoverOffset, canHover ? hoverLift : 0f, ref hoverVelocity,
+                hoverSeconds, Mathf.Infinity, Time.unscaledDeltaTime);
+            portrait.rectTransform.anchoredPosition = portraitRestPosition + Vector2.up * hoverOffset;
+        }
+
+        private void ResetHover()
+        {
+            SavePortraitPosition();
+            hoverOffset = hoverVelocity = 0f;
+            if (portraitPositionSaved && portrait != null) portrait.rectTransform.anchoredPosition = portraitRestPosition;
+        }
+
+        public void OnPointerEnter(PointerEventData eventData) => pointerInside = true;
+        public void OnPointerExit(PointerEventData eventData) => pointerInside = false;
+
         public void Refresh(DraggableCard worker)
         {
-            if (currentWorker != worker) CancelEntry();
+            if (currentWorker != worker) { CancelEntry(); ResetHover(); }
             currentWorker = worker;
             if (portrait != null)
             {
@@ -58,6 +95,7 @@ namespace CivilGameJam.Cards
         {
             if (portrait == null || entryImage == null || !isActiveAndEnabled) return;
             CancelEntry();
+            ResetHover();
             entryProgress = 0f;
             portrait.gameObject.SetActive(false);
             entryImage.sprite = portrait.sprite;
@@ -137,6 +175,8 @@ namespace CivilGameJam.Cards
             Quaternion rotation = source.rotation;
             float slideSeconds = (IsEntering ? Mathf.Max(0f, entryProgress - 0.62f) : 0.38f) * entrySeconds;
             CancelEntry();
+            // Capture the raised portrait first so clicking it never snaps back into the folder.
+            ResetHover();
             currentWorker = null;
             returningWorker = worker;
             portrait.gameObject.SetActive(false);
@@ -247,6 +287,8 @@ namespace CivilGameJam.Cards
 
         private void OnDisable()
         {
+            pointerInside = false;
+            ResetHover();
             CancelEntry();
             CancelExit(returningWorker);
         }

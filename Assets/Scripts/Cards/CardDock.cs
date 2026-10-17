@@ -19,9 +19,11 @@ namespace CivilGameJam.Cards
         private float fromExpansion;
         private float elapsed;
         private Vector2 layerSize;
+        private bool cityPresentation;
 
         public bool IsExpanded { get; private set; }
         public float Expansion => expansion;
+        public bool IsCityPresentationActive => cityPresentation;
         public RectTransform ActivationArea => activationArea;
         public float CollapsedCanvasHeight => panel == null ? 0f : Mathf.Min(collapsedHeight, panel.rect.height) * Mathf.Abs(panel.localScale.y);
 
@@ -64,13 +66,26 @@ namespace CivilGameJam.Cards
 
         public void TickPointer(Vector2 screenPosition, float deltaTime)
         {
-            bool locked = game.IsDraggingAnyCard || game.IsChoosingBlueprint || game.HasActiveCardAnimation;
-            SetExpanded(locked || ContainsPointer(screenPosition));
+            bool pointerInside = ContainsPointer(screenPosition);
+            bool directInteraction = game.IsDraggingAnyCard || game.IsChoosingBlueprint;
+            SetExpanded(directInteraction || (!cityPresentation && (game.HasActiveCardAnimation || pointerInside)));
             elapsed += Mathf.Max(0f, deltaTime);
             float t = Mathf.Clamp01(elapsed / Mathf.Max(0.01f, slideSeconds));
             t = t * t * t * (t * (t * 6f - 15f) + 10f);
             expansion = Mathf.Lerp(fromExpansion, IsExpanded ? 1f : 0f, t);
             ApplyPosition();
+        }
+
+        public void BeginCityPresentation()
+        {
+            cityPresentation = true;
+            SetExpanded(false, !isActiveAndEnabled);
+        }
+
+        public void EndCityPresentation()
+        {
+            if (!cityPresentation) return;
+            cityPresentation = false;
         }
 
         public void SetExpanded(bool value, bool immediate = false)

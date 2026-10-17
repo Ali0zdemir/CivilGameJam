@@ -30,12 +30,31 @@ public sealed class CardShowcaseEditModeTests
                 string path = AnimationUtility.CalculateTransformPath(mesh.transform, original);
                 var copy = imported.Find(path).GetComponent<MeshFilter>();
                 Assert.That(copy.sharedMesh, Is.SameAs(mesh.sharedMesh), path);
-                Assert.That(copy.transform.position, Is.EqualTo(mesh.transform.position), path);
                 Assert.That(copy.transform.rotation, Is.EqualTo(mesh.transform.rotation), path);
-                Assert.That(copy.transform.lossyScale, Is.EqualTo(mesh.transform.lossyScale), path);
+                // City groups move as a whole; the models and their internal layout keep their authored size.
+                if (mesh.transform.IsChildOf(original.Find("Buildings")))
+                {
+                    Assert.That(copy.transform.localPosition, Is.EqualTo(mesh.transform.localPosition), path);
+                    Assert.That(copy.transform.lossyScale, Is.EqualTo(mesh.transform.lossyScale), path);
+                }
                 Assert.That(copy.GetComponent<Renderer>().sharedMaterials, Is.EqualTo(mesh.GetComponent<Renderer>().sharedMaterials), path);
             }
             Assert.That(imported.Find("Buildings").childCount, Is.EqualTo(7));
+            foreach (Transform group in original.Find("Buildings"))
+            {
+                var copy = imported.Find("Buildings/" + group.name);
+                Assert.That(copy.localPosition.x, Is.EqualTo(group.localPosition.x));
+                Assert.That(copy.localPosition.y, Is.EqualTo(group.localPosition.y));
+                Assert.That(copy.localPosition.z, Is.EqualTo(group.localPosition.z * 1.152f).Within(0.0001f));
+            }
+            float addedDepth = 1.95f * (1.152f - 1f);
+            foreach (string name in new[] { "Continuous_Ground", "Island_Base" })
+            {
+                Assert.That(imported.Find("City_Environment/" + name).localScale.x,
+                    Is.EqualTo(original.Find("City_Environment/" + name).localScale.x));
+                Assert.That(imported.Find("City_Environment/" + name).localScale.z,
+                    Is.EqualTo(original.Find("City_Environment/" + name).localScale.z + addedDepth).Within(0.0001f));
+            }
         }
         finally { EditorSceneManager.CloseScene(source, true); }
     }

@@ -139,7 +139,7 @@ MonoBehaviour:
   m_Material: {fileID: 0}
   m_Color: {r: 0, g: 0, b: 0, a: 0}
   m_RaycastTarget: 1
-  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: -24}
   m_Maskable: 1
   m_OnCullStateChanged:
     m_PersistentCalls:
@@ -180,6 +180,8 @@ MonoBehaviour:
   normalPortrait: {fileID: 21300000, guid: 1a125be83f7faca4e8850721dbd51393, type: 3}
   educatedPortrait: {fileID: 21300000, guid: 376bc919052d1014489d52aaac4c6282, type: 3}
   entrySeconds: 0.5
+  hoverLift: 24
+  hoverSeconds: 0.16
 --- !u!1 &935524539752228877
 GameObject:
   m_ObjectHideFlags: 0
@@ -953,7 +955,7 @@ MonoBehaviour:
   m_Material: {fileID: 0}
   m_Color: {r: 0, g: 0, b: 0, a: 0}
   m_RaycastTarget: 1
-  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: -24}
   m_Maskable: 1
   m_OnCullStateChanged:
     m_PersistentCalls:
@@ -994,6 +996,8 @@ MonoBehaviour:
   normalPortrait: {fileID: 21300000, guid: 1a125be83f7faca4e8850721dbd51393, type: 3}
   educatedPortrait: {fileID: 21300000, guid: 376bc919052d1014489d52aaac4c6282, type: 3}
   entrySeconds: 0.5
+  hoverLift: 24
+  hoverSeconds: 0.16
 --- !u!1 &2109192395265433705
 GameObject:
   m_ObjectHideFlags: 0

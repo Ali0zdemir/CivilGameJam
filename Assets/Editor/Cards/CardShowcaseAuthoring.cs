@@ -50,6 +50,7 @@ namespace CivilGameJam.Cards.Editor
             }
             EditorSceneManager.CloseScene(source, true);
             sourceLighting.Apply();
+            CardCitySpacingAuthoring.Configure(world);
 
             // Retain the complete showcase tools for editing, with one active input system
             // and the card canvas owning the combined game's visible interface.
@@ -96,6 +97,7 @@ namespace CivilGameJam.Cards.Editor
             guardData.ApplyModifiedPropertiesWithoutUndo();
 
             CardShowcaseControlsAuthoring.Configure(game, viewport, world);
+            CardHouseUpgradeAuthoring.Configure(game, world);
 
             if (!EditorBuildSettings.scenes.Any(scene => scene.path == SourceScene))
                 EditorBuildSettings.scenes = EditorBuildSettings.scenes.Concat(new[] { new EditorBuildSettingsScene(SourceScene, true) }).ToArray();

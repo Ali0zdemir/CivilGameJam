@@ -10,6 +10,7 @@ namespace CivilGameJam.Cards
         private readonly DraggableCard[] installed = new DraggableCard[3];
         private CardGameController game;
         private DraggableCard card;
+        public event System.Action<HouseUpgrades, UpgradeKind> StateChanged;
         public DraggableCard Card => card;
         public bool IsInstalling => System.Array.Exists(slots, slot => slot.IsInstalling);
         public DraggableCard GetInstalled(UpgradeKind kind) => kind == UpgradeKind.None ? null : installed[(int)kind - 1];
@@ -17,6 +18,7 @@ namespace CivilGameJam.Cards
         {
             game = owner; card = building;
             for (int i = 0; i < slots.Length; i++) slots[i].ShowFilled(installed[i] != null);
+            StateChanged?.Invoke(this, UpgradeKind.None);
         }
         public bool CanAccept(DraggableCard upgrade) => game != null && !game.IsChoosingBlueprint && upgrade != null &&
             upgrade.Kind == CardKind.Upgrade && upgrade.UpgradeType != UpgradeKind.None && !upgrade.IsStored &&
@@ -30,6 +32,7 @@ namespace CivilGameJam.Cards
             upgrade.InstalledIn = this;
             slots[index].AnimateInstall(upgrade);
             upgrade.gameObject.SetActive(false);
+            StateChanged?.Invoke(this, upgrade.UpgradeType);
             return true;
         }
         public DraggableCard Release(UpgradeKind kind, bool animate = true)
@@ -46,6 +49,7 @@ namespace CivilGameJam.Cards
             slots[(int)kind - 1].ShowFilled(false);
             game.ReturnToTable(upgrade, origin, animate);
             if (animate) upgrade.MatchArtworkWidth(width, rotation);
+            StateChanged?.Invoke(this, kind);
             return upgrade;
         }
         public void Preview(DraggableCard upgrade)
