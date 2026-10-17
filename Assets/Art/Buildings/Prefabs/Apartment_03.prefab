@@ -805,6 +805,8 @@ GameObject:
   - component: {fileID: 3788929999367585809}
   - component: {fileID: 8719574118008618671}
   - component: {fileID: 8391006690597599393}
+  - component: {fileID: 8933236941006230345}
+  - component: {fileID: 2975059844193269372}
   m_Layer: 0
   m_Name: Apartment_03
   m_TagString: Untagged
@@ -985,6 +987,7 @@ MonoBehaviour:
   apartment: {fileID: 8719574118008618671}
   animationRoot: {fileID: 5046562576705045881}
   collapseAnimation: {fileID: 7400000, guid: 48777ed7f3709d44eba48ca24d76f5e9, type: 2}
+  collapseFeedback: {fileID: 2975059844193269372}
   parts:
   - body: {fileID: 4331311631329664703}
     attachments:
@@ -2688,3 +2691,145 @@ MeshFilter:
   m_CorrespondingSourceObject: {fileID: 1569891539336311317, guid: 4476f78a4f29e0040b317bb791c3473c, type: 3}
   m_PrefabInstance: {fileID: 7793027484626286458}
   m_PrefabAsset: {fileID: 0}
+--- !u!114 &8933236941006230345
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4726052575305312254}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7b0db75479fb4037bebcb9101fe266fe, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  apartment: {fileID: 8719574118008618671}
+  tsunamiCollapse: {fileID: 8391006690597599393}
+  collapseFeedback: {fileID: 2975059844193269372}
+  normal:
+    root: {fileID: 5046562576705045881}
+    collapse: {fileID: 7400000, guid: 8d5eb76466880404faa9560c4a30da3a, type: 2}
+    seismic: {fileID: 7400000, guid: 4a529bba2b39d2941809771501b6f17d, type: 2}
+    parts:
+    - body: {fileID: 4331311631329664703}
+      attachments:
+      - {fileID: 2984271993203299143}
+      - {fileID: 5082411213354225010}
+      - {fileID: 1858300350339593562}
+    - body: {fileID: 6294859492176326338}
+      attachments:
+      - {fileID: 5263658170424835197}
+      - {fileID: 5287429174718944510}
+      - {fileID: 6147984802702968707}
+    - body: {fileID: 1960406847807895322}
+      attachments:
+      - {fileID: 6219015920079153159}
+      - {fileID: 2206036237539628870}
+      - {fileID: 7260215156346128667}
+    - body: {fileID: 5968005257349723847}
+      attachments:
+      - {fileID: 7572912029303192557}
+      - {fileID: 6356559726766439274}
+      - {fileID: 2881558349975250922}
+    - body: {fileID: 435073766310578274}
+      attachments:
+      - {fileID: 4609845893486018161}
+      - {fileID: 2852039691354541083}
+      - {fileID: 4009580031148455381}
+    - body: {fileID: 1549249211037511612}
+      attachments:
+      - {fileID: 1768008146643989368}
+      - {fileID: 5244444720180001473}
+      - {fileID: 1490492153767341708}
+  elevated:
+    root: {fileID: 4731708696329818322}
+    collapse: {fileID: 7400000, guid: 9cf9ac3df42d6a442ab90459569f9a8f, type: 2}
+    seismic: {fileID: 7400000, guid: d26bce6b9afa02244948f54024336ba6, type: 2}
+    parts:
+    - body: {fileID: 1608865506338581258}
+      attachments:
+      - {fileID: 2984271993203299143}
+      - {fileID: 8304594227614024698}
+      - {fileID: 8201708368427630453}
+      - {fileID: 2338490247269206672}
+    - body: {fileID: 2877360279064087886}
+      attachments:
+      - {fileID: 5263658170424835197}
+      - {fileID: 7853912929825440778}
+      - {fileID: 6805858822823733458}
+      - {fileID: 6968930849865096401}
+    - body: {fileID: 1409284383450195333}
+      attachments:
+      - {fileID: 6219015920079153159}
+      - {fileID: 6093361136987162811}
+      - {fileID: 1419011852552864800}
+      - {fileID: 4458326022662166681}
+    - body: {fileID: 2726737532217439830}
+      attachments:
+      - {fileID: 7572912029303192557}
+      - {fileID: 7498328013764226380}
+      - {fileID: 5433548458385426643}
+      - {fileID: 2029427943074601121}
+    - body: {fileID: 6374289029011726593}
+      attachments:
+      - {fileID: 4609845893486018161}
+      - {fileID: 7055959138630363897}
+      - {fileID: 4476976502784952365}
+      - {fileID: 5713915330076983132}
+    - body: {fileID: 3386762524919247850}
+      attachments:
+      - {fileID: 1768008146643989368}
+      - {fileID: 7377111985767083619}
+      - {fileID: 993626061471410335}
+      - {fileID: 2891689772111640256}
+--- !u!4 &1409284383450195333 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 4310910012312346256, guid: c124e4ce652b6f645be160c9c076ab07, type: 3}
+  m_PrefabInstance: {fileID: 2908662898987416341}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &1608865506338581258 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 4471638858373533727, guid: c124e4ce652b6f645be160c9c076ab07, type: 3}
+  m_PrefabInstance: {fileID: 2908662898987416341}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &2726737532217439830 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 975860723023023427, guid: c124e4ce652b6f645be160c9c076ab07, type: 3}
+  m_PrefabInstance: {fileID: 2908662898987416341}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &2877360279064087886 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 1131470665148249691, guid: c124e4ce652b6f645be160c9c076ab07, type: 3}
+  m_PrefabInstance: {fileID: 2908662898987416341}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &3386762524919247850 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 530747372677499135, guid: c124e4ce652b6f645be160c9c076ab07, type: 3}
+  m_PrefabInstance: {fileID: 2908662898987416341}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &6374289029011726593 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 8082733621244942868, guid: c124e4ce652b6f645be160c9c076ab07, type: 3}
+  m_PrefabInstance: {fileID: 2908662898987416341}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &2975059844193269372
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4726052575305312254}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1274607c3d7240d88f505127c4ac87d0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  geometry: {fileID: 3788929999367585809}
+  cardFont: {fileID: 11400000, guid: 60e75f4c2ff43464d882249013bc23d0, type: 2}
+  constructionDustMaterial: {fileID: 2100000, guid: cf6dddf3937549718bf29db86caebbcb, type: 2}
+  popupSeconds: 3.4
+  popupRise: 1.1
+  popupFontSize: 4.6
+  popupStartOffset: -0.3
+  popupMaximumScale: 0.75
+  dustAmount: 1.4

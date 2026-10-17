@@ -12,6 +12,8 @@ namespace CivilGameJam.Disasters
         [SerializeField] private TsunamiTestController tsunami;
         [SerializeField] private Transform walkPoint;
         [SerializeField] private Transform afterEventPoint;
+        [SerializeField] private bool hideAtAfterEventPoint;
+        [SerializeField] private MonsterFootstepFeedback footstepFeedback;
         [SerializeField] private Transform leftLeg;
         [SerializeField] private Transform leftFoot;
         [SerializeField] private Transform leftArm;
@@ -36,6 +38,7 @@ namespace CivilGameJam.Disasters
         private bool started;
         private bool afterEventRoute;
         private float afterEventElapsed;
+        private int lastFootstep;
         private readonly Vector3[] initialFootOffsets = new Vector3[2];
 
         public float StepDuration => Mathf.Max(0.2f, stepDuration);
@@ -60,7 +63,8 @@ namespace CivilGameJam.Disasters
         public void CompleteWalk()
         {
             if (!started || afterEventRoute) BeginWalk();
-            SetWalkTime(WalkDuration);
+            ApplyWalkPose(WalkDuration);
+            lastFootstep = plannedSteps;
         }
 
         public void BeginWalk(bool preserveTsunami = false)
@@ -99,6 +103,7 @@ namespace CivilGameJam.Disasters
                 }
             }
             started = true;
+            lastFootstep = 0;
             SetWalkTime(0f);
         }
 
@@ -107,7 +112,12 @@ namespace CivilGameJam.Disasters
             if (!started || afterEventRoute || afterEventPoint == null || emergence == null || emergence.Model == null) return;
             var model = emergence.Model;
             var destination = model.parent.InverseTransformPoint(afterEventPoint.position);
-            if (Vector3.Distance(model.localPosition, destination) < 0.001f) return;
+            if (Vector3.Distance(model.localPosition, destination) < 0.001f)
+            {
+                afterEventRoute = true;
+                FinishAfterEventWalk();
+                return;
+            }
             // Keep the planted fire stance as the start of this route, including both feet.
             for (var side = 0; side < 2; side++)
             {
@@ -125,6 +135,7 @@ namespace CivilGameJam.Disasters
             afterEventRoute = true;
             IsWalkingAfterEvent = true;
             afterEventElapsed = 0f;
+            lastFootstep = 0;
         }
 
         public void StopAfterEventWalk() => IsWalkingAfterEvent = false;
@@ -139,10 +150,31 @@ namespace CivilGameJam.Disasters
             if (!IsWalkingAfterEvent) return;
             afterEventElapsed = Mathf.Min(afterEventElapsed + Mathf.Max(0f, deltaTime), AfterEventWalkDuration);
             SetWalkTime(afterEventElapsed);
-            if (afterEventElapsed >= AfterEventWalkDuration) IsWalkingAfterEvent = false;
+            if (afterEventElapsed >= AfterEventWalkDuration) FinishAfterEventWalk();
+        }
+
+        private void FinishAfterEventWalk()
+        {
+            IsWalkingAfterEvent = false;
+            if (hideAtAfterEventPoint && emergence != null && emergence.Model != null)
+                emergence.Model.gameObject.SetActive(false);
         }
 
         public void SetWalkTime(float seconds)
+        {
+            if (!started) return;
+            var completed = Mathf.Min(plannedSteps, Mathf.FloorToInt(Mathf.Clamp(seconds, 0f, plannedSteps * StepDuration) / StepDuration + .00001f));
+            if (footstepFeedback != null)
+                for (var step = lastFootstep + 1; step <= completed; step++)
+                {
+                    ApplyWalkPose(step * StepDuration);
+                    footstepFeedback.EmitFootfall((step & 1) == 1 ? leftFoot : rightFoot);
+                }
+            lastFootstep = completed;
+            ApplyWalkPose(seconds);
+        }
+
+        private void ApplyWalkPose(float seconds)
         {
             if (!started || emergence == null || emergence.Model == null) return;
             var time = Mathf.Clamp(seconds, 0f, plannedSteps * StepDuration) / StepDuration;
@@ -205,6 +237,8 @@ namespace CivilGameJam.Disasters
 
         public void CancelWalk()
         {
+            if (footstepFeedback != null) footstepFeedback.Clear();
+            lastFootstep = 0;
             if (!started) return;
             started = false;
             afterEventRoute = false;

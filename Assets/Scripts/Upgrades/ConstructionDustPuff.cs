@@ -55,10 +55,10 @@ namespace CivilGameJam.Upgrades
         }
 
         public static void Emit(ParticleSystem particles, Transform building, Bounds bounds, float amount,
-            float size, float lifetime, Random random, Vector3 worldOffset, IReadOnlyList<Vector3> origins = null, float lightening = 0f)
+            float size, float lifetime, Random random, Vector3 worldOffset, IReadOnlyList<Vector3> origins = null, float lightening = 0f, bool clearExisting = true)
         {
-            particles.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
-            particles.Play(true);
+            if (clearExisting) particles.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            if (!particles.isPlaying) particles.Play(true);
             var scale = building.lossyScale;
             var footprint = new Vector2(bounds.size.x * Mathf.Abs(scale.x), bounds.size.z * Mathf.Abs(scale.z));
             var sizeFactor = Mathf.Clamp(Mathf.Sqrt(footprint.x * footprint.y), 0.75f, 1.5f);

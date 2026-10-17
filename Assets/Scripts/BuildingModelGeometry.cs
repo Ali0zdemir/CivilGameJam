@@ -99,10 +99,13 @@ namespace CivilGameJam
             return !float.IsNegativeInfinity(highest);
         }
 
-        public void AppendRenderers(List<MeshRenderer> output)
+        public void AppendRenderers(List<MeshRenderer> output, bool includeInactiveVariants = false)
         {
-            if (IsCollection) { foreach (var part in parts) part.AppendRenderers(output); return; }
+            if (IsCollection) { foreach (var part in parts) part.AppendRenderers(output, includeInactiveVariants); return; }
             if (VisibleMesh != null && VisibleMesh.TryGetComponent<MeshRenderer>(out var renderer)) output.Add(renderer);
+            if (!includeInactiveVariants) return;
+            var other = VisibleMesh == modelMesh ? elevatedMesh : modelMesh;
+            if (other != null && other != VisibleMesh && other.TryGetComponent<MeshRenderer>(out var alternate)) output.Add(alternate);
         }
 
         public void AppendFoundationBounds(Transform relativeTo, List<Bounds> output)

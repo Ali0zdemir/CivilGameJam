@@ -81,6 +81,7 @@ namespace CivilGameJam
         private bool eventCentered;
         private Vector2 eventCenterPan;
         private float eventCenterSeconds;
+        private Transform[] eventOverviewSubjects;
         private readonly Vector3[] viewportCorners = new Vector3[4];
 
         public Vector2 PanOffset => currentPan;
@@ -91,6 +92,7 @@ namespace CivilGameJam
         }
         public bool IsEventCameraActive => eventFocusOwner != null;
         public RectTransform InputViewport => inputViewport;
+        public Rect OverviewViewportRect => GetOverviewViewportRect();
         public bool IsPresenting => presenting;
         public bool IsFocusReady => presenting && !returningFromPresentation && presentationElapsed >= presentationSeconds;
         private float ProjectionScale => inputViewport == null ? 1f :
@@ -300,6 +302,7 @@ namespace CivilGameJam
                 eventHomeZoom = presenting ? presentationHomeZoom : currentZoom;
             }
             presenting = returningFromPresentation = false;
+            eventOverviewSubjects = null;
             eventFocusOwner = owner;
             eventZoom = ClampZoom(eventHomeZoom / Mathf.Max(1f, zoomFactor));
             targetPan = EventFocusPan(worldPoint, eventZoom);
@@ -335,12 +338,80 @@ namespace CivilGameJam
             return true;
         }
 
-        private bool ProjectSubject(Transform subject, ref Vector2 minimum, ref Vector2 maximum)
+        public bool BeginEventOverview(Object owner, Transform[] subjects, float seconds)
+        {
+            if (!MeasureOverview(subjects, out var center, out var zoom)) return false;
+            controlledCamera.farClipPlane = Mathf.Max(controlledCamera.farClipPlane, 240f);
+            if (!BeginEventFocus(owner, center, 1f, seconds)) return false;
+            eventOverviewSubjects = subjects;
+            eventZoom = targetZoom = zoom;
+            targetPan = EventFocusPan(center, zoom, true);
+            return true;
+        }
+
+        public void TrackEventOverview(Object owner, Transform[] subjects, float responseSeconds)
+        {
+            if (eventFocusOwner != owner || eventReturning || !MeasureOverview(subjects, out var center, out var zoom)) return;
+            eventOverviewSubjects = subjects;
+            eventZoom = targetZoom = zoom;
+            targetPan = EventFocusPan(center, zoom, true);
+            eventTracking = true;
+            eventSeconds = Mathf.Max(.001f, responseSeconds);
+        }
+
+        private bool MeasureOverview(Transform[] subjects, out Vector3 center, out float zoom)
+        {
+            center = Vector3.zero; zoom = 0f;
+            if (subjects == null || !isActiveAndEnabled || !Initialize()) return false;
+            var minimum = Vector2.positiveInfinity; var maximum = Vector2.negativeInfinity;
+            var found = false;
+            foreach (var subject in subjects) found |= ProjectSubject(subject, ref minimum, ref maximum, true);
+            if (!found) return false;
+            var half = (maximum - minimum) * .5f;
+            var middle = (minimum + maximum) * .5f;
+            var safe = GetOverviewViewportRect();
+            zoom = Mathf.Max(closestZoom, Mathf.Max(half.y / safe.height,
+                half.x / (safe.width * Mathf.Max(.01f, controlledCamera.aspect))) / (.94f * ProjectionScale));
+            middle -= Vector2.Scale(safe.center - Vector2.one * .5f,
+                new Vector2(2f * zoom * ProjectionScale * controlledCamera.aspect, 2f * zoom * ProjectionScale));
+            center = controlledCamera.transform.position + controlledCamera.transform.right * middle.x + controlledCamera.transform.up * middle.y;
+            return true;
+        }
+
+        private Rect GetOverviewViewportRect()
+        {
+            var safe = Rect.MinMaxRect(.04f, .06f, .96f, .94f);
+            if (inputViewport == null || inputViewport.rect.height <= 1f) return safe;
+            var view = inputViewport.rect;
+            foreach (Transform child in inputViewport)
+            {
+                var rect = child as RectTransform;
+                if (rect == null || !rect.gameObject.activeInHierarchy || rect.rect.height > view.height * .45f) continue;
+                rect.GetWorldCorners(viewportCorners);
+                var minimum = Vector2.positiveInfinity; var maximum = Vector2.negativeInfinity;
+                foreach (var corner in viewportCorners)
+                {
+                    var point = (Vector2)inputViewport.InverseTransformPoint(corner);
+                    minimum = Vector2.Min(minimum, point); maximum = Vector2.Max(maximum, point);
+                }
+                if (maximum.x - minimum.x < view.width * .12f) continue;
+                var bottom = (minimum.y - view.yMin) / view.height;
+                var top = (maximum.y - view.yMin) / view.height;
+                var middle = (bottom + top) * .5f;
+                if (middle > .65f) safe.yMax = Mathf.Min(safe.yMax, bottom - .025f);
+                else if (middle < .35f) safe.yMin = Mathf.Max(safe.yMin, top + .025f);
+            }
+            safe.yMin = Mathf.Clamp(safe.yMin, .06f, .4f);
+            safe.yMax = Mathf.Clamp(safe.yMax, .6f, .94f);
+            return safe;
+        }
+
+        private bool ProjectSubject(Transform subject, ref Vector2 minimum, ref Vector2 maximum, bool includeInactive = false)
         {
             if (subject == null) return false;
             var found = false;
             var cameraTransform = controlledCamera.transform;
-            foreach (var renderer in subject.GetComponentsInChildren<MeshRenderer>())
+            foreach (var renderer in subject.GetComponentsInChildren<MeshRenderer>(includeInactive))
             {
                 if (!renderer.enabled) continue;
                 var bounds = renderer.localBounds;
@@ -454,6 +525,22 @@ namespace CivilGameJam
                 }
             }
             ApplyCameraPose();
+            if (eventTracking && eventOverviewSubjects != null && !eventReturning)
+            {
+                // Keep fast Inspector speed changes inside the frame while the pan catches up smoothly.
+                var minimum = Vector2.positiveInfinity; var maximum = Vector2.negativeInfinity;
+                foreach (var subject in eventOverviewSubjects) ProjectSubject(subject, ref minimum, ref maximum, true);
+                var safe = GetOverviewViewportRect();
+                var vertical = Mathf.Max(maximum.y / (2f * (safe.yMax - .5f)), -minimum.y / (2f * (.5f - safe.yMin)));
+                var horizontal = Mathf.Max(maximum.x / (2f * (safe.xMax - .5f)), -minimum.x / (2f * (.5f - safe.xMin))) /
+                    Mathf.Max(.01f, controlledCamera.aspect);
+                var requiredZoom = Mathf.Max(vertical, horizontal) / ProjectionScale;
+                if (requiredZoom > currentZoom)
+                {
+                    currentPan.y += (requiredZoom - currentZoom) * (ProjectionScale - 1f) * (2f * viewportVerticalAlignment - 1f);
+                    currentZoom = requiredZoom; ApplyCameraPose();
+                }
+            }
         }
 
         private static float SmootherStep(float t) => t * t * t * (t * (t * 6f - 15f) + 10f);

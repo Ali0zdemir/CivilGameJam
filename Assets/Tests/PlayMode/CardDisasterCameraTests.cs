@@ -21,12 +21,14 @@ public sealed partial class CardGamePlayModeTests
     }
 
     [UnityTest]
-    public IEnumerator TsunamiCameraAnticipatesFollowsHoldsLastTrackingViewAndSmoothlyRestoresThePlayerView()
+    public IEnumerator TsunamiCameraFramesTheWholeMovingWaveThenSmoothlyRestoresThePlayerView()
     {
         game.GetComponent<CardDock>().SetExpanded(false, true);
         var tsunami = Object.FindFirstObjectByType<TsunamiTestController>();
         var monster = Object.FindFirstObjectByType<SeaMonsterEmergence>();
         var navigation = Object.FindFirstObjectByType<CityCameraController>();
+        var wave = ControlField<AuthoredTsunamiWave>(tsunami, "authoredWave");
+        var camera = ControlField<Camera>(navigation, "controlledCamera");
         PresentationField(navigation, "targetPan", new Vector2(0.2f, -0.15f));
         PresentationField(navigation, "targetZoom", 5.5f);
         InvokeCity(navigation, "AdvanceNavigation", 2f);
@@ -45,7 +47,8 @@ public sealed partial class CardGamePlayModeTests
         float leadStart = monster.WaveReleaseDelay - lead;
         AdvanceTsunamiCamera(tsunami, navigation, leadStart + lead * 0.5f - ControlField<float>(tsunami, "sequenceElapsed"));
         float halfwayZoom = ControlField<float>(navigation, "currentZoom");
-        Assert.That(halfwayZoom, Is.LessThan(homeZoom).And.GreaterThan(homeZoom / 1.2f));
+        Assert.That(halfwayZoom, Is.GreaterThan(homeZoom).And.LessThan(ControlField<float>(navigation, "targetZoom")),
+            "The cinematic smoothly widens before the full-size wave appears.");
         Assert.That(tsunami.transform.Find("Tsunami_Water").gameObject.activeSelf, Is.False);
         AdvanceTsunamiCamera(tsunami, navigation, monster.WaveReleaseDelay - 0.06f - ControlField<float>(tsunami, "sequenceElapsed"));
         Vector2 oceanPan = navigation.PanOffset;
@@ -55,26 +58,25 @@ public sealed partial class CardGamePlayModeTests
         AdvanceTsunamiCamera(tsunami, navigation, monster.WaveReleaseDelay + Mathf.Min(0.8f, approach * 0.8f) - ControlField<float>(tsunami, "sequenceElapsed"));
         Assert.That(Vector2.Distance(navigation.PanOffset, oceanPan), Is.GreaterThan(Mathf.Min(0.4f, approach * ControlField<float>(tsunami, "waveSpeed") * 0.1f)),
             "The camera travels with the wave over the shortened shore approach.");
-        Assert.That(ControlField<float>(navigation, "currentZoom"), Is.EqualTo(homeZoom / 1.2f).Within(0.015f));
+        AssertOpaqueWaveInGameCamera(camera, wave, navigation.OverviewViewportRect);
         CaptureCityWorldFrame(Path.Combine(directory, "03-following-wave.png"));
 
         float landfall = monster.WaveReleaseDelay +
             (tsunami.CityBounds.min.z - ControlField<float>(tsunami, "startDistance")) / ControlField<float>(tsunami, "waveSpeed");
         AdvanceTsunamiCamera(tsunami, navigation, landfall - 0.02f - ControlField<float>(tsunami, "sequenceElapsed"));
-        Vector2 heldPan = navigation.PanOffset;
-        float heldZoom = ControlField<float>(navigation, "currentZoom");
-        InvokeCity(tsunami, "AdvanceTsunami", 0.04f);
-        InvokeCity(navigation, "AdvanceNavigation", 0.04f);
-        Assert.That(navigation.PanOffset, Is.EqualTo(heldPan), "Landfall must hold the last tracking view without another pan.");
+        Vector2 impactPan = navigation.PanOffset;
         AdvanceTsunamiCamera(tsunami, navigation, landfall + 0.9f - ControlField<float>(tsunami, "sequenceElapsed"));
-        Assert.That(navigation.PanOffset, Is.EqualTo(heldPan), "The camera must not reframe the city or keep drifting after tracking ends.");
-        Assert.That(ControlField<float>(navigation, "currentZoom"), Is.EqualTo(heldZoom));
+        Assert.That(Vector2.Distance(navigation.PanOffset, impactPan), Is.GreaterThan(.01f),
+            "Tracking continues after first landfall until the mesh reaches the second saved point.");
+        AssertOpaqueWaveInGameCamera(camera, wave, navigation.OverviewViewportRect);
         Assert.That(tsunami.FloodCoverage, Is.GreaterThan(0f));
         CaptureCityWorldFrame(Path.Combine(directory, "04-city-impact.png"));
         AdvanceTsunamiCamera(tsunami, navigation, tsunami.TestDuration - 0.2f - ControlField<float>(tsunami, "sequenceElapsed"));
         Assert.That(tsunami.IsRunning, Is.True);
-        Assert.That(navigation.PanOffset, Is.EqualTo(heldPan));
-        Assert.That(ControlField<float>(navigation, "currentZoom"), Is.EqualTo(heldZoom));
+        AssertOpaqueWaveInGameCamera(camera, wave, navigation.OverviewViewportRect);
+        Assert.That(wave.transform.localPosition, Is.EqualTo(wave.EndPosition));
+        Vector2 heldPan = navigation.PanOffset;
+        float heldZoom = ControlField<float>(navigation, "currentZoom");
         Assert.That(navigation.InputBlocked, Is.True, "Keep the view locked through the final runoff.");
 
         InvokeCity(tsunami, "AdvanceTsunami", 1f);
@@ -82,7 +84,7 @@ public sealed partial class CardGamePlayModeTests
         Assert.That(navigation.PanOffset, Is.EqualTo(heldPan), "The return must start without a cut.");
         InvokeCity(navigation, "AdvanceNavigation", 0.8f);
         Assert.That(navigation.InputBlocked, Is.True);
-        Assert.That(ControlField<float>(navigation, "currentZoom"), Is.GreaterThan(heldZoom).And.LessThan(homeZoom));
+        Assert.That(ControlField<float>(navigation, "currentZoom"), Is.LessThan(heldZoom).And.GreaterThan(homeZoom));
         InvokeCity(navigation, "AdvanceNavigation", 0.81f);
         Assert.That(navigation.IsEventCameraActive, Is.False);
         Assert.That(navigation.InputBlocked, Is.False);

@@ -9,7 +9,7 @@ using UnityEngine;
 public sealed class SeaMonsterTsunamiEditModeTests
 {
     [TestCase("Assets/2DCardScene.unity")]
-        public void MonsterAndSeaAreSavedOnTheNewIncomingSideBeforePlay(string path)
+    public void MonsterAndSeaAreSavedOnTheNewIncomingSideBeforePlay(string path)
     {
         var scene = EditorSceneManager.OpenScene(path);
         var tsunami = scene.GetRootGameObjects().SelectMany(root => root.GetComponentsInChildren<TsunamiTestController>()).Single();
@@ -48,7 +48,7 @@ public sealed class SeaMonsterTsunamiEditModeTests
         Assert.That(walk.AfterEventPoint, Is.Not.Null);
         Assert.That(walk.AfterEventPoint.name, Is.EqualTo("monsterWalkAfterEventPoint"));
         Assert.That(Vector3.Distance(tsunami.transform.InverseTransformPoint(walk.AfterEventPoint.position),
-            new Vector3(2.61f, 0.76f, 6.8f)), Is.LessThan(0.0001f), "Preserve the authored departure point in both scenes.");
+            new Vector3(0.006f, 0.046f, 3.934f)), Is.LessThan(0.0001f), "Preserve the card scene's authored departure point.");
         var earthquake = scene.GetRootGameObjects().SelectMany(root => root.GetComponentsInChildren<EarthquakeTestController>()).Single();
         var earthquakeData = new SerializedObject(earthquake);
         var navigation = scene.GetRootGameObjects().SelectMany(root => root.GetComponentsInChildren<CityCameraController>()).Single();

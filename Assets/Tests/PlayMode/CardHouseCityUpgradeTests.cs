@@ -131,6 +131,7 @@ public sealed partial class CardGamePlayModeTests
         yield return CaptureCanvas(Path.Combine(directory, "house-city-upgrades-installed.png"));
         var fire = Object.FindFirstObjectByType<FireTestController>();
         fire.StartFire();
+        AdvanceMonsterFireTo(fire, fire.SprinklerStartTime + .05f);
         yield return null;
         Assert.That(link.FireProtection.IsSpraying, Is.True);
         link.House.Release(UpgradeKind.Fire, false);
