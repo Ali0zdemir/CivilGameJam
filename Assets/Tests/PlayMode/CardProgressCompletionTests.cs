@@ -77,19 +77,21 @@ public sealed partial class CardGamePlayModeTests
     {
         var factory = FactoryWithWorkers(1, 0);
         var effect = CompletionFor(Station(CardKind.Factory));
-        var fill = (RectTransform)factory.transform.Find("ProgressBar/BlueProgress");
+        var fill = factory.transform.Find("ProgressBar/BlueProgress").GetComponent<Image>();
         factory.AdvanceWork(factory.ProductionSeconds + 0.01f);
         Assert.That(factory.PendingBlueprint, Is.Null);
         Assert.That(game.Cards.Count(card => card.Kind == CardKind.Upgrade), Is.EqualTo(2));
         Assert.That(effect.IsCompleting, Is.True);
         TickCompletion(effect, 0.3f);
         Assert.That(effect.GetComponent<CanvasGroup>().alpha, Is.LessThan(1f));
-        Assert.That(factory.TryInsertBlueprint(ResearchPlan(1)), Is.True);
+        var nextPlan = ResearchPlan(1);
+        Assert.That(Station(CardKind.Factory).TryAssign(People().First(person => person.CanStartWork && !person.IsStored)), Is.True);
+        Assert.That(factory.TryInsertBlueprint(nextPlan), Is.True);
         Assert.That(effect.IsCompleting, Is.False);
         Assert.That(effect.GetComponent<CanvasGroup>().alpha, Is.EqualTo(1f));
-        Assert.That(fill.anchorMax.x, Is.Zero);
+        Assert.That(BarProgress(fill), Is.Zero);
         factory.AdvanceWork(factory.ProductionSeconds * 0.027f);
-        Assert.That(fill.anchorMax.x, Is.EqualTo(0.027f).Within(0.00001f));
+        Assert.That(BarProgress(fill), Is.EqualTo(0.027f).Within(0.00001f));
         factory.AdvanceWork(factory.ProductionSeconds);
         AssertCompletionFlashAndFade(effect);
     }
@@ -99,16 +101,16 @@ public sealed partial class CardGamePlayModeTests
     {
         var effect = CompletionFor(school);
         school.TryAssign(People()[0]);
-        school.AdvanceWork(10f);
+        school.AdvanceWork(game.EducationSeconds * .4f);
         school.TryAssign(People().First(person => person.AssignedTo == null));
-        school.AdvanceWork(15.01f);
+        school.AdvanceWork(game.EducationSeconds * .6f + .01f);
         Assert.That(school.WorkerCount, Is.EqualTo(1));
         Assert.That(game.EducatedPeopleCount, Is.EqualTo(1));
-        var fill = (RectTransform)school.transform.Find("ProgressBar/BlueProgress");
-        Assert.That(fill.anchorMax.x, Is.EqualTo(1f));
+        var fill = school.transform.Find("ProgressBar/BlueProgress").GetComponent<Image>();
+        Assert.That(BarProgress(fill), Is.EqualTo(1f));
         TickCompletion(effect, effect.CompletionSeconds + 0.01f);
         Assert.That(effect.gameObject.activeSelf, Is.True);
-        Assert.That(fill.anchorMax.x, Is.EqualTo(school.GetEducationProgress(1)).Within(0.00001f));
+        Assert.That(BarProgress(fill), Is.EqualTo(school.GetEducationProgress(1)).Within(0.00001f));
         Assert.That(effect.GetComponent<CanvasGroup>().alpha, Is.Zero);
         TickCompletion(effect, 0.06f);
         Assert.That(effect.GetComponent<CanvasGroup>().alpha, Is.GreaterThan(0f).And.LessThan(1f));

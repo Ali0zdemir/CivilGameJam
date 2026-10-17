@@ -397,7 +397,10 @@ public sealed class CardSceneEditModeTests
         foreach (var card in cards.Where(c => c.IsBuilding))
         {
             Assert.That(card.Rect.sizeDelta, Is.EqualTo(example.Rect.sizeDelta), card.name);
-            Assert.That(card.Rect.localScale, Is.EqualTo(example.Rect.localScale), card.name);
+            var scale = card.Kind == CardKind.House
+                ? AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/HouseCard.prefab").GetComponent<RectTransform>().localScale
+                : example.Rect.localScale;
+            Assert.That(card.Rect.localScale, Is.EqualTo(scale), card.name);
             Assert.That(card.Rect.anchoredPosition, Is.EqualTo(Vector2.zero), card.name);
         }
         foreach (var card in cards.Where(c => c.IsPerson))

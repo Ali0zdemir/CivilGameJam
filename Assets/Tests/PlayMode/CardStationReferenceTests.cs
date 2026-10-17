@@ -57,7 +57,7 @@ public sealed partial class CardGamePlayModeTests
         factory.AdvanceWork(factory.ProductionSeconds + 0.01f);
         Assert.That(factory.PendingBlueprint, Is.Null);
         Assert.That(blueprint.StoredInVault, Is.SameAs(game.Vault));
-        Assert.That(station.WorkerCount, Is.EqualTo(1));
+        Assert.That(station.WorkerCount, Is.Zero);
         Assert.That(game.Cards.Count(card => card.Kind == CardKind.Upgrade), Is.EqualTo(2));
     }
 }

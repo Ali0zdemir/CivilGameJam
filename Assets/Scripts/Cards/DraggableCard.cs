@@ -14,6 +14,7 @@ namespace CivilGameJam.Cards
         [SerializeField] private CardKind kind;
         [SerializeField] private CardFeedback feedback;
         [SerializeField] private BuildingStation station;
+        [SerializeField] private CardDropTargetFeedback dropTargetFeedback;
         [SerializeField] private UpgradeKind upgradeType;
         [SerializeField] private Image newItemOutline;
         [Tooltip("Starting grid slot, numbered from 0. Use -1 for loose cards or automatic placement.")]
@@ -27,6 +28,7 @@ namespace CivilGameJam.Cards
         private Vector3 dragStartLocal;
         private Coroutine flight;
         private WorkerSlot returningFrom;
+        private FactoryFolderPresentation returningBlueprintFrom;
         private Transform flightSpace;
         private Vector3 flightOrigin;
         private Vector3 flightDestination;
@@ -34,10 +36,12 @@ namespace CivilGameJam.Cards
         private CardHover hover;
         private BlueprintDiscoveryEffects discoveryEffects;
         private HouseUpgrades houseUpgrades;
+        private FactoryProduction factory;
 
         public CardKind Kind => kind;
         public RectTransform Rect => rect != null ? rect : rect = (RectTransform)transform;
         public BuildingStation Station => station;
+        public CardDropTargetFeedback DropTargetFeedback => dropTargetFeedback;
         public UpgradeKind UpgradeType => upgradeType;
         public CardGameController Owner => game;
         public FactoryProduction StoredAtFactory { get; internal set; }
@@ -47,17 +51,37 @@ namespace CivilGameJam.Cards
         public int InitialGridCell => initialGridCell;
         public BuildingStation AssignedTo { get; internal set; }
         public bool IsDragging { get; private set; }
-        public bool IsFlying => flight != null || IsReturningFromFolder;
+        public bool IsMovingInGrid => game != null && game.Grid != null && game.Grid.IsMoving(this);
+        public bool IsFlying => flight != null || IsReturningFromFolder || returningBlueprintFrom != null;
         public bool IsReturningFromFolder => returningFrom != null;
         public bool IsNewProduct { get; private set; }
         public bool IsParkedInFactoryOutput { get; internal set; }
         public bool IsInstallingUpgrade => houseUpgrades != null && houseUpgrades.IsInstalling;
+        public bool IsStoringBlueprint => factory != null && factory.IsAnimatingBlueprint;
+        public bool UsedThisTurn { get; private set; }
+        public bool CanStartWork => IsPerson && !UsedThisTurn;
+
+        internal void UseForThisTurn()
+        {
+            if (!IsPerson) return;
+            UsedThisTurn = true;
+            RefreshAvailability();
+        }
+
+        private void RefreshAvailability()
+        {
+            if (canvasGroup == null) return;
+            canvasGroup.alpha = IsReturningFromFolder || returningBlueprintFrom != null ? 0f : UsedThisTurn ? .45f : 1f;
+            canvasGroup.interactable = !UsedThisTurn;
+            canvasGroup.blocksRaycasts = !IsReturningFromFolder && returningBlueprintFrom == null;
+        }
+
         public bool IsPerson => Kind == CardKind.Person || Kind == CardKind.EducatedPerson;
         public bool IsBuilding => Kind == CardKind.House || Kind == CardKind.School ||
             Kind == CardKind.Factory || Kind == CardKind.ResearchCenter;
         public Vector3 LayoutScale => feedback.LayoutScale;
-        public bool CanShowHover => game != null && !game.IsChoosingBlueprint && !IsDragging &&
-            !game.IsDraggingAnyCard && !IsStored && !IsFlying && !IsInstallingUpgrade && (station == null || !station.IsAnimatingWorkers);
+        public bool CanShowHover => game != null && !game.ActionsLocked && !game.IsChoosingBlueprint && !IsDragging &&
+            !game.IsDraggingAnyCard && !IsStored && !IsFlying && !IsMovingInGrid && !IsInstallingUpgrade && !IsStoringBlueprint && (station == null || !station.IsAnimatingWorkers);
         public Vector2 TablePosition => game != null
             ? (Vector2)game.CardLayer.InverseTransformPoint(flight != null
                 ? flightSpace.TransformPoint(flightDestination) : Rect.position) : Rect.anchoredPosition;
@@ -87,8 +111,10 @@ namespace CivilGameJam.Cards
             Rect.anchorMin = Rect.anchorMax = new Vector2(0.5f, 0.5f);
             Rect.position = position;
             if (station != null) station.Initialize(owner, this);
-            GetComponent<FactoryProduction>()?.Initialize(owner, this);
+            factory = GetComponent<FactoryProduction>();
+            factory?.Initialize(owner, this);
             GetComponent<HouseUpgrades>()?.Initialize(owner, this);
+            RefreshAvailability();
         }
 
         public void SetLayoutScale(Vector3 scale) => feedback.SetLayoutScale(scale);
@@ -106,7 +132,8 @@ namespace CivilGameJam.Cards
         public void OnPointerDown(PointerEventData eventData)
         {
             if (eventData.button != PointerEventData.InputButton.Left || pressed || IsDragging ||
-                IsStored || IsReturningFromFolder || game.IsChoosingBlueprint) return;
+                IsStored || UsedThisTurn || IsReturningFromFolder || game.IsChoosingBlueprint || game.ActionsLocked ||
+                houseUpgrades != null && houseUpgrades.IsDestroyed) return;
             pressed = true;
             pointerId = eventData.pointerId;
             AcknowledgeProduct();
@@ -127,7 +154,8 @@ namespace CivilGameJam.Cards
         public void OnBeginDrag(PointerEventData eventData)
         {
             if (eventData.button != PointerEventData.InputButton.Left || IsDragging ||
-                IsStored || IsReturningFromFolder || game.IsChoosingBlueprint ||
+                IsStored || UsedThisTurn || IsReturningFromFolder || game.IsChoosingBlueprint || game.ActionsLocked ||
+                houseUpgrades != null && houseUpgrades.IsDestroyed ||
                 (pressed && pointerId != eventData.pointerId)) return;
 
             // Closing an edge-clamped hover restores its layout position. Keep the visible
@@ -135,6 +163,7 @@ namespace CivilGameJam.Cards
             Vector3 visiblePosition = Rect.position;
             dragStartParent = Rect.parent;
             StopFlight();
+            game.Grid?.StopMoving(this);
             game.BeginCardDrag(this);
             hover?.CancelHover();
             dragStartLocal = Rect.localPosition;
@@ -184,8 +213,7 @@ namespace CivilGameJam.Cards
             feedback.EndDragMotion();
             game.EndCardDrag(this);
             pressed = false;
-            canvasGroup.blocksRaycasts = true;
-            canvasGroup.alpha = 1f;
+            RefreshAvailability();
             Vector3 dragStart = dragStartParent != null ? dragStartParent.TransformPoint(dragStartLocal) : Rect.position;
             game.FinishDrop(this, eventData.position, eventData.pressEventCamera, dragStart);
             if (AssignedTo != null)
@@ -202,13 +230,13 @@ namespace CivilGameJam.Cards
 
         private void OnDisable()
         {
+            game?.Grid?.StopMoving(this, true);
             StopFlight();
             pressed = false;
             IsDragging = false;
             game?.EndCardDrag(this);
             if (canvasGroup == null) return;
-            canvasGroup.blocksRaycasts = true;
-            canvasGroup.alpha = 1f;
+            RefreshAvailability();
         }
 
         public void FlyFrom(Vector3 origin, Vector3 destination)
@@ -236,9 +264,24 @@ namespace CivilGameJam.Cards
         {
             discoveryEffects?.StopEffects();
             if (returningFrom != null) returningFrom.CancelExit(this);
+            if (returningBlueprintFrom != null) returningBlueprintFrom.CancelReturn(this);
             if (flight == null) return;
             StopCoroutine(flight);
             flight = null;
+        }
+
+        internal void BeginBlueprintReturn(FactoryFolderPresentation source)
+        {
+            StopFlight();
+            returningBlueprintFrom = source;
+            RefreshAvailability();
+        }
+
+        internal void EndBlueprintReturn(FactoryFolderPresentation source)
+        {
+            if (returningBlueprintFrom != source) return;
+            returningBlueprintFrom = null;
+            RefreshAvailability();
         }
 
         internal void BeginFolderReturn(WorkerSlot source)
@@ -254,8 +297,7 @@ namespace CivilGameJam.Cards
         {
             if (returningFrom != source) return;
             returningFrom = null;
-            canvasGroup.alpha = 1f;
-            canvasGroup.blocksRaycasts = true;
+            RefreshAvailability();
         }
 
         private IEnumerator Fly()

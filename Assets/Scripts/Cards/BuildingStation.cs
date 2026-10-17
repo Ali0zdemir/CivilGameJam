@@ -18,6 +18,22 @@ namespace CivilGameJam.Cards
         [SerializeField] private ProgressBarFeedback progressFeedback;
         [SerializeField] private TextMeshProUGUI status;
         [SerializeField] private Outline dropOutline;
+        [Header("Ability points per worker, per operation")]
+        [SerializeField, Min(0)] private int normalAbilityPointCost = 4;
+        [SerializeField, Min(0)] private int educatedAbilityPointCost = 2;
+        [Header("Tsunami: AP per worker, per operation")]
+        [SerializeField, Min(0)] private int tsunamiNormalAbilityPointCost = 6;
+        [SerializeField, Min(0)] private int tsunamiEducatedAbilityPointCost = 3;
+        [Header("Fire: AP per worker, per operation")]
+        [SerializeField, Min(0)] private int fireNormalAbilityPointCost = 8;
+        [SerializeField, Min(0)] private int fireEducatedAbilityPointCost = 5;
+        private int pricingSequence = 1;
+        [SerializeField] private TMP_Text normalCostLabel;
+        [SerializeField] private TMP_Text educatedCostLabel;
+        [SerializeField] private AbilityPointCostFeedback normalCostFeedback;
+        [SerializeField] private AbilityPointCostFeedback educatedCostFeedback;
+        private readonly int[] reservedCosts = new int[Capacity];
+        private readonly float[] researchContributions = new float[Capacity];
 
         public float ResearchProgress { get; private set; }
         public bool AwaitingBlueprint { get; private set; }
@@ -27,6 +43,22 @@ namespace CivilGameJam.Cards
         public DraggableCard Card => card;
         public DraggableCard GetWorker(int index) => workers[index];
         public float GetEducationProgress(int index) => educationProgress[index];
+        public int AbilityPointCost(CardKind kind)
+        {
+            bool educated = kind == CardKind.EducatedPerson;
+            int cost = pricingSequence == 3 ? educated ? fireEducatedAbilityPointCost : fireNormalAbilityPointCost
+                : pricingSequence == 2 ? educated ? tsunamiEducatedAbilityPointCost : tsunamiNormalAbilityPointCost
+                : educated ? educatedAbilityPointCost : normalAbilityPointCost;
+            return Mathf.Max(0, cost);
+        }
+
+        public void UseSequencePrices(int sequenceNumber)
+        {
+            pricingSequence = Mathf.Clamp(sequenceNumber, 1, 3);
+            RefreshAbilityCostLabels();
+        }
+        public bool HasActiveWork => card != null && !AwaitingBlueprint && WorkerCount > 0 &&
+            (card.Kind == CardKind.School || card.Kind == CardKind.ResearchCenter && game != null && game.HasUndiscoveredBlueprints);
 
         public void Initialize(CardGameController owner, DraggableCard building)
         {
@@ -43,13 +75,16 @@ namespace CivilGameJam.Cards
                 progressFill = progressRoot.Find("BlueProgress")?.GetComponent<Image>();
             if (progressFeedback == null && progressRoot != null) progressFeedback = progressRoot.GetComponent<ProgressBarFeedback>();
             if (dropOutline != null) dropOutline.enabled = false;
+            RefreshAbilityCostLabels();
             RefreshView();
         }
 
-        public bool CanAccept(DraggableCard worker)
+        public bool CanAccept(DraggableCard worker) => CanAccept(worker, true);
+
+        private bool CanAccept(DraggableCard worker, bool requirePayment)
         {
-            return game != null && card != null && card.Kind != CardKind.House && worker != null && worker.IsPerson && worker.AssignedTo == null &&
-                   !AwaitingBlueprint && AvailableSlot(worker) >= 0 &&
+            return game != null && card != null && card.Kind != CardKind.House && worker != null && worker.Owner == game && worker.CanStartWork && worker.AssignedTo == null &&
+                   !game.ActionsLocked && !AwaitingBlueprint && AvailableSlot(worker) >= 0 && (!requirePayment || CanPayWorker(worker)) &&
                    (card.Kind != CardKind.ResearchCenter || game.HasUndiscoveredBlueprints) &&
                    (card.Kind != CardKind.School || worker.Kind == CardKind.Person);
         }
@@ -67,9 +102,46 @@ namespace CivilGameJam.Cards
 
         private WorkerSlot Indicator(int index) => indicators != null && index >= 0 && index < indicators.Length ? indicators[index] : null;
 
+        private int AdditionalCost(DraggableCard worker)
+        {
+            if (card.Kind == CardKind.Factory)
+            {
+                var factory = GetComponent<FactoryProduction>();
+                if (factory == null || factory.PendingBlueprint == null || factory.HasPaidFor(worker)) return 0;
+            }
+            return AbilityPointCost(worker.Kind);
+        }
+
+        private bool CanPayWorker(DraggableCard worker) => game.AbilityPoints == null || game.AbilityPoints.CanSpend(AdditionalCost(worker));
+
+        public string RejectionMessage(DraggableCard worker) => game != null && game.ActionsLocked ? "Wait until the disaster finishes." :
+            worker != null && worker.UsedThisTurn ? "This person has already worked this turn." :
+            worker != null && game != null && !CanPayWorker(worker) ? "Not enough AP: " + AdditionalCost(worker) + " AP required." :
+            "This building holds up to 2 workers.";
+
+        public void ShowInsufficientCost(CardKind workerKind)
+        {
+            (workerKind == CardKind.EducatedPerson ? educatedCostFeedback : normalCostFeedback)?.PlayDenied();
+        }
+
+        public void RefreshAbilityCostLabels()
+        {
+            if (normalCostLabel != null) normalCostLabel.text = AbilityPointCost(CardKind.Person) + " AP";
+            if (educatedCostLabel != null) educatedCostLabel.text = card != null && card.Kind == CardKind.School
+                ? "N/A" : AbilityPointCost(CardKind.EducatedPerson) + " AP";
+        }
+
+        private void OnValidate() => RefreshAbilityCostLabels();
+
         public bool TryAssign(DraggableCard worker)
         {
-            if (!CanAccept(worker) || game.IsChoosingBlueprint) return false;
+            if (game == null || game.IsChoosingBlueprint) return false;
+            if (!CanAccept(worker))
+            {
+                if (CanAccept(worker, false) && game.AbilityPoints != null && game.AbilityPoints.ReportInsufficient(AdditionalCost(worker)))
+                    ShowInsufficientCost(worker.Kind);
+                return false;
+            }
             Vector3 droppedPosition = worker.Rect.position;
             game.CloseInspection();
             worker.Rect.position = droppedPosition;
@@ -79,6 +151,10 @@ namespace CivilGameJam.Cards
             {
                 var slot = Indicator(i);
                 if (slot == null || workers[i] != null || slot.IsReturning) continue;
+                int cost = AdditionalCost(worker);
+                if (game.AbilityPoints != null && !game.AbilityPoints.TrySpend(cost)) return false;
+                if (card.Kind == CardKind.Factory) GetComponent<FactoryProduction>()?.RecordPayment(worker, cost);
+                else reservedCosts[i] = cost;
                 workers[i] = worker;
                 educationProgress[i] = 0f;
                 if (card.Kind != CardKind.Factory && progressFeedback != null)
@@ -99,9 +175,18 @@ namespace CivilGameJam.Cards
 
         public DraggableCard ReleaseWorker(int index, bool animate = true)
         {
-            if (index < 0 || index >= Capacity || game == null || game.IsChoosingBlueprint) return null;
+            if (index < 0 || index >= Capacity || game == null || game.IsChoosingBlueprint || game.ActionsLocked) return null;
             var worker = workers[index];
             if (worker == null) return null;
+            if (!worker.UsedThisTurn)
+            {
+                if (card.Kind == CardKind.Factory) GetComponent<FactoryProduction>()?.RefundWorker(worker);
+                else if (reservedCosts[index] > 0) game.AbilityPoints?.AddPoints(reservedCosts[index]);
+                // An unfinished worker's contribution is cancelled along with their AP charge.
+                researchContributions[index] = 0f;
+                ResearchProgress = Mathf.Clamp01(researchContributions[0] + researchContributions[1]);
+            }
+            reservedCosts[index] = 0;
             workers[index] = null;
             educationProgress[index] = 0f;
             worker.AssignedTo = null;
@@ -122,7 +207,7 @@ namespace CivilGameJam.Cards
         // Independent school timers preserve each student's own start time. Research combines worker rates.
         public void AdvanceWork(float seconds)
         {
-            if (game == null || card == null || seconds <= 0f || AwaitingBlueprint || card.Kind == CardKind.House) return;
+            if (game == null || game.ActionsLocked || card == null || seconds <= 0f || AwaitingBlueprint || card.Kind == CardKind.House) return;
             if (card.Kind == CardKind.School)
             {
                 bool graduated = false;
@@ -133,6 +218,8 @@ namespace CivilGameJam.Cards
                     if (educationProgress[i] < 1f) continue;
                     graduated = true;
                     var student = workers[i];
+                    reservedCosts[i] = 0;
+                    student.UseForThisTurn();
                     workers[i] = null;
                     educationProgress[i] = 0f;
                     student.AssignedTo = null;
@@ -147,13 +234,19 @@ namespace CivilGameJam.Cards
                 for (int i = 0; i < Capacity; i++)
                 {
                     if (workers[i] == null) continue;
-                    ResearchProgress += seconds / (workers[i].Kind == CardKind.EducatedPerson
+                    researchContributions[i] += seconds / (workers[i].Kind == CardKind.EducatedPerson
                         ? game.EducatedResearchSeconds : game.NormalResearchSeconds);
                 }
+                ResearchProgress = Mathf.Clamp01(researchContributions[0] + researchContributions[1]);
                 if (ResearchProgress >= 1f)
                 {
                     ResearchProgress = 1f;
                     AwaitingBlueprint = true;
+                    for (int i = 0; i < Capacity; i++)
+                    {
+                        if (workers[i] != null) workers[i].UseForThisTurn();
+                        reservedCosts[i] = 0;
+                    }
                     if (progressFeedback != null) progressFeedback.Complete();
                     game.ShowBlueprintChoice(this);
                 }
@@ -166,8 +259,32 @@ namespace CivilGameJam.Cards
             if (!AwaitingBlueprint) return;
             AwaitingBlueprint = false;
             ResearchProgress = 0f;
+            System.Array.Clear(researchContributions, 0, Capacity);
             for (int i = 0; i < Capacity; i++) ReleaseWorker(i);
             RefreshView();
+        }
+
+        // Turn reset discards old people without creating folder return animations.
+        public void ResetForNewTurn()
+        {
+            AwaitingBlueprint = false;
+            ResearchProgress = 0f;
+            for (int i = 0; i < Capacity; i++)
+            {
+                if (reservedCosts[i] > 0) game.AbilityPoints?.AddPoints(reservedCosts[i]);
+                reservedCosts[i] = 0;
+                researchContributions[i] = 0f;
+                if (workers[i] != null) workers[i].AssignedTo = null;
+                workers[i] = null;
+                educationProgress[i] = 0f;
+                Indicator(i)?.ResetForNewTurn();
+            }
+            RefreshView();
+        }
+
+        public void ReleaseAllWorkers()
+        {
+            for (int i = 0; i < Capacity; i++) ReleaseWorker(i);
         }
 
         public void PreviewAcceptance(DraggableCard worker)
@@ -200,15 +317,8 @@ namespace CivilGameJam.Cards
                     if (progressFill != null) CardUI.SetProgress(progressFill.rectTransform, progress);
                 }
             }
-            if (status == null) return;
-            if (AwaitingBlueprint) status.text = "Choose a blueprint";
-            else if (card.Kind == CardKind.ResearchCenter && game != null && !game.HasUndiscoveredBlueprints)
-                status.text = "All blueprints discovered";
-            else if (card.Kind == CardKind.School && WorkerCount > 0)
-                status.text = "Educating";
-            else if (card.Kind == CardKind.ResearchCenter && WorkerCount > 0)
-                status.text = "Researching";
-            else status.text = string.Empty;
+            // Progress is communicated by the saved bar, never an automatic status caption.
+            if (status != null) status.text = string.Empty;
         }
     }
 }

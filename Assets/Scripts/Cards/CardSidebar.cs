@@ -70,6 +70,8 @@ namespace CivilGameJam.Cards
             }
         }
 
+        internal void ForgetPosition(DraggableCard card) => rememberedPositions.Remove(card);
+
         public void TransferRememberedPosition(DraggableCard from, DraggableCard to)
         {
             if (!rememberedPositions.TryGetValue(from, out var position)) return;

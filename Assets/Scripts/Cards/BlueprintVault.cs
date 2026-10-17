@@ -17,7 +17,7 @@ namespace CivilGameJam.Cards
         public CardGameController Owner => game;
         public RectTransform Area => area;
         public IReadOnlyList<BlueprintVaultSlot> Slots => slots;
-        public bool CanDrag => game != null && !game.IsChoosingBlueprint && !game.IsDraggingAnyCard;
+        public bool CanDrag => game != null && !game.ActionsLocked && !game.IsChoosingBlueprint && !game.IsDraggingAnyCard;
         public bool IsDiscovered(UpgradeKind kind) => discoveries.Contains(kind);
         public int AvailableCount(UpgradeKind kind)
         {
@@ -41,9 +41,17 @@ namespace CivilGameJam.Cards
         }
 
         public bool Store(DraggableCard plan, Vector3? origin = null)
+            => Store(plan, origin, null);
+
+        internal bool StoreFromFactory(DraggableCard plan, FactoryFolderPresentation source)
+            => source != null && source.CanReturn && Store(plan, null, source);
+
+        private bool Store(DraggableCard plan, Vector3? origin, FactoryFolderPresentation source)
         {
             if (plan == null || plan.Owner != game || plan.Kind != CardKind.Blueprint || SlotFor(plan.UpgradeType) == null ||
                 (plan.IsStored && plan.StoredInVault != this)) return false;
+            // Capture before closing an edge-clamped building hover moves its folder.
+            var pose = source != null ? source.CaptureExitPose() : default;
             game.CloseInspection();
             CancelArrival(plan);
             plan.StopFlight();
@@ -51,7 +59,7 @@ namespace CivilGameJam.Cards
             bool firstDiscovery = discoveries.Add(plan.UpgradeType);
             plan.StoredInVault = this;
             var slot = SlotFor(plan.UpgradeType);
-            if (origin.HasValue)
+            if (origin.HasValue || source != null)
             {
                 slot.BeginArrival(firstDiscovery);
                 plan.Rect.SetParent(slot.transform, true);
@@ -59,7 +67,12 @@ namespace CivilGameJam.Cards
                 plan.gameObject.SetActive(true);
                 plan.Rect.SetAsLastSibling();
                 Vector3 destination = slot.CardRect.TransformPoint(slot.CardRect.rect.center);
-                plan.FlyFrom(origin.Value, destination);
+                if (source != null)
+                {
+                    plan.Rect.position = destination;
+                    source.AnimateReturn(plan, slot.CardRect, pose);
+                }
+                else plan.FlyFrom(origin.Value, destination);
                 arrivals.Add(plan, StartCoroutine(FinishArrival(plan, slot)));
             }
             else plan.gameObject.SetActive(false);
@@ -99,7 +112,8 @@ namespace CivilGameJam.Cards
 
         public DraggableCard Withdraw(DraggableCard plan)
         {
-            if (game.IsChoosingBlueprint || plan == null || plan.StoredInVault != this || !plans.Remove(plan)) return null;
+            if (game.IsChoosingBlueprint || game.ActionsLocked || plan == null || !game.CanUseBlueprint(plan.UpgradeType) ||
+                plan.StoredInVault != this || !plans.Remove(plan)) return null;
             CancelArrival(plan);
             plan.StoredInVault = null;
             plan.Rect.SetParent(game.CardLayer, true);
@@ -125,7 +139,21 @@ namespace CivilGameJam.Cards
                 .Overlaps(new Rect(position - size * 0.5f, size));
         }
 
-        private void Refresh()
+        internal void Forget(UpgradeKind kind)
+        {
+            for (int i = plans.Count - 1; i >= 0; i--)
+            {
+                var plan = plans[i];
+                if (plan == null || plan.UpgradeType != kind) continue;
+                CancelArrival(plan);
+                plan.StoredInVault = null;
+                plans.RemoveAt(i);
+            }
+            discoveries.Remove(kind);
+            Refresh();
+        }
+
+        internal void Refresh()
         {
             foreach (var slot in slots) slot.Refresh(IsDiscovered(slot.Kind), AvailableCount(slot.Kind));
         }

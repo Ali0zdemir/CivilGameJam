@@ -1,5 +1,5 @@
 {
     "name": "CivilGameJam.Integration",
-    "references": ["CivilGameJam.World", "CivilGameJam.Cards"],
+    "references": ["CivilGameJam.World", "CivilGameJam.Cards", "UnityEngine.UI", "Unity.TextMeshPro"],
     "autoReferenced": true
 }

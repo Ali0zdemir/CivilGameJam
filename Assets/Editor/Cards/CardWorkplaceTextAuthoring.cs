@@ -88,10 +88,16 @@ namespace CivilGameJam.Cards.Editor
                     : fromText.text;
                 Save(toText);
             }
-            CopyPresentation(reference.transform.Find("WorkStatus").GetComponent<TextMeshProUGUI>(),
-                target.transform.Find("WorkStatus").GetComponent<TextMeshProUGUI>());
+            var workStatus = target.transform.Find("WorkStatus");
+            if (workStatus != null)
+            {
+                workStatus.GetComponent<TextMeshProUGUI>().text = string.Empty;
+                workStatus.gameObject.SetActive(false);
+                Save(workStatus.gameObject);
+            }
             CopyPresentation(reference.transform.Find("FolderArt/WorkerCaption").GetComponent<TextMeshProUGUI>(),
                 folder.Find("WorkerCaption").GetComponent<TextMeshProUGUI>());
+            target.GetComponent<BuildingStation>()?.RefreshAbilityCostLabels();
         }
 
         private static void Save(Object target)

@@ -1,4 +1,5 @@
 using UnityEngine;
+using TMPro;
 using UnityEngine.UI;
 
 namespace CivilGameJam.Cards
@@ -10,9 +11,18 @@ namespace CivilGameJam.Cards
         private readonly DraggableCard[] installed = new DraggableCard[3];
         private CardGameController game;
         private DraggableCard card;
+        [SerializeField] private TMP_Text earthquakeDamageLabel;
+        public bool IsDestroyed { get; private set; }
+        public void SetDestroyed(bool destroyed)
+        {
+            IsDestroyed = destroyed;
+            if (earthquakeDamageLabel != null) earthquakeDamageLabel.gameObject.SetActive(destroyed);
+            var group = GetComponent<CanvasGroup>();
+            if (group != null) group.alpha = destroyed ? .48f : 1f;
+        }
         public event System.Action<HouseUpgrades, UpgradeKind> StateChanged;
         public DraggableCard Card => card;
-        public bool IsInstalling => System.Array.Exists(slots, slot => slot.IsInstalling);
+        public bool IsInstalling => System.Array.Exists(slots, slot => slot.IsAnimating);
         public DraggableCard GetInstalled(UpgradeKind kind) => kind == UpgradeKind.None ? null : installed[(int)kind - 1];
         public void Initialize(CardGameController owner, DraggableCard building)
         {
@@ -20,7 +30,7 @@ namespace CivilGameJam.Cards
             for (int i = 0; i < slots.Length; i++) slots[i].ShowFilled(installed[i] != null);
             StateChanged?.Invoke(this, UpgradeKind.None);
         }
-        public bool CanAccept(DraggableCard upgrade) => game != null && !game.IsChoosingBlueprint && upgrade != null &&
+        public bool CanAccept(DraggableCard upgrade) => game != null && !IsDestroyed && !game.ActionsLocked && !game.IsChoosingBlueprint && upgrade != null &&
             upgrade.Kind == CardKind.Upgrade && upgrade.UpgradeType != UpgradeKind.None && !upgrade.IsStored &&
             GetInstalled(upgrade.UpgradeType) == null;
         public bool TryInstall(DraggableCard upgrade)
@@ -37,7 +47,7 @@ namespace CivilGameJam.Cards
         }
         public DraggableCard Release(UpgradeKind kind, bool animate = true)
         {
-            if (game.IsChoosingBlueprint) return null;
+            if (game.IsChoosingBlueprint || game.ActionsLocked) return null;
             var upgrade = GetInstalled(kind);
             if (upgrade == null) return null;
             installed[(int)kind - 1] = null;
@@ -52,6 +62,17 @@ namespace CivilGameJam.Cards
             StateChanged?.Invoke(this, kind);
             return upgrade;
         }
+
+        internal void DiscardInstalled(DraggableCard upgrade)
+        {
+            if (upgrade == null || upgrade.UpgradeType == UpgradeKind.None || GetInstalled(upgrade.UpgradeType) != upgrade) return;
+            int index = (int)upgrade.UpgradeType - 1;
+            installed[index] = null;
+            upgrade.InstalledIn = null;
+            slots[index].ShowFilled(false);
+            StateChanged?.Invoke(this, upgrade.UpgradeType);
+        }
+
         public void Preview(DraggableCard upgrade)
         {
             outline.enabled = upgrade != null;

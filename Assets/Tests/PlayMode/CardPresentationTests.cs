@@ -95,10 +95,12 @@ public sealed partial class CardGamePlayModeTests
         var station = Station(CardKind.Factory);
         var factory = station.GetComponent<FactoryProduction>();
         factory.enabled = false;
-        station.TryAssign(People()[3]);
         for (int type = 0; type < 3; type++)
         {
-            factory.TryInsertBlueprint(ResearchPlan(type));
+            EnsurePresentationWorkers(2);
+            var plan = ResearchPlan(type);
+            Assert.That(station.TryAssign(People().First(person => person.CanStartWork && !person.IsStored)), Is.True);
+            factory.TryInsertBlueprint(plan);
             factory.AdvanceWork(factory.ProductionSeconds + 0.01f);
         }
         yield return null;

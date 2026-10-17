@@ -20,10 +20,12 @@ public sealed partial class CardGamePlayModeTests
         var station = Station(CardKind.Factory);
         var factory = station.GetComponent<FactoryProduction>();
         factory.enabled = false;
-        if (station.WorkerCount == 0) Assert.That(station.TryAssign(People().First(person => person.AssignedTo == null)), Is.True);
+        EnsurePresentationWorkers(game.Vault.IsDiscovered(kind) ? 1 : 2);
         var plan = ResearchPlan((int)kind - 1);
         for (int i = 0; i < batches; i++)
         {
+            EnsurePresentationWorkers(1);
+            Assert.That(station.TryAssign(People().First(person => person.CanStartWork && !person.IsStored)), Is.True);
             Assert.That(factory.TryInsertBlueprint(plan), Is.True);
             factory.AdvanceWork(factory.ProductionSeconds + 0.01f);
         }
@@ -114,6 +116,8 @@ public sealed partial class CardGamePlayModeTests
         var positions = models.Select(model => model.transform.position).ToArray();
         foreach (var kind in new[] { UpgradeKind.RailSystem, UpgradeKind.Breakwater, UpgradeKind.Fire })
             Assert.That(link.House.TryInstall(ProduceCityProducts(kind)[0]), Is.True);
+        // Turn replenishment retires the old people at the end of the setup frame.
+        yield return null;
         var savedUI = UIIds(game);
         yield return new WaitForSecondsRealtime(0.45f);
         Assert.That(link.RailSystem.CurrentLift, Is.GreaterThan(0f));

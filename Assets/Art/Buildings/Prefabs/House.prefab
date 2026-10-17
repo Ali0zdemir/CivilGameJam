@@ -1079,6 +1079,7 @@ GameObject:
   - component: {fileID: 3788929999367585809}
   - component: {fileID: 538975037537020119}
   - component: {fileID: 4426561051563634328}
+  - component: {fileID: 1260521755187814221}
   m_Layer: 0
   m_Name: House
   m_TagString: Untagged
@@ -2686,5 +2687,107 @@ MeshFilter:
 --- !u!33 &9148694493088967139 stripped
 MeshFilter:
   m_CorrespondingSourceObject: {fileID: 2127895803650915024, guid: c124e4ce652b6f645be160c9c076ab07, type: 3}
+  m_PrefabInstance: {fileID: 7165645779284775731}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &1260521755187814221
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4726052575305312254}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c3ad98aa23c649cc827312141b2cec9d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  apartment: {fileID: 538975037537020119}
+  towers:
+  - normalBody: {fileID: 914750146730377487}
+    elevatedBody: {fileID: 6737120092082651948}
+    surface: {fileID: 3253953834497005959}
+    normalAttachments:
+    - {fileID: 8512483350391624386}
+    - {fileID: 2981438758450916074}
+    elevatedAttachments:
+    - {fileID: 3304070047132528913}
+    - {fileID: 814594060027786826}
+  - normalBody: {fileID: 7490020305820168562}
+    elevatedBody: {fileID: 7837026746651403624}
+    surface: {fileID: 4495985832275621657}
+    normalAttachments:
+    - {fileID: 8775976638935272270}
+    - {fileID: 7347683305047300147}
+    elevatedAttachments:
+    - {fileID: 5864722580896679276}
+    - {fileID: 5834540711714157694}
+  - normalBody: {fileID: 3143217010656209066}
+    elevatedBody: {fileID: 6386685973828636067}
+    surface: {fileID: 8781202919998073127}
+    normalAttachments:
+    - {fileID: 3330230327095691510}
+    - {fileID: 6083034493073938091}
+    elevatedAttachments:
+    - {fileID: 6398488033606234397}
+    - {fileID: 4072122234404788462}
+  - normalBody: {fileID: 7095612231241148791}
+    elevatedBody: {fileID: 7997136156665896560}
+    surface: {fileID: 8568972487056626142}
+    normalAttachments:
+    - {fileID: 7538245084668650714}
+    - {fileID: 1681930216292759642}
+    elevatedAttachments:
+    - {fileID: 7125911433472586063}
+    - {fileID: 3782104131841980939}
+  - normalBody: {fileID: 3937133274752440274}
+    elevatedBody: {fileID: 1394673022314645799}
+    surface: {fileID: 8552231180343190407}
+    normalAttachments:
+    - {fileID: 1674857950393750443}
+    - {fileID: 508576186640607845}
+    elevatedAttachments:
+    - {fileID: 7688806846610814395}
+    - {fileID: 4152432135700258307}
+  - normalBody: {fileID: 2678016019121057804}
+    elevatedBody: {fileID: 7218402905322281932}
+    surface: {fileID: 4465916850212212072}
+    normalAttachments:
+    - {fileID: 8674551066629875057}
+    - {fileID: 2595615055474782524}
+    elevatedAttachments:
+    - {fileID: 2747135748574728452}
+    - {fileID: 4586693045443029034}
+  collapseSeconds: 2.2
+  towerDelay: 0.12
+  fallAngle: 78
+  settlingDepth: 0.06
+--- !u!4 &1394673022314645799 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 8082733621244942868, guid: c124e4ce652b6f645be160c9c076ab07, type: 3}
+  m_PrefabInstance: {fileID: 7165645779284775731}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &6386685973828636067 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 4310910012312346256, guid: c124e4ce652b6f645be160c9c076ab07, type: 3}
+  m_PrefabInstance: {fileID: 7165645779284775731}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &6737120092082651948 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 4471638858373533727, guid: c124e4ce652b6f645be160c9c076ab07, type: 3}
+  m_PrefabInstance: {fileID: 7165645779284775731}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &7218402905322281932 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 530747372677499135, guid: c124e4ce652b6f645be160c9c076ab07, type: 3}
+  m_PrefabInstance: {fileID: 7165645779284775731}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &7837026746651403624 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 1131470665148249691, guid: c124e4ce652b6f645be160c9c076ab07, type: 3}
+  m_PrefabInstance: {fileID: 7165645779284775731}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &7997136156665896560 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 975860723023023427, guid: c124e4ce652b6f645be160c9c076ab07, type: 3}
   m_PrefabInstance: {fileID: 7165645779284775731}
   m_PrefabAsset: {fileID: 0}

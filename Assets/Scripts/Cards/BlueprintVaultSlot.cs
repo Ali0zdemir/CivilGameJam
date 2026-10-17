@@ -40,9 +40,10 @@ namespace CivilGameJam.Cards
             quantity.gameObject.SetActive(visible);
             if (!preserveArtworkColors) background.color = discovered ? unlockedColor : lockedColor;
             icon.color = Color.white;
-            discovery.text = discovered ? "DISCOVERED" : string.Empty;
+            bool completed = discovered && !Owner.CanUseBlueprint(kind);
+            discovery.text = !discovered ? string.Empty : completed ? "COMPLETED" : "DISCOVERED";
             discovery.color = discovered ? new Color(0.96f, 0.75f, 0.39f) : new Color(0.48f, 0.58f, 0.59f);
-            quantity.text = !discovered ? string.Empty : available > 0 ? "Reusable · drag" : "In use";
+            quantity.text = !discovered ? string.Empty : completed ? kind == UpgradeKind.RailSystem ? "Earthquake complete" : "Tsunami complete" : available > 0 ? "Reusable · drag" : "In use";
         }
 
         public void OnPointerDown(PointerEventData data) { }

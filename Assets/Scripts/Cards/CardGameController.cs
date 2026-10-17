@@ -29,17 +29,29 @@ namespace CivilGameJam.Cards
         [SerializeField] private RectTransform choicePanel;
         [SerializeField] private BlueprintVault vault;
         [SerializeField] private CardSidebar sidebar;
+        [SerializeField] private AbilityPoints abilityPoints;
+        [Header("Saved drag destination outlines")]
+        [SerializeField] private CardDropTargetFeedback vaultDropTarget;
+        [SerializeField] private CardDropTargetFeedback peopleDropTarget;
+
+        [Header("Turn personnel")]
+        [SerializeField] private GameObject normalPersonPrefab;
+        [SerializeField, Min(1)] private int normalPeoplePerTurn = 4;
+        private readonly List<PersonPose> startingPeople = new List<PersonPose>();
+        private struct PersonPose { public Vector3 position, scale; public Vector2 size; }
 
         [Header("Gameplay rewards")]
         [SerializeField] private GameObject educatedPersonPrefab;
         [SerializeField] private BlueprintOption[] blueprints;
 
         [Header("Time in seconds (one worker)")]
-        [Min(0.1f)] [SerializeField] private float educationSeconds = 25f;
-        [Min(0.1f)] [SerializeField] private float normalResearchSeconds = 25f;
-        [Min(0.1f)] [SerializeField] private float educatedResearchSeconds = 15f;
+        [Min(0.1f)] [SerializeField] private float educationSeconds = 6.25f;
+        [Min(0.1f)] [SerializeField] private float normalResearchSeconds = 12.5f;
+        [Min(0.1f)] [SerializeField] private float educatedResearchSeconds = 7.5f;
 
         private readonly List<DraggableCard> cards = new List<DraggableCard>();
+        private readonly HashSet<UpgradeKind> newBlueprintsThisTurn = new HashSet<UpgradeKind>();
+        private readonly HashSet<UpgradeKind> completedBlueprints = new HashSet<UpgradeKind>();
         private Canvas canvas;
         private BuildingStation choosingStation;
         private float messageUntil;
@@ -53,24 +65,65 @@ namespace CivilGameJam.Cards
         public CardGrid Grid => grid;
         public BlueprintVault Vault => vault;
         public CardSidebar Sidebar => sidebar;
+        public AbilityPoints AbilityPoints => abilityPoints;
+        public bool ActionsLocked => abilityPoints != null && abilityPoints.ActionsLocked;
         public bool IsChoosingBlueprint => choosingStation != null;
         public bool HasUndiscoveredBlueprints
         {
             get
             {
                 foreach (var option in blueprints)
-                    if (!vault.IsDiscovered(option.prefab.GetComponent<DraggableCard>().UpgradeType)) return true;
+                    if (CanResearchBlueprint(option.prefab.GetComponent<DraggableCard>().UpgradeType)) return true;
                 return false;
             }
         }
         public bool IsDraggingAnyCard => draggedCard != null;
+        public bool CanUseBlueprint(UpgradeKind kind) => kind != UpgradeKind.None && !completedBlueprints.Contains(kind);
+        public bool CanResearchBlueprint(UpgradeKind kind) => CanUseBlueprint(kind) && !vault.IsDiscovered(kind);
+
+        public void CompleteBlueprint(UpgradeKind kind)
+        {
+            completedBlueprints.Add(kind);
+            CloseInspection();
+            vault.Refresh();
+        }
+
+        public void EndBlueprintTurn(bool discardNewDiscoveries)
+        {
+            if (discardNewDiscoveries)
+            {
+                CloseInspection();
+                foreach (var kind in newBlueprintsThisTurn)
+                {
+                    // An idle order can still hold a plan when READY is pressed.
+                    foreach (var card in cards)
+                    {
+                        var factory = card.GetComponent<FactoryProduction>();
+                        if (factory != null && factory.PendingBlueprint != null && factory.PendingBlueprint.UpgradeType == kind)
+                            factory.ResetForNewTurn();
+                    }
+                    vault.Forget(kind);
+                    for (int i = cards.Count - 1; i >= 0; i--)
+                    {
+                        var plan = cards[i];
+                        if (plan.Kind != CardKind.Blueprint || plan.UpgradeType != kind) continue;
+                        plan.StopFlight();
+                        cards.RemoveAt(i);
+                        plan.gameObject.SetActive(false);
+                        Destroy(plan.gameObject);
+                    }
+                }
+            }
+            newBlueprintsThisTurn.Clear();
+        }
         public DraggableCard DraggedCard => draggedCard;
         public bool HasActiveCardAnimation
         {
             get
             {
+                if (Grid != null && Grid.IsAnimating) return true;
                 foreach (var card in cards)
-                    if (card != null && ((card.Station != null && card.Station.IsAnimatingWorkers) || card.IsInstallingUpgrade)) return true;
+                    if (card != null && ((card.Station != null && card.Station.IsAnimatingWorkers) || card.IsInstallingUpgrade || card.IsStoringBlueprint)) return true;
                 return false;
             }
         }
@@ -102,6 +155,9 @@ namespace CivilGameJam.Cards
             {
                 card.Initialize(this);
                 cards.Add(card);
+                if (card.Kind == CardKind.Person && sidebar.PeopleArea != null)
+                    startingPeople.Add(new PersonPose { position = sidebar.PeopleArea.InverseTransformPoint(card.Rect.position),
+                        scale = card.LayoutScale, size = card.Rect.sizeDelta });
                 if (!card.IsBuilding) continue;
                 int cell = card.InitialGridCell >= 0 ? card.InitialGridCell : Grid.FindNearestAvailable(card, card.Rect.position);
                 if (!Grid.TryPlace(card, cell)) Grid.SnapToNearest(card);
@@ -113,7 +169,7 @@ namespace CivilGameJam.Cards
         {
             if (table == null || gridPanel == null || CardLayer == null || Grid == null ||
                 choicePanel == null || vault == null || sidebar == null ||
-                table.GetComponentInParent<Canvas>() == null || educatedPersonPrefab == null ||
+                table.GetComponentInParent<Canvas>() == null || educatedPersonPrefab == null || normalPersonPrefab == null ||
                 blueprints == null || blueprints.Length == 0)
             {
                 Debug.LogError("CardGameController: scene or card prefab references are missing.", this);
@@ -149,8 +205,19 @@ namespace CivilGameJam.Cards
             inspectedCard = null;
         }
 
-        public void BeginCardDrag(DraggableCard card) { CloseInspection(); draggedCard = card; }
-        public void EndCardDrag(DraggableCard card) { if (draggedCard == card) draggedCard = null; }
+        public void BeginCardDrag(DraggableCard card)
+        {
+            CloseInspection();
+            draggedCard = card;
+            RefreshDropTargets(card, null);
+        }
+
+        public void EndCardDrag(DraggableCard card)
+        {
+            if (draggedCard != card) return;
+            draggedCard = null;
+            if (this != null) ClearPreview();
+        }
 
         public BlueprintOption RecipeFor(UpgradeKind kind)
         {
@@ -204,7 +271,7 @@ namespace CivilGameJam.Cards
         public void FinishDrop(DraggableCard card, Vector2 screenPosition, Camera eventCamera, Vector3 dragStart)
         {
             ClearPreview();
-            if (IsChoosingBlueprint)
+            if (IsChoosingBlueprint || ActionsLocked)
             {
                 if (card.IsBuilding) Grid.SnapToNearest(card);
                 else RestoreRejectedDrop(card, dragStart);
@@ -212,7 +279,8 @@ namespace CivilGameJam.Cards
             }
             if (card.IsBuilding)
             {
-                Grid.SnapToNearest(card);
+                int target = BuildingDropCell(card, screenPosition, eventCamera, BuildingAt(screenPosition, eventCamera, card));
+                if (!Grid.TryPlaceOrSwap(card, target)) Grid.SnapToNearest(card);
                 return;
             }
 
@@ -227,7 +295,7 @@ namespace CivilGameJam.Cards
                         ? "All blueprints are discovered. Reuse them from the Vault." :
                         target.Station == null ? "This building does not accept workers." :
                         target.Kind == CardKind.School && card.Kind == CardKind.EducatedPerson
-                            ? "This person is already educated." : "This building holds up to 2 workers.");
+                            ? "This person is already educated." : target.Station.RejectionMessage(card));
                     return;
                 }
             }
@@ -243,7 +311,7 @@ namespace CivilGameJam.Cards
                     if (card.Kind == CardKind.Blueprint)
                     {
                         vault.Store(card, card.Rect.position);
-                        ShowMessage("Blueprint returned to the Vault. Drag it to the factory to produce items.");
+                        ShowMessage(factory != null ? factory.RejectionMessageFor(card) : "Blueprint returned to the Vault. Drag it to the factory to produce items.");
                         return;
                     }
                     RestoreRejectedDrop(card, dragStart);
@@ -266,20 +334,27 @@ namespace CivilGameJam.Cards
 
         public void PreviewDrop(DraggableCard card, Vector2 screenPosition, Camera eventCamera)
         {
-            ClearPreview();
-            if (card.IsBuilding) Grid.SetPreview(Grid.FindNearestAvailable(card, card.Rect.position));
-            else if (card.IsPerson) BuildingAt(screenPosition, eventCamera)?.Station?.PreviewAcceptance(card);
-            else if (card.Kind == CardKind.Blueprint) BuildingAt(screenPosition, eventCamera)?.GetComponent<FactoryProduction>()?.Preview(card);
-            else if (card.Kind == CardKind.Upgrade) BuildingAt(screenPosition, eventCamera)?.GetComponent<HouseUpgrades>()?.Preview(card);
+            if (card == null) { ClearPreview(); return; }
+            var hovered = BuildingAt(screenPosition, eventCamera, card);
+            Grid.SetPreview(card.IsBuilding ? BuildingDropCell(card, screenPosition, eventCamera, hovered) : -1);
+            RefreshDropTargets(card, hovered);
         }
 
-        private DraggableCard BuildingAt(Vector2 screenPosition, Camera eventCamera)
+        private int BuildingDropCell(DraggableCard card, Vector2 screenPosition, Camera eventCamera, DraggableCard hovered)
+        {
+            int occupiedCell = Grid.IndexOf(hovered);
+            if (occupiedCell >= 0) return occupiedCell;
+            return RectTransformUtility.RectangleContainsScreenPoint(Grid.rectTransform, screenPosition, eventCamera)
+                ? Grid.FindNearestCell(card.Rect.position) : Grid.FindNearestAvailable(card, card.Rect.position);
+        }
+
+        private DraggableCard BuildingAt(Vector2 screenPosition, Camera eventCamera, DraggableCard ignored = null)
         {
             DraggableCard best = null;
             float nearest = float.PositiveInfinity;
             foreach (var card in cards)
             {
-                if (!card.IsBuilding || !card.gameObject.activeSelf || card.IsDragging ||
+                if (card == ignored || !card.IsBuilding || !card.gameObject.activeSelf || card.IsDragging ||
                     !RectTransformUtility.RectangleContainsScreenPoint(card.Rect, screenPosition, eventCamera)) continue;
                 Vector2 center = RectTransformUtility.WorldToScreenPoint(eventCamera, card.Rect.TransformPoint(card.Rect.rect.center));
                 float distance = (screenPosition - center).sqrMagnitude;
@@ -288,12 +363,31 @@ namespace CivilGameJam.Cards
             return best;
         }
 
+        private void RefreshDropTargets(DraggableCard incoming, DraggableCard hovered)
+        {
+            bool canDrop = incoming != null && !ActionsLocked && !IsChoosingBlueprint;
+            foreach (var target in cards)
+            {
+                if (target == null || !target.IsBuilding || target.DropTargetFeedback == null) continue;
+                bool valid = canDrop && target != incoming && target.gameObject.activeInHierarchy && !target.IsDragging &&
+                    (incoming.IsPerson ? target.Station != null && target.Station.CanAccept(incoming)
+                    : incoming.Kind == CardKind.Blueprint ? target.GetComponent<FactoryProduction>()?.CanAccept(incoming) == true
+                    : incoming.Kind == CardKind.Upgrade && target.GetComponent<HouseUpgrades>()?.CanAccept(incoming) == true);
+                target.DropTargetFeedback.SetAvailable(valid, target == hovered);
+            }
+            vaultDropTarget?.SetAvailable(canDrop && incoming.Kind == CardKind.Blueprint && incoming.Owner == this &&
+                !incoming.IsStored && vault.SlotFor(incoming.UpgradeType) != null);
+            peopleDropTarget?.SetAvailable(canDrop && incoming.IsPerson && incoming.Owner == this && !incoming.IsStored);
+        }
+
         private void ClearPreview()
         {
-            Grid.SetPreview(-1);
-            foreach (var card in cards) card.Station?.PreviewAcceptance(null);
+            RefreshDropTargets(null, null);
+            if (Grid != null) Grid.SetPreview(-1);
+            foreach (var card in cards) if (card != null) card.Station?.PreviewAcceptance(null);
             foreach (var card in cards)
             {
+                if (card == null) continue;
                 card.GetComponent<FactoryProduction>()?.Preview(null);
                 card.GetComponent<HouseUpgrades>()?.Preview(null);
             }
@@ -354,6 +448,57 @@ namespace CivilGameJam.Cards
             ReturnToTable(educated, schoolPosition, animate);
             ShowMessage("Education complete: 1 person became educated.");
             return educated;
+        }
+
+        public void DiscardUpgrades(UpgradeKind kind)
+        {
+            CloseInspection();
+            for (int i = cards.Count - 1; i >= 0; i--)
+            {
+                var product = cards[i];
+                if (product.Kind != CardKind.Upgrade || product.UpgradeType != kind) continue;
+                product.InstalledIn?.DiscardInstalled(product);
+                product.StopFlight();
+                cards.RemoveAt(i);
+                product.gameObject.SetActive(false);
+                Destroy(product.gameObject);
+            }
+        }
+
+        public void ResetTurnPeople()
+        {
+            CloseInspection();
+            // Cancel jobs first so no station or saved animation retains a retired person.
+            foreach (var card in cards)
+            {
+                card.GetComponent<FactoryProduction>()?.ResetForNewTurn();
+                card.Station?.ResetForNewTurn();
+            }
+            for (int i = cards.Count - 1; i >= 0; i--)
+            {
+                var person = cards[i];
+                if (!person.IsPerson) continue;
+                person.StopFlight();
+                person.AssignedTo = null;
+                sidebar.ForgetPosition(person);
+                cards.RemoveAt(i);
+                person.gameObject.SetActive(false);
+                Destroy(person.gameObject);
+            }
+            for (int i = 0; i < Mathf.Max(1, normalPeoplePerTurn); i++)
+            {
+                var person = Spawn(normalPersonPrefab);
+                if (i < startingPeople.Count && sidebar.PeopleArea != null)
+                {
+                    var pose = startingPeople[i];
+                    person.Rect.SetParent(sidebar.PeopleArea, false);
+                    person.Rect.sizeDelta = pose.size;
+                    person.SetLayoutScale(pose.scale);
+                    sidebar.TrySnap(person, sidebar.PeopleArea.TransformPoint(pose.position));
+                }
+                else ReturnToTable(person, sidebar.transform.position, false);
+            }
+            RefreshPopulation();
         }
 
         private Vector2 FindFreePosition(DraggableCard incoming)
@@ -446,10 +591,11 @@ namespace CivilGameJam.Cards
             ClearPreview();
             foreach (var option in blueprints)
             {
-                bool discovered = vault.IsDiscovered(option.prefab.GetComponent<DraggableCard>().UpgradeType);
-                option.button.interactable = !discovered;
+                var kind = option.prefab.GetComponent<DraggableCard>().UpgradeType;
+                bool discovered = vault.IsDiscovered(kind);
+                option.button.interactable = CanResearchBlueprint(kind);
                 var label = option.button.transform.Find("Name")?.GetComponent<TextMeshProUGUI>();
-                if (label != null) label.text = option.title + (discovered ? "\nDISCOVERED" : string.Empty);
+                if (label != null) label.text = option.title + (!CanUseBlueprint(kind) ? "\nCOMPLETED" : discovered ? "\nDISCOVERED" : string.Empty);
             }
             choicePanel.SetAsLastSibling();
             choicePanel.gameObject.SetActive(true);
@@ -458,11 +604,13 @@ namespace CivilGameJam.Cards
         public void SelectBlueprint(int index)
         {
             if (!IsChoosingBlueprint || index < 0 || index >= blueprints.Length) return;
-            if (vault.IsDiscovered(blueprints[index].prefab.GetComponent<DraggableCard>().UpgradeType)) return;
+            var kind = blueprints[index].prefab.GetComponent<DraggableCard>().UpgradeType;
+            if (!CanResearchBlueprint(kind)) return;
             var station = choosingStation;
             choosingStation = null;
             choicePanel.gameObject.SetActive(false);
             var blueprint = Spawn(blueprints[index].prefab);
+            newBlueprintsThisTurn.Add(kind);
             vault.Store(blueprint, station.Card.Rect.position);
             station.FinishResearch();
             blueprint.GetComponent<BlueprintDiscoveryEffects>()?.BeginDiscovery();
@@ -478,6 +626,8 @@ namespace CivilGameJam.Cards
 
         private void LateUpdate()
         {
+            // Re-evaluate affordability and free slots even while the mouse is stationary.
+            if (draggedCard != null) RefreshDropTargets(draggedCard, BuildingAt(Input.mousePosition, null));
             if (hint == null) return;
             if (messageUntil > 0f && Time.unscaledTime > messageUntil)
             {

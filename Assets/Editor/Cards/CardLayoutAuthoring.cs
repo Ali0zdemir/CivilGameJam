@@ -10,6 +10,57 @@ namespace CivilGameJam.Cards.Editor
     // Applies the scene's hand-edited examples once, then saves ordinary scene objects and prefabs.
     public static class CardLayoutAuthoring
     {
+        [MenuItem("Tools/Card Game/Enlarge Houses By Two Percent And Align Grid")]
+        public static void EnlargeHousesAndAlignGridForBatch()
+        {
+            if (EditorApplication.isPlayingOrWillChangePlaymode)
+                throw new InvalidOperationException("Save the house layout in Edit Mode.");
+            var scene = EditorSceneManager.OpenScene("Assets/2DCardScene.unity");
+            var game = UnityEngine.Object.FindFirstObjectByType<CardGameController>();
+            Canvas.ForceUpdateCanvases();
+            var buildings = game.Grid.GetComponentsInChildren<DraggableCard>().Where(card => card.IsBuilding).ToArray();
+            var houses = buildings.Where(card => card.Kind == CardKind.House).ToArray();
+            var scales = houses.Select(card => card.Rect.localScale).ToArray();
+            var first = game.Grid.GetCell(0);
+            float gap = game.Grid.GetCell(1).anchoredPosition.x - first.anchoredPosition.x - first.rect.width;
+            float top = -first.anchoredPosition.y - first.rect.height * .5f;
+            const string path = "Assets/Prefabs/HouseCard.prefab";
+            var prefab = PrefabUtility.LoadPrefabContents(path);
+            try
+            {
+                prefab.GetComponent<RectTransform>().localScale = scales[0] * 1.02f;
+                PrefabUtility.SaveAsPrefabAsset(prefab, path);
+            }
+            finally { PrefabUtility.UnloadPrefabContents(prefab); }
+            for (int i = 0; i < houses.Length; i++)
+            {
+                houses[i].Rect.localScale = scales[i] * 1.02f;
+                PrefabUtility.RecordPrefabInstancePropertyModifications(houses[i].Rect);
+            }
+            Vector2 size = Vector2.zero;
+            foreach (var card in buildings) size = Vector2.Max(size, Vector2.Scale(card.Rect.rect.size, card.Rect.localScale));
+            for (int i = 0; i < CardGrid.CellCount; i++)
+            {
+                var cell = game.Grid.GetCell(i);
+                cell.anchorMin = cell.anchorMax = new Vector2(.5f, 1f);
+                cell.pivot = new Vector2(.5f, .5f);
+                cell.sizeDelta = size;
+                cell.anchoredPosition = new Vector2((i % CardGrid.Columns - (CardGrid.Columns - 1) * .5f) * (size.x + gap),
+                    -top - size.y * .5f - i / CardGrid.Columns * (size.y + gap));
+            }
+            foreach (var card in buildings)
+            {
+                card.Rect.anchorMin = card.Rect.anchorMax = new Vector2(.5f, .5f);
+                card.Rect.anchoredPosition = Vector2.zero;
+                PrefabUtility.RecordPrefabInstancePropertyModifications(card.Rect);
+            }
+            Canvas.ForceUpdateCanvases();
+            EditorSceneManager.MarkSceneDirty(scene);
+            EditorSceneManager.SaveScene(scene);
+            AssetDatabase.SaveAssets();
+            Debug.Log("Saved houses at 102 percent of their prior scale, centered 4x2 cells and equal gaps of " + gap + ". Cell size: " + size);
+        }
+
         public static void ApplySavedExamplesForBatch()
         {
             EditorSceneManager.OpenScene("Assets/2DCardScene.unity");

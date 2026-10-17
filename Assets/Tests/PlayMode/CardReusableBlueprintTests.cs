@@ -50,10 +50,10 @@ public sealed partial class CardGamePlayModeTests
         var factory = station.GetComponent<FactoryProduction>();
         factory.enabled = false;
         var worker = People().First(p => p.AssignedTo == null);
-        Assert.That(station.TryAssign(worker), Is.True);
         int identity = plan.GetInstanceID();
         for (int order = 1; order <= 3; order++)
         {
+            Assert.That(station.TryAssign(People().First(p => p.CanStartWork && !p.IsStored)), Is.True);
             Assert.That(factory.TryInsertBlueprint(plan), Is.True);
             Assert.That(game.Vault.AvailableCount(UpgradeKind.RailSystem), Is.Zero);
             factory.AdvanceWork(factory.ProductionSeconds + 0.01f);
@@ -75,7 +75,8 @@ public sealed partial class CardGamePlayModeTests
         }
         Assert.That(game.Cards.Count(c => c.Kind == CardKind.Blueprint), Is.EqualTo(1));
         Assert.That(game.NormalPeopleCount, Is.EqualTo(4));
-        Assert.That(worker.AssignedTo, Is.SameAs(station));
+        Assert.That(worker.AssignedTo, Is.Null);
+        Assert.That(worker.UsedThisTurn, Is.True);
         string directory = System.IO.Path.GetFullPath(System.IO.Path.Combine(Application.dataPath, "../Library/CardGameTestResults"));
         yield return CaptureCanvas(System.IO.Path.Combine(directory, "reusable-blueprint-vault.png"), game.Vault.SlotFor(UpgradeKind.RailSystem).gameObject);
         yield return CaptureCanvas(System.IO.Path.Combine(directory, "people-info-enlarged.png"), People().First(p => p.AssignedTo == null).gameObject);
@@ -91,7 +92,7 @@ public sealed partial class CardGamePlayModeTests
         research.AdvanceWork(100f);
         Assert.That(game.IsChoosingBlueprint, Is.False);
         Assert.That(research.AwaitingBlueprint, Is.False);
-        Assert.That(research.transform.Find("WorkStatus").GetComponent<TextMeshProUGUI>().text, Is.EqualTo("All blueprints discovered"));
+        Assert.That(research.transform.Find("WorkStatus").GetComponent<TextMeshProUGUI>().text, Is.Empty);
         Assert.That(game.Cards.Count(c => c.Kind == CardKind.Blueprint), Is.EqualTo(3));
     }
 }

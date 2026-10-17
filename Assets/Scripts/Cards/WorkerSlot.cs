@@ -60,7 +60,7 @@ namespace CivilGameJam.Cards
             if (!portraitPositionSaved) return;
             var game = station != null && station.Card != null ? station.Card.Owner : null;
             bool canHover = pointerInside && currentWorker != null && !IsAnimating && draggedWorker == null &&
-                game != null && !game.IsDraggingAnyCard && !game.IsChoosingBlueprint;
+                game != null && !game.ActionsLocked && !game.IsDraggingAnyCard && !game.IsChoosingBlueprint;
             hoverOffset = Mathf.SmoothDamp(hoverOffset, canHover ? hoverLift : 0f, ref hoverVelocity,
                 hoverSeconds, Mathf.Infinity, Time.unscaledDeltaTime);
             portrait.rectTransform.anchoredPosition = portraitRestPosition + Vector2.up * hoverOffset;
@@ -119,45 +119,9 @@ namespace CivilGameJam.Cards
 
         private IEnumerator EnterFolder(RectTransform space, Vector3 localOrigin, Vector3 localScale, Quaternion localRotation)
         {
-            var rect = entryImage.rectTransform;
-            var target = portrait.rectTransform;
-            bool behindFlap = false;
-            for (float elapsed = 0f; elapsed < entrySeconds; elapsed += Time.unscaledDeltaTime)
-            {
-                float t = Mathf.Clamp01(elapsed / entrySeconds);
-                entryProgress = t;
-                Vector3 origin = space.TransformPoint(localOrigin);
-                Vector3 fromScale = Vector3.Scale(localScale, space.lossyScale);
-                Quaternion rotation = space.rotation * localRotation;
-                entryImage.color = station.Card.Owner.IsChoosingBlueprint ? Color.clear : Color.white;
-                Vector3 destination = target.position;
-                // Shrink above the folder lip first. Switching layers while the card is
-                // already below the flap would abruptly cut off the person's lower half.
-                Vector3 above = entryMouth != null ? entryMouth.position :
-                    destination + target.up * (target.rect.height * target.lossyScale.y * 1.05f);
-                Vector3 toScale = new Vector3(target.lossyScale.x * target.rect.width / rect.rect.width,
-                    target.lossyScale.y * target.rect.height / rect.rect.height, target.lossyScale.z);
-                if (t < 0.62f)
-                {
-                    float approach = Smooth(t / 0.62f);
-                    Vector3 bend = Vector3.Lerp(origin, above, 0.5f) + target.up * (target.rect.height * target.lossyScale.y * 0.2f);
-                    rect.position = Vector3.Lerp(Vector3.Lerp(origin, bend, approach), Vector3.Lerp(bend, above, approach), approach);
-                    rect.rotation = Quaternion.Slerp(rotation, target.rotation, approach);
-                    SetWorldScale(rect, Vector3.Lerp(fromScale, toScale, approach));
-                }
-                else
-                {
-                    if (!behindFlap)
-                    {
-                        if (entryCanvas != null) entryCanvas.overrideSorting = false;
-                        rect.SetParent(transform, true); behindFlap = true;
-                    }
-                    rect.position = Vector3.Lerp(above, destination, Smooth((t - 0.62f) / 0.38f));
-                    rect.rotation = target.rotation;
-                    SetWorldScale(rect, toScale);
-                }
-                yield return null;
-            }
+            yield return FolderEntryMotion.Play(entryImage, entryCanvas, space, (RectTransform)transform,
+                portrait.rectTransform, entryMouth, entrySeconds, localOrigin, localScale, localRotation,
+                () => station.Card.Owner.IsChoosingBlueprint, t => entryProgress = t);
             entry = null;
             ResetEntryImage();
             portrait.gameObject.SetActive(currentWorker != null);
@@ -286,6 +250,16 @@ namespace CivilGameJam.Cards
             rect.localRotation = Quaternion.identity;
         }
 
+        internal void ResetForNewTurn()
+        {
+            CancelEntry();
+            CancelExit(returningWorker);
+            draggedWorker = null;
+            pointerInside = false;
+            Refresh(null);
+            ResetHover();
+        }
+
         private void OnDisable()
         {
             pointerInside = false;
@@ -308,6 +282,11 @@ namespace CivilGameJam.Cards
         public void OnBeginDrag(PointerEventData eventData)
         {
             if (eventData.button != PointerEventData.InputButton.Left) return;
+            if (station.GetWorker(index) != null && station.GetWorker(index).UsedThisTurn)
+            {
+                station.ReleaseWorker(index);
+                return;
+            }
             Vector3 origin = VisibleWorkerRect != null ? VisibleWorkerRect.position : transform.position;
             float width = VisibleWorkerRect != null ? VisibleWorkerRect.rect.width * VisibleWorkerRect.lossyScale.x : 0f;
             Quaternion rotation = VisibleWorkerRect != null ? VisibleWorkerRect.rotation : Quaternion.identity;

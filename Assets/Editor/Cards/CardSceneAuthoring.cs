@@ -272,7 +272,8 @@ namespace CivilGameJam.Cards.Editor
             var choice = BuildBlueprintPanel(table, controller, out var buttons);
             SetObjects(controller, ("table", table), ("gridPanel", gridPanel), ("grid", grid),
                 ("cardLayer", cardLayer), ("population", population), ("hint", hint), ("choicePanel", choice),
-                ("educatedPersonPrefab", Prefab("EducatedPeopleCard")));
+                ("educatedPersonPrefab", Prefab("EducatedPeopleCard")),
+                ("normalPersonPrefab", Prefab("PeopleCard")));
             var settings = new SerializedObject(controller);
             var options = settings.FindProperty("blueprints");
             options.arraySize = BlueprintNames.Length;

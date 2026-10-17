@@ -51,9 +51,12 @@ namespace CivilGameJam
 
         private IEnumerator Present()
         {
-            if (dock != null) dock.BeginCityPresentation();
             // The drop callback is still ending its drag in this frame.
             yield return null;
+            // Show the item entering its saved socket and the socket's flash before
+            // sliding the house row off screen for the city upgrade presentation.
+            while (!Interrupted && HasPendingCardAnimation()) yield return null;
+            if (!Interrupted && dock != null) dock.BeginCityPresentation();
             do
             {
                 while (pending.Count > 0 && !Interrupted)
@@ -91,6 +94,13 @@ namespace CivilGameJam
             current = null;
             if (dock != null) dock.EndCityPresentation();
             presentation = null;
+        }
+
+        private bool HasPendingCardAnimation()
+        {
+            foreach (var item in pending)
+                if (item.IsValid && item.Link.House.IsInstalling) return true;
+            return false;
         }
 
         private static Vector3 BuildingCenter(Transform building)

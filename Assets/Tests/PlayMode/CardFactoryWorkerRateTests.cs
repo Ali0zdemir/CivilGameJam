@@ -54,7 +54,7 @@ public sealed partial class CardGamePlayModeTests
         Assert.That(factory.PendingBlueprint, Is.Null);
         Assert.That(blueprint.StoredInVault, Is.SameAs(game.Vault));
         Assert.That(game.Cards.Count(card => card.Kind == CardKind.Upgrade), Is.EqualTo(2));
-        Assert.That(Station(CardKind.Factory).WorkerCount, Is.EqualTo(normalWorkers + educatedWorkers));
+        Assert.That(Station(CardKind.Factory).WorkerCount, Is.Zero, "Completed workers leave the factory for the rest of the turn.");
         Assert.That(game.NormalPeopleCount, Is.EqualTo(4 - educatedWorkers));
         Assert.That(game.EducatedPeopleCount, Is.EqualTo(educatedWorkers));
     }
@@ -76,16 +76,16 @@ public sealed partial class CardGamePlayModeTests
         station.ReleaseWorker(0, false);
         Assert.That(factory.WorkRate, Is.EqualTo(1.8f));
         factory.AdvanceWork(factory.ProductionSeconds * 0.1f);
-        Assert.That(factory.Progress, Is.EqualTo(0.94f).Within(0.00001f));
+        Assert.That(factory.Progress, Is.EqualTo(0.54f).Within(0.00001f));
         station.ReleaseWorker(1, false);
         Assert.That(factory.WorkRate, Is.Zero);
         factory.AdvanceWork(100f);
-        Assert.That(factory.Progress, Is.EqualTo(0.94f).Within(0.00001f));
+        Assert.That(factory.Progress, Is.Zero, "Withdrawing unfinished workers cancels their refunded effort.");
         Assert.That(station.TryAssign(normal), Is.True);
         factory.AdvanceWork(0f);
         factory.AdvanceWork(-10f);
-        Assert.That(factory.Progress, Is.EqualTo(0.94f).Within(0.00001f));
-        factory.AdvanceWork(factory.ProductionSeconds * 0.061f);
+        Assert.That(factory.Progress, Is.Zero);
+        factory.AdvanceWork(factory.ProductionSeconds + .01f);
         Assert.That(factory.PendingBlueprint, Is.Null);
         Assert.That(game.Cards.Count(card => card.Kind == CardKind.Upgrade), Is.EqualTo(2));
         Assert.That(game.NormalPeopleCount, Is.EqualTo(3));

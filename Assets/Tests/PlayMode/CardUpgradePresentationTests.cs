@@ -9,6 +9,7 @@ using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.TestTools;
+using UnityEngine.UI;
 
 public sealed partial class CardGamePlayModeTests
 {
@@ -232,10 +233,27 @@ public sealed partial class CardGamePlayModeTests
         float zoomBefore = city.WorldCamera.orthographicSize;
         Vector2 panBefore = navigation.PanOffset;
         var savedUI = UIIds(game);
-        Assert.That(link.House.TryInstall(product), Is.True);
-        Assert.That(dock.IsExpanded, Is.False);
+        Drag(product, link.House.Card.Rect.position);
+        Assert.That(link.House.GetInstalled(UpgradeKind.RailSystem), Is.SameAs(product));
+        Assert.That(dock.IsExpanded, Is.True, "Keep the house card visible while its item flies into the socket.");
         Assert.That(dock.Expansion, Is.EqualTo(1f));
         Assert.That(link.RailSystem.IsInstalled, Is.False);
+        var slot = link.House.GetComponentsInChildren<HouseUpgradeSlot>(true).Single(item => item.Kind == UpgradeKind.RailSystem);
+        Vector3 dropPosition = slot.VisibleIcon.position;
+        bool sawItemTravel = false, sawSocketGlow = false;
+        float itemTimeout = Time.realtimeSinceStartup + 2f;
+        while (link.House.IsInstalling && Time.realtimeSinceStartup < itemTimeout)
+        {
+            Assert.That(dock.IsExpanded, Is.True);
+            Assert.That(dock.Expansion, Is.EqualTo(1f));
+            Assert.That(navigation.IsPresenting, Is.False);
+            Assert.That(link.RailSystem.IsInstalled, Is.False);
+            if (slot.IsInstalling && Vector3.Distance(slot.VisibleIcon.position, dropPosition) > 1f) sawItemTravel = true;
+            if (!slot.IsInstalling && slot.transform.Find("InstallGlow").GetComponent<Image>().enabled) sawSocketGlow = true;
+            yield return null;
+        }
+        Assert.That(sawItemTravel && sawSocketGlow, Is.True, "The actual drag must show both socket travel and its completion flash before the city presentation.");
+        Assert.That(link.House.IsInstalling, Is.False);
         bool sawCollapse = false, sawSmoothZoom = false;
         float timeout = Time.realtimeSinceStartup + 4f;
         while (!link.RailSystem.IsInstalled && Time.realtimeSinceStartup < timeout)

@@ -35,6 +35,8 @@ namespace CivilGameJam.Disasters
         [SerializeField] private TMP_Text selectionLabel;
         [SerializeField] private TMP_Text statusLabel;
         private float riseElapsed;
+        private float departureLimit, departureElapsed;
+        private bool monsterDeparted;
         private bool expanded;
 
         public bool IsRunning { get; private set; }
@@ -59,7 +61,12 @@ namespace CivilGameJam.Disasters
             RefreshMenu();
         }
 
-        public void StartSelectedSequence()
+        public void StartSelectedSequence() => StartSequence(0f);
+
+        // READY uses a bounded departure; the saved standalone debug routes retain their full paths.
+        public void StartRoundSequence(float maximumDepartureSeconds) => StartSequence(Mathf.Max(.1f, maximumDepartureSeconds));
+
+        private void StartSequence(float maximumDepartureSeconds)
         {
             if (!Application.isPlaying || !isActiveAndEnabled || IsRunning) return;
             if (monster == null || walk == null || walk.WalkPoint == null || walk.AfterEventPoint == null ||
@@ -71,6 +78,9 @@ namespace CivilGameJam.Disasters
             monster.ResetEmergence();
             ActiveSequence = SelectedSequence;
             riseElapsed = 0f;
+            departureElapsed = 0f;
+            departureLimit = maximumDepartureSeconds;
+            monsterDeparted = false;
             expanded = false;
             Stage = MonsterSequenceStage.Emerging;
             IsRunning = true;
@@ -139,6 +149,17 @@ namespace CivilGameJam.Disasters
                     Stage = MonsterSequenceStage.WalkingToSecondPoint;
                     break;
                 case MonsterSequenceStage.WalkingToSecondPoint:
+                    if (departureLimit > 0f && !monsterDeparted)
+                    {
+                        departureElapsed += Mathf.Max(0f, deltaTime);
+                        if (departureElapsed >= departureLimit || !walk.IsWalkingAfterEvent)
+                        {
+                            walk.StopAfterEventWalk();
+                            monster.ResetEmergence();
+                            monsterDeparted = true;
+                        }
+                    }
+                    // Hiding the departing boss must not cut short the remaining water/fire effects.
                     if (walk.IsWalkingAfterEvent || earthquake.IsRunning || fire.IsRunning || tsunami.IsRunning) return;
                     IsRunning = false;
                     Stage = MonsterSequenceStage.Complete;

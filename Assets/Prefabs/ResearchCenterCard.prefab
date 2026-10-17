@@ -17,7 +17,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &6752295469488463361
 RectTransform:
   m_ObjectHideFlags: 0
@@ -171,11 +171,11 @@ RectTransform:
   - {fileID: 4294863494283196921}
   m_Father: {fileID: 1510205013851205850}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0.5, y: 0.5}
-  m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 0, y: 143}
-  m_SizeDelta: {x: 238, y: 10}
-  m_Pivot: {x: 0.5, y: 0.5}
+  m_AnchorMin: {x: 0.5, y: 1}
+  m_AnchorMax: {x: 0.5, y: 1}
+  m_AnchoredPosition: {x: 0, y: 8}
+  m_SizeDelta: {x: 282, y: 23.5}
+  m_Pivot: {x: 0.5, y: 0}
 --- !u!222 &5589006997121124134
 CanvasRenderer:
   m_ObjectHideFlags: 0
@@ -197,14 +197,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
-  m_Color: {r: 0.1, g: 0.15, b: 0.2, a: 1}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 0}
+  m_Sprite: {fileID: 8296864580924696453, guid: 930d49e85fe8d034f99d933805742952, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -398,6 +398,7 @@ GameObject:
   - component: {fileID: 1824538970843298274}
   - component: {fileID: 2258249566297198450}
   - component: {fileID: 327910093788898980}
+  - component: {fileID: 3958946987297496520}
   m_Layer: 5
   m_Name: APEducated
   m_TagString: Untagged
@@ -760,6 +761,7 @@ GameObject:
   - component: {fileID: 192215325262486437}
   - component: {fileID: 7390446696680751222}
   - component: {fileID: 1365820141684071142}
+  - component: {fileID: 3457862675055299939}
   m_Layer: 5
   m_Name: APNormalPeople
   m_TagString: Untagged
@@ -1146,7 +1148,7 @@ RectTransform:
   m_Father: {fileID: 6494976402722266402}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 0, y: 1}
+  m_AnchorMax: {x: 1, y: 1}
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
@@ -1171,19 +1173,19 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
-  m_Color: {r: 0.18, g: 0.63, b: 0.94, a: 1}
+  m_Color: {r: 0.9, g: 0.9, b: 0.9, a: 1}
   m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 0}
-  m_Type: 0
+  m_Sprite: {fileID: -1021525959387009217, guid: ed693616608f7b848a867c2011ffb140, type: 3}
+  m_Type: 3
   m_PreserveAspect: 0
   m_FillCenter: 1
-  m_FillMethod: 4
-  m_FillAmount: 1
+  m_FillMethod: 0
+  m_FillAmount: 0
   m_FillClockwise: 1
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
@@ -1200,7 +1202,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e19747de3f5aca642ab2be37e372fb86, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_EffectColor: {r: 0.67200005, g: 0.852, b: 0.976, a: 0.7}
+  m_EffectColor: {r: 1, g: 0.79, b: 0.38, a: 0.7}
   m_EffectDistance: {x: 1.5, y: -1.5}
   m_UseGraphicAlpha: 1
 --- !u!1 &4009852431083327496
@@ -1479,6 +1481,7 @@ GameObject:
   - component: {fileID: 6128546233380285640}
   - component: {fileID: 3598936760026424532}
   - component: {fileID: 49059754746159610}
+  - component: {fileID: 220987608205798022}
   m_Layer: 5
   m_Name: ResearchCenterCard
   m_TagString: Untagged
@@ -1575,6 +1578,7 @@ MonoBehaviour:
   kind: 3
   feedback: {fileID: 2848759328142821800}
   station: {fileID: 7745038234765686323}
+  dropTargetFeedback: {fileID: 220987608205798022}
   upgradeType: 0
   newItemOutline: {fileID: 0}
   initialGridCell: 0
@@ -1634,6 +1638,16 @@ MonoBehaviour:
   progressFeedback: {fileID: 6126313201442451291}
   status: {fileID: 2883267190652279276}
   dropOutline: {fileID: 296597797645829262}
+  normalAbilityPointCost: 4
+  educatedAbilityPointCost: 2
+  tsunamiNormalAbilityPointCost: 6
+  tsunamiEducatedAbilityPointCost: 3
+  fireNormalAbilityPointCost: 8
+  fireEducatedAbilityPointCost: 5
+  normalCostLabel: {fileID: 947389457472057711}
+  educatedCostLabel: {fileID: 3715439495129067326}
+  normalCostFeedback: {fileID: 3457862675055299939}
+  educatedCostFeedback: {fileID: 3958946987297496520}
 --- !u!114 &6128546233380285640
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1689,6 +1703,25 @@ MonoBehaviour:
   windowLight: {fileID: 957172483695582404}
   fadeSeconds: 0.3
   cycleSeconds: 2.8
+--- !u!114 &220987608205798022
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4551122702813775966}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 18603adf13a79e44388f4119f0430801, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  edgeOutline: {fileID: 1921582815994693162}
+  glowOutline: {fileID: 8126905670032719138}
+  tint: {r: 0.5, g: 1, b: 0.78, a: 1}
+  fadeSeconds: 0.09
+  pulseSpeed: 1.25
+  edgeWidth: 4.5
+  glowWidth: 9
 --- !u!1 &4592339684668205718
 GameObject:
   m_ObjectHideFlags: 0
@@ -2033,6 +2066,8 @@ GameObject:
   - component: {fileID: 1360375400942956988}
   - component: {fileID: 914118598301564692}
   - component: {fileID: 296597797645829262}
+  - component: {fileID: 8126905670032719138}
+  - component: {fileID: 1921582815994693162}
   m_Layer: 5
   m_Name: "D\u0131\u015FKenar"
   m_TagString: Untagged
@@ -2126,6 +2161,36 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   m_EffectColor: {r: 0, g: 0, b: 0, a: 0.5}
   m_EffectDistance: {x: 3, y: -3}
+  m_UseGraphicAlpha: 1
+--- !u!114 &8126905670032719138
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5619807763563857141}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e19747de3f5aca642ab2be37e372fb86, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_EffectColor: {r: 0.5, g: 1, b: 0.78, a: 0}
+  m_EffectDistance: {x: 9, y: -9}
+  m_UseGraphicAlpha: 1
+--- !u!114 &1921582815994693162
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5619807763563857141}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e19747de3f5aca642ab2be37e372fb86, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_EffectColor: {r: 0.5, g: 1, b: 0.78, a: 0}
+  m_EffectDistance: {x: 4.5, y: -4.5}
   m_UseGraphicAlpha: 1
 --- !u!1 &5777718871352214373
 GameObject:
@@ -2380,7 +2445,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: 2 AP
+  m_text: 4 AP
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 60e75f4c2ff43464d882249013bc23d0, type: 2}
   m_sharedMaterial: {fileID: 3628592581146971286, guid: 60e75f4c2ff43464d882249013bc23d0, type: 2}
@@ -3062,3 +3127,37 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: 163.50021}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &3958946987297496520
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1855130751630874989}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3124f1eb1f7e4a0f960e47449af86fe6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  badge: {fileID: 1824538970843298274}
+  label: {fileID: 3715439495129067326}
+  warningColor: {r: 1, g: 0.25, b: 0.2, a: 1}
+  warningSeconds: 0.5
+  shakeDistance: 4
+--- !u!114 &3457862675055299939
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2117724776558361645}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3124f1eb1f7e4a0f960e47449af86fe6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  badge: {fileID: 192215325262486437}
+  label: {fileID: 947389457472057711}
+  warningColor: {r: 1, g: 0.25, b: 0.2, a: 1}
+  warningSeconds: 0.5
+  shakeDistance: 4

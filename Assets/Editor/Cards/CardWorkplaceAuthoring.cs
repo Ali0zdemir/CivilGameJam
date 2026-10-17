@@ -21,6 +21,33 @@ namespace CivilGameJam.Cards.Editor
         private const float SidebarWidth = 648f;
         private const float VaultHeight = 70f + 2f * (400f * BlueprintScale + 42f) + 24f;
         private static readonly Color Ink = new Color(0.16f, 0.20f, 0.19f);
+
+        [MenuItem("Tools/Card Game/Center Saved Blueprint Selection On Screen")]
+        public static void CenterBlueprintSelectionForBatch()
+        {
+            if (EditorApplication.isPlayingOrWillChangePlaymode)
+                throw new InvalidOperationException("Center the saved blueprint selection in Edit Mode.");
+            var scene = EditorSceneManager.OpenScene(ScenePath);
+            var game = Object.FindFirstObjectByType<CardGameController>();
+            var choice = (RectTransform)game.transform.Find("BlueprintChoice");
+            foreach (RectTransform child in choice)
+                child.anchorMin = child.anchorMax = new Vector2(.5f, .5f);
+            var overlay = game.GetComponent<CardCanvasOverlay>() ?? game.gameObject.AddComponent<CardCanvasOverlay>();
+            var data = new SerializedObject(overlay);
+            data.FindProperty("overlay").objectReferenceValue = choice;
+            data.ApplyModifiedPropertiesWithoutUndo();
+            Canvas.ForceUpdateCanvases();
+            overlay.RefreshLayout();
+            var root = (RectTransform)game.GetComponentInParent<Canvas>().rootCanvas.transform;
+            var window = (RectTransform)choice.Find("SelectionWindow");
+            if (Vector3.Distance(window.position, root.TransformPoint(root.rect.center)) > .01f)
+                throw new InvalidOperationException("Blueprint selection is not centered on the canvas.");
+            EditorSceneManager.MarkSceneDirty(scene);
+            EditorSceneManager.SaveScene(scene);
+            AssetDatabase.SaveAssets();
+            Debug.Log("Saved the blueprint selection at the full canvas center with its existing artwork, sizes and callbacks.");
+        }
+
         private static Rect[] workerReferenceBounds;
         private static readonly Dictionary<Sprite, Rect> artworkBounds = new Dictionary<Sprite, Rect>();
 

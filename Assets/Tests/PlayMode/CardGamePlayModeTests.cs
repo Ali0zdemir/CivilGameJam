@@ -23,6 +23,8 @@ public sealed partial class CardGamePlayModeTests
         yield return SceneManager.LoadSceneAsync("2DCardScene", LoadSceneMode.Single);
         yield return null;
         game = Object.FindFirstObjectByType<CardGameController>();
+        // Legacy mechanics/presentation tests have a generous budget; AP-specific tests use the actual starting balance.
+        game.AbilityPoints?.AddPoints(10000);
         Assert.That(game, Is.Not.Null);
         Assert.That(game.Grid, Is.Not.Null, "The serialized scene must initialize without manual setup.");
         var dock = game.GetComponent<CardDock>();
@@ -38,7 +40,7 @@ public sealed partial class CardGamePlayModeTests
     }
 
     private BuildingStation Station(CardKind kind) => game.Cards.Single(c => c.Kind == kind).Station;
-    private DraggableCard[] People() => game.Cards.Where(c => c.Kind == CardKind.Person).ToArray();
+    private DraggableCard[] People() => game.Cards.Where(c => c.Kind == CardKind.Person).OrderBy(c => c.UsedThisTurn).ToArray();
     private DraggableCard Educated() => game.Cards.First(c => c.Kind == CardKind.EducatedPerson);
 
     [UnityTest]
@@ -299,7 +301,7 @@ public sealed partial class CardGamePlayModeTests
         AssertNoTimingText(game.GetComponentInParent<Canvas>());
         research.AdvanceWork(game.NormalResearchSeconds / 10f + 0.01f);
         Assert.That(research.AwaitingBlueprint, Is.True);
-        Assert.That(((RectTransform)research.transform.Find("ProgressBar/BlueProgress")).anchorMax.x, Is.EqualTo(1f));
+        Assert.That(BarProgress(research.transform.Find("ProgressBar/BlueProgress").GetComponent<Image>()), Is.EqualTo(1f));
         game.SelectBlueprint(0);
 
         var factoryStation = Station(CardKind.Factory);
@@ -321,22 +323,24 @@ public sealed partial class CardGamePlayModeTests
             Assert.That(product.TablePosition.x - product.Rect.rect.width * product.LayoutScale.x / 2f,
                 Is.GreaterThan(gridRight), "Manufactured cards should use the open space to the right of the grid.");
         }
-        Assert.That(((RectTransform)factoryStation.transform.Find("ProgressBar/BlueProgress")).anchorMax.x, Is.EqualTo(1f),
+        Assert.That(BarProgress(factoryStation.transform.Find("ProgressBar/BlueProgress").GetComponent<Image>()), Is.EqualTo(1f),
             "The completed bar stays full during its visual outro.");
     }
 
     private static void AssertContinuousBar(DraggableCard card, System.Action<float> advance, float stepDuration)
     {
-        var fill = (RectTransform)card.transform.Find("ProgressBar/BlueProgress");
-        Assert.That(fill.anchorMax.x, Is.Zero);
+        var fill = card.transform.Find("ProgressBar/BlueProgress").GetComponent<Image>();
+        Assert.That(BarProgress(fill), Is.Zero);
         for (int step = 1; step < 10; step++)
         {
             advance(stepDuration * 0.45f);
-            Assert.That(fill.anchorMax.x, Is.EqualTo((step - 1 + 0.45f) / 10f).Within(0.0001f), card.name + ": advance between former steps");
+            Assert.That(BarProgress(fill), Is.EqualTo((step - 1 + 0.45f) / 10f).Within(0.0001f), card.name + ": advance between former steps");
             advance(stepDuration * 0.55f);
-            Assert.That(fill.anchorMax.x, Is.EqualTo(step / 10f).Within(0.0001f), card.name + ": stay synchronized with work");
+            Assert.That(BarProgress(fill), Is.EqualTo(step / 10f).Within(0.0001f), card.name + ": stay synchronized with work");
         }
     }
+
+    private static float BarProgress(Image fill) => fill.type == Image.Type.Filled ? fill.fillAmount : fill.rectTransform.anchorMax.x;
 
     private static void Hover(GameObject target, bool entered)
     {
@@ -479,11 +483,20 @@ public sealed partial class CardGamePlayModeTests
         Assert.That(Vector3.Distance(card.Rect.localScale, card.LayoutScale * 1.21125f), Is.LessThan(0.001f));
     }
 
+    private void EnsurePresentationWorkers(int count)
+    {
+        // Long presentation scenarios span turns; gameplay economy is covered with the real 10 AP separately.
+        // Synchronous setup also skips finished workers' cosmetic returns before filling their saved pockets again.
+        foreach (var person in game.Cards.Where(card => card.IsPerson && card.UsedThisTurn && card.IsFlying)) person.StopFlight();
+        if (game.Cards.Count(card => card.Kind == CardKind.Person && card.CanStartWork && !card.IsStored) < count) game.ResetTurnPeople();
+    }
+
     private DraggableCard ResearchPlan(int index)
     {
         var existing = game.Cards.FirstOrDefault(c => c.Kind == CardKind.Blueprint && c.UpgradeType == (UpgradeKind)(index + 1));
         if (existing != null) return existing;
-        research.TryAssign(People().First(p => p.AssignedTo == null));
+        EnsurePresentationWorkers(1);
+        Assert.That(research.TryAssign(People().First(p => p.CanStartWork && p.AssignedTo == null)), Is.True);
         research.AdvanceWork(25.01f);
         game.SelectBlueprint(index);
         var plan = game.Cards.Last(c => c.Kind == CardKind.Blueprint);
@@ -520,7 +533,8 @@ public sealed partial class CardGamePlayModeTests
         Assert.That(product.UpgradeType, Is.EqualTo(UpgradeKind.Fire));
         Assert.That(product.IsBuilding, Is.False);
         Assert.That(game.NormalPeopleCount, Is.EqualTo(4));
-        Assert.That(worker.AssignedTo, Is.SameAs(Station(CardKind.Factory)));
+        Assert.That(worker.AssignedTo, Is.Null);
+        Assert.That(worker.UsedThisTurn, Is.True);
         Drag(product, house.transform.position);
         Assert.That(house.GetInstalled(UpgradeKind.Fire), Is.SameAs(product));
         Assert.That(product.gameObject.activeSelf, Is.False);
@@ -536,11 +550,12 @@ public sealed partial class CardGamePlayModeTests
     {
         var factory = Station(CardKind.Factory).GetComponent<FactoryProduction>();
         factory.enabled = false;
-        Station(CardKind.Factory).TryAssign(People()[0]);
         var houses = game.Cards.Where(c => c.Kind == CardKind.House).Select(c => c.GetComponent<HouseUpgrades>()).ToArray();
         for (int i = 0; i < 3; i++)
         {
+            EnsurePresentationWorkers(2);
             var blueprint = ResearchPlan(i);
+            Assert.That(Station(CardKind.Factory).TryAssign(People().First(p => p.CanStartWork && !p.IsStored)), Is.True);
             Assert.That(factory.TryInsertBlueprint(blueprint), Is.True);
             factory.AdvanceWork(factory.ProductionSeconds + 0.01f);
             var products = game.Cards.Where(c => c.Kind == CardKind.Upgrade && c.UpgradeType == (UpgradeKind)(i + 1)).ToArray();
@@ -583,7 +598,8 @@ public sealed partial class CardGamePlayModeTests
         Assert.That(vault.AvailableCount(UpgradeKind.Breakwater), Is.Zero);
         factory.ReleaseBlueprint(false);
         Assert.That(vault.AvailableCount(UpgradeKind.RailSystem), Is.EqualTo(1));
-        research.TryAssign(People().First(p => p.AssignedTo == null));
+        EnsurePresentationWorkers(1);
+        Assert.That(research.TryAssign(People().First(p => p.CanStartWork && p.AssignedTo == null)), Is.True);
         research.AdvanceWork(25.01f);
         Assert.That(game.IsChoosingBlueprint, Is.True);
         var knownButton = game.GetComponentsInChildren<Button>().Single(b => b.name == "BlueprintOption0");
@@ -639,7 +655,10 @@ public sealed partial class CardGamePlayModeTests
         Hover(house.gameObject, false);
         for (int i = 0; i < 3; i++)
         {
+            EnsurePresentationWorkers(2);
             var blueprint = ResearchPlan(i);
+            if (Station(CardKind.Factory).WorkerCount == 0)
+                Assert.That(Station(CardKind.Factory).TryAssign(People().First(p => p.CanStartWork && !p.IsStored)), Is.True);
             factory.TryInsertBlueprint(blueprint);
             factory.AdvanceWork(factory.ProductionSeconds + 0.01f);
             house.TryInstall(game.Cards.First(c => c.Kind == CardKind.Upgrade && c.UpgradeType == (UpgradeKind)(i + 1)));
@@ -647,6 +666,7 @@ public sealed partial class CardGamePlayModeTests
             Hover(house.gameObject, false);
         }
         Station(CardKind.Factory).ReleaseWorker(0, false);
+        game.ResetTurnPeople();
         factory.TryInsertBlueprint(ResearchPlan(2));
         factory.AdvanceWork(0f);
         yield return new WaitForSeconds(0.6f);
@@ -1098,9 +1118,8 @@ public sealed partial class CardGamePlayModeTests
         Assert.That(game.Grid.GetOccupant(InitiallyEmptyCell), Is.SameAs(building));
         Assert.That(game.Grid.GetOccupant(0), Is.Null);
         Assert.That(Vector3.Distance(building.Rect.position, game.Grid.GetCellWorldPosition(InitiallyEmptyCell)), Is.LessThan(0.1f));
-        var occupied = game.Grid.GetOccupant(1);
-        Drag(building, occupied.Rect.position);
-        Assert.That(game.Grid.GetOccupant(1), Is.SameAs(occupied));
+        // Releasing on the same slot still snaps without duplicating the occupant.
+        Drag(building, game.Grid.GetCellWorldPosition(InitiallyEmptyCell));
         Assert.That(Enumerable.Range(0, CardGrid.CellCount).Count(i => game.Grid.GetOccupant(i) == building), Is.EqualTo(1));
         Assert.That(Enumerable.Range(0, CardGrid.CellCount).Count(i => game.Grid.GetOccupant(i) != null), Is.EqualTo(7));
     }
@@ -1131,17 +1150,17 @@ public sealed partial class CardGamePlayModeTests
     }
 
     [Test]
-    public void SchoolConvertsEachStudentAfterTheirOwnTwentyFiveSeconds()
+    public void SchoolConvertsEachStudentAfterTheirOwnConfiguredDuration()
     {
         var people = People();
         school.TryAssign(people[0]);
-        school.AdvanceWork(10f);
+        school.AdvanceWork(game.EducationSeconds * .4f);
         school.TryAssign(people[1]);
-        school.AdvanceWork(15.01f);
+        school.AdvanceWork(game.EducationSeconds * .6f + .01f);
         Assert.That(game.NormalPeopleCount, Is.EqualTo(3));
         Assert.That(game.EducatedPeopleCount, Is.EqualTo(1));
         Assert.That(school.WorkerCount, Is.EqualTo(1));
-        school.AdvanceWork(10f);
+        school.AdvanceWork(game.EducationSeconds * .4f);
         Assert.That(game.NormalPeopleCount, Is.EqualTo(2));
         Assert.That(game.EducatedPeopleCount, Is.EqualTo(2));
         Assert.That(school.WorkerCount, Is.Zero);
@@ -1165,13 +1184,13 @@ public sealed partial class CardGamePlayModeTests
     }
 
     [Test]
-    public void NormalResearchTakesTwentyFiveSecondsAndChoiceGivesExactlyOneBlueprint()
+    public void NormalResearchUsesItsConfiguredDurationAndChoiceGivesExactlyOneBlueprint()
     {
         var worker = People()[0];
         research.TryAssign(worker);
-        research.AdvanceWork(24.9f);
+        research.AdvanceWork(game.NormalResearchSeconds - .01f);
         Assert.That(game.IsChoosingBlueprint, Is.False);
-        research.AdvanceWork(0.11f);
+        research.AdvanceWork(.02f);
         Assert.That(game.IsChoosingBlueprint, Is.True);
         Assert.That(game.Cards.Count(c => c.Kind == CardKind.Blueprint), Is.Zero);
         research.AdvanceWork(100f);
@@ -1188,7 +1207,8 @@ public sealed partial class CardGamePlayModeTests
         Assert.That(research.WorkerCount, Is.Zero);
         Assert.That(worker.gameObject.activeSelf, Is.True);
         Assert.That(worker.AssignedTo, Is.Null);
-        Assert.That(research.TryAssign(worker), Is.True, "The researcher must be reusable.");
+        Assert.That(research.TryAssign(worker), Is.False, "A completed researcher is unavailable until the next turn.");
+        Assert.That(research.TryAssign(People().First(p => p.CanStartWork && !p.IsStored)), Is.True);
         research.AdvanceWork(25.01f);
         game.SelectBlueprint(1);
         Assert.That(game.Cards.Count(c => c.Kind == CardKind.Blueprint), Is.EqualTo(2));
@@ -1196,15 +1216,15 @@ public sealed partial class CardGamePlayModeTests
     }
 
     [Test]
-    public void EducatedResearchTakesFifteenSecondsAndPreservesTheWorker()
+    public void EducatedResearchUsesItsConfiguredDurationAndPreservesTheWorker()
     {
         school.TryAssign(People()[0]);
         school.AdvanceWork(25.01f);
         var worker = Educated();
         research.TryAssign(worker);
-        research.AdvanceWork(14.9f);
+        research.AdvanceWork(game.EducatedResearchSeconds - .01f);
         Assert.That(game.IsChoosingBlueprint, Is.False);
-        research.AdvanceWork(0.11f);
+        research.AdvanceWork(.02f);
         Assert.That(game.IsChoosingBlueprint, Is.True);
         game.SelectBlueprint(1);
         Assert.That(game.EducatedPeopleCount, Is.EqualTo(1));
@@ -1221,9 +1241,10 @@ public sealed partial class CardGamePlayModeTests
         research.TryAssign(Educated());
         var slots = research.GetComponentsInChildren<WorkerSlot>();
         Assert.That(slots[0].Portrait.sprite, Is.Not.EqualTo(slots[1].Portrait.sprite));
-        research.AdvanceWork(9.3f);
+        float duration = 1f / (1f / game.NormalResearchSeconds + 1f / game.EducatedResearchSeconds);
+        research.AdvanceWork(duration - .01f);
         Assert.That(game.IsChoosingBlueprint, Is.False);
-        research.AdvanceWork(0.08f);
+        research.AdvanceWork(.02f);
         Assert.That(game.IsChoosingBlueprint, Is.True);
         game.SelectBlueprint(0);
         Assert.That(game.NormalPeopleCount + game.EducatedPeopleCount, Is.EqualTo(4));
@@ -1234,7 +1255,7 @@ public sealed partial class CardGamePlayModeTests
     {
         var worker = People()[0];
         school.TryAssign(worker);
-        school.AdvanceWork(10f);
+        school.AdvanceWork(game.EducationSeconds * .4f);
         var slot = school.GetComponentsInChildren<WorkerSlot>().OrderBy(item => item.name).First();
         var pointer = new PointerEventData(EventSystem.current)
         {
@@ -1255,8 +1276,8 @@ public sealed partial class CardGamePlayModeTests
         float progress = research.ResearchProgress;
         research.AdvanceWork(100f);
         Assert.That(research.ResearchProgress, Is.EqualTo(progress), "Research pauses without a worker.");
-        research.TryAssign(worker);
-        research.AdvanceWork(15.01f);
+        Assert.That(research.TryAssign(worker), Is.True);
+        research.AdvanceWork(25.01f);
         Assert.That(game.IsChoosingBlueprint, Is.True);
     }
 
@@ -1318,11 +1339,11 @@ public sealed partial class CardGamePlayModeTests
             yield return new WaitForSecondsRealtime(0.32f);
         }
         school.TryAssign(People()[0]);
-        school.AdvanceWork(12.5f);
+        school.AdvanceWork(game.EducationSeconds * .5f);
         research.TryAssign(People()[1]);
-        research.AdvanceWork(10f);
+        research.AdvanceWork(game.NormalResearchSeconds * .4f);
         yield return CaptureCanvas(Path.Combine(directory, "card-board.png"));
-        research.AdvanceWork(15.01f);
+        research.AdvanceWork(game.NormalResearchSeconds * .6f + .01f);
         yield return CaptureCanvas(Path.Combine(directory, "blueprint-choice.png"));
         Assert.That(game.IsChoosingBlueprint, Is.True);
         game.SelectBlueprint(0);
@@ -1337,7 +1358,9 @@ public sealed partial class CardGamePlayModeTests
         var slot = game.Vault.SlotFor(UpgradeKind.Fire);
         yield return CaptureCanvas(Path.Combine(directory, "vault-hover.png"), slot.gameObject);
         Hover(slot.gameObject, false);
-        school.AdvanceWork(12.51f);
+        if (school.WorkerCount == 0)
+            Assert.That(school.TryAssign(People().First(person => person.CanStartWork && !person.IsStored)), Is.True);
+        school.AdvanceWork(game.EducationSeconds + .01f);
         yield return new WaitForSeconds(0.65f);
         yield return CaptureCanvas(Path.Combine(directory, "efe-people-cards.png"), Educated().gameObject);
     }

@@ -25,6 +25,7 @@ namespace CivilGameJam.Cards
         public UpgradeKind Kind => kind;
         public bool Filled => icon.gameObject.activeSelf;
         public bool IsInstalling => installPreview != null && installPreview.gameObject.activeSelf;
+        public bool IsAnimating => reveal != null;
         public RectTransform VisibleIcon => IsInstalling ? installPreview.rectTransform : icon.rectTransform;
         public void ShowFilled(bool filled, bool animate = true)
         {
