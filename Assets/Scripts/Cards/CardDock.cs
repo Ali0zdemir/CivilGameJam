@@ -70,7 +70,7 @@ namespace CivilGameJam.Cards
         public void TickPointer(Vector2 screenPosition, float deltaTime)
         {
             bool pointerInside = ContainsPointer(screenPosition);
-            bool directInteraction = game.IsDraggingAnyCard || game.IsChoosingBlueprint;
+            bool directInteraction = game.IsDraggingAnyCard || game.IsChoosingBlueprint || game.TutorialKeepsBoardOpen;
             SetExpanded(directInteraction || (!cityPresentation && (game.HasActiveCardAnimation || pointerInside)));
             elapsed += Mathf.Max(0f, deltaTime);
             float t = Mathf.Clamp01(elapsed / Mathf.Max(0.01f, slideSeconds));

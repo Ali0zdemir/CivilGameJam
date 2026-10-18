@@ -14,6 +14,103 @@ namespace CivilGameJam.Cards.Editor
         private static readonly Color Muted = new Color(0.52f, 0.65f, 0.67f);
         private static readonly Color Gold = new Color(0.96f, 0.75f, 0.39f);
 
+        [MenuItem("Tools/Card Game/Save Sidebar Upgrade Inventory")]
+        public static void SaveUpgradeInventoryForBatch()
+        {
+            if (EditorApplication.isPlayingOrWillChangePlaymode)
+                throw new System.InvalidOperationException("Save the upgrade inventory in Edit Mode.");
+            SaveProductInventoryNames();
+            var scene = EditorSceneManager.OpenScene("Assets/2DCardScene.unity");
+            var game = Object.FindFirstObjectByType<CardGameController>();
+            var sidebar = game.Sidebar;
+            sidebar.RefreshLayout();
+            Canvas.ForceUpdateCanvases();
+            var people = sidebar.PeopleArea;
+            var peopleRoot = (RectTransform)people.parent;
+            var upgradesRoot = sidebar.transform.Find("Upgrades") as RectTransform;
+            var section = upgradesRoot != null ? upgradesRoot : peopleRoot;
+            float sectionTop = sidebar.Area.rect.yMax - sidebar.Area.InverseTransformPoint(
+                section.TransformPoint(new Vector3(0f, section.rect.yMax))).y;
+            float sectionWidth = peopleRoot.rect.width;
+            const float header = 48f, peopleHeight = 238f, upgradesHeight = 310f, gap = 16f;
+
+            Place(peopleRoot, Vector2.up, new Vector2(0f, -sectionTop - header - upgradesHeight - gap),
+                new Vector2(sectionWidth, header + peopleHeight), Vector2.up);
+            Place(people, new Vector2(.5f, 1f), new Vector2(0f, -header),
+                new Vector2(sectionWidth - 48f, peopleHeight), new Vector2(.5f, 1f));
+            Title(peopleRoot.Find("Title").GetComponent<TextMeshProUGUI>(), "PEOPLE", 0f);
+            var peopleCards = people.GetComponentsInChildren<DraggableCard>(true).Where(card => card.IsPerson)
+                .OrderBy(card => card.name).ToArray();
+            for (int i = 0; i < peopleCards.Length; i++)
+            {
+                var rect = peopleCards[i].Rect;
+                rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(.5f, .5f);
+                rect.anchoredPosition = new Vector2(people.rect.width * ((i + .5f) / peopleCards.Length - .5f), 0f);
+                PrefabUtility.RecordPrefabInstancePropertyModifications(rect);
+            }
+
+            upgradesRoot = Box("Upgrades", sidebar.transform, Color.clear);
+            int peopleIndex = peopleRoot.GetSiblingIndex();
+            upgradesRoot.SetSiblingIndex(upgradesRoot.GetSiblingIndex() < peopleIndex ? peopleIndex - 1 : peopleIndex);
+            Place(upgradesRoot, Vector2.up, new Vector2(0f, -sectionTop),
+                new Vector2(sectionWidth, header + upgradesHeight), Vector2.up);
+            Title(Label("Title", upgradesRoot, "UPGRADES", 30f, Gold, FontStyles.Bold), "UPGRADES", 0f);
+            var upgrades = game.FactoryOutputArea;
+            upgrades.SetParent(upgradesRoot, false);
+            upgrades.localScale = Vector3.one;
+            upgrades.anchorMin = Vector2.zero;
+            upgrades.anchorMax = Vector2.one;
+            upgrades.pivot = new Vector2(.5f, .5f);
+            upgrades.offsetMin = new Vector2(24f, 0f);
+            upgrades.offsetMax = new Vector2(-24f, -header);
+            var background = upgrades.GetComponent<Image>() ?? upgrades.gameObject.AddComponent<Image>();
+            background.color = people.GetComponent<Image>().color;
+            background.raycastTarget = true;
+            Frame(upgrades);
+            Refs(sidebar, ("upgradesArea", upgrades));
+            Refs(game, ("upgradesDropTarget", CardTsunamiTurnAuthoring.ConfigureFeedback(upgrades.gameObject, background)));
+            Canvas.ForceUpdateCanvases();
+            if (upgrades.rect.height < 300f)
+                throw new System.InvalidOperationException("The upgrade inventory needs room for two rows of products.");
+            EditorSceneManager.MarkSceneDirty(scene);
+            EditorSceneManager.SaveScene(scene);
+            AssetDatabase.SaveAssets();
+            Debug.Log("Saved UPGRADES between the Vault and compact People area, with free product placement and persistent names.");
+        }
+
+        private static void SaveProductInventoryNames()
+        {
+            foreach (string name in new[] { "RaylıSistemCard", "DalgaKıranCard", "YangınCard" })
+            {
+                string path = "Assets/Prefabs/" + name + ".prefab";
+                var root = PrefabUtility.LoadPrefabContents(path);
+                try
+                {
+                    var card = root.GetComponent<DraggableCard>();
+                    card.Rect.sizeDelta = new Vector2(200f, 280f);
+                    var icon = (RectTransform)root.transform.Find("CardSymbol");
+                    Place(icon, new Vector2(.5f, .5f), Vector2.zero, Vector2.one * 200f, new Vector2(.5f, .5f));
+                    string title = card.UpgradeType == UpgradeKind.RailSystem ? "Rail System"
+                        : card.UpgradeType == UpgradeKind.Breakwater ? "Elevator" : "Fire Sprinkler";
+                    var label = Label("InventoryName", root.transform, title, 52f, new Color(.85f, .92f, .93f));
+                    label.textWrappingMode = TextWrappingModes.NoWrap;
+                    Place(label.rectTransform, new Vector2(.5f, .5f), new Vector2(0f, 104f),
+                        new Vector2(300f, 52f), new Vector2(.5f, 0f));
+                    var hoverName = root.transform.Find("HoverDetails/ProductName")?.GetComponent<TMP_Text>();
+                    if (hoverName != null)
+                    {
+                        hoverName.text = title;
+                        hoverName.gameObject.SetActive(false);
+                    }
+                    foreach (string frameName in new[] { "NewItemOutline", "HoverOutline" })
+                        if (root.transform.Find(frameName) is RectTransform frame)
+                            Place(frame, new Vector2(.5f, .5f), Vector2.zero, Vector2.one * 216f, new Vector2(.5f, .5f));
+                    PrefabUtility.SaveAsPrefabAsset(root, path);
+                }
+                finally { PrefabUtility.UnloadPrefabContents(root); }
+            }
+        }
+
         public static void BuildForBatch()
         {
             EditorSceneManager.OpenScene("Assets/2DCardScene.unity");

@@ -13,6 +13,103 @@ namespace CivilGameJam.Cards.Editor
 {
     public static class CardSequenceResultsAuthoring
     {
+        public static void BindTutorialOutcome(MonsterSequenceResults results)
+        {
+            var data = new SerializedObject(results);
+            var overlay = ((GameObject)data.FindProperty("overlay").objectReferenceValue).transform;
+            var content = overlay.Find("Card/Content");
+            var label = content.Find("TutorialOutcome")?.GetComponent<TMP_Text>();
+            if (label == null)
+            {
+                var font = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>("Assets/EfeArts/Fonts/Pixellari SDF.asset");
+                label = Label("TutorialOutcome", content, "", font, 18f, new Color(.96f, .77f, .48f));
+                Top(label.rectTransform, 28f, 232f, 28f, 32f);
+            }
+            label.text = data.FindProperty("tutorialOutcomeMessage").stringValue;
+            label.gameObject.SetActive(false);
+            data.FindProperty("tutorialOutcomeLabel").objectReferenceValue = label;
+            data.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        [MenuItem("Tools/Card Game/Bind Authored Sequence House Reports")]
+        public static void BindAuthoredHouseReportsForBatch()
+        {
+            if (EditorApplication.isPlayingOrWillChangePlaymode) throw new InvalidOperationException("Bind result cards in Edit Mode.");
+            var scene = EditorSceneManager.OpenScene("Assets/2DCardScene.unity");
+            var results = Object.FindFirstObjectByType<MonsterSequenceResults>();
+            var sequence = results.GetComponent<MonsterSequenceController>();
+            var data = new SerializedObject(results);
+            var overlay = ((GameObject)data.FindProperty("overlay").objectReferenceValue).transform;
+            var roots = overlay.GetComponentsInChildren<DraggableCard>(true).OrderBy(card => card.Rect.anchoredPosition.x).ToArray();
+            var sources = Object.FindObjectsByType<HouseCityUpgradeLink>(FindObjectsInactive.Include, FindObjectsSortMode.None)
+                .Where(link => link.Building != null && link.House != null).OrderBy(link => link.House.GetComponent<DraggableCard>().InitialGridCell).ToArray();
+            if (roots.Length != 4 || sources.Length != 4) throw new InvalidOperationException("Expected four authored result cards and four real houses.");
+            var view = results.GetComponent<SequenceHouseResultsView>() ?? results.gameObject.AddComponent<SequenceHouseResultsView>();
+            var viewData = new SerializedObject(view);
+            viewData.FindProperty("results").objectReferenceValue = results;
+            viewData.FindProperty("sequence").objectReferenceValue = sequence;
+            var entries = viewData.FindProperty("cards"); entries.arraySize = 4;
+            var font = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>("Assets/EfeArts/Fonts/Pixellari SDF.asset");
+            for (int i = 0; i < roots.Length; i++)
+            {
+                var root = roots[i];
+                var entry = entries.GetArrayElementAtIndex(i);
+                entry.FindPropertyRelative("source").objectReferenceValue = sources[i];
+                var slots = root.GetComponentsInChildren<HouseUpgradeSlot>(true).OrderBy(slot => slot.Kind).ToArray();
+                if (slots.Length != 3) throw new InvalidOperationException("The result card must retain its three authored slots.");
+                var icons = entry.FindPropertyRelative("icons"); icons.arraySize = 3;
+                for (int n = 0; n < slots.Length; n++)
+                {
+                    var icon = (UpgradeIcon)new SerializedObject(slots[n]).FindProperty("icon").objectReferenceValue;
+                    icons.GetArrayElementAtIndex(n).objectReferenceValue = icon;
+                    icon.raycastTarget = false; icon.gameObject.SetActive(false);
+                }
+                foreach (var preview in root.GetComponentsInChildren<UpgradeIcon>(true).Where(icon => icon.name == "InstallPreview"))
+                    preview.gameObject.SetActive(false);
+                var title = root.GetComponentsInChildren<TMP_Text>(true).Single(label => label.text == "HOUSE" || label.text == "HOUSE " + (i + 1));
+                entry.FindPropertyRelative("title").objectReferenceValue = title;
+                var damage = root.transform.Find("EarthquakeDamage");
+                if (damage != null) damage.gameObject.SetActive(false);
+                entry.FindPropertyRelative("destroyedMarker").objectReferenceValue = damage != null ? damage.gameObject : null;
+                var reportTransform = root.transform.Find("HouseReport") as RectTransform;
+                if (reportTransform == null)
+                {
+                    reportTransform = Rect("HouseReport", root.transform);
+                    reportTransform.anchorMin = new Vector2(0f, 0f); reportTransform.anchorMax = new Vector2(1f, 0f);
+                    reportTransform.pivot = new Vector2(.5f, 1f);
+                    reportTransform.anchoredPosition = new Vector2(0f, -10f); reportTransform.sizeDelta = new Vector2(0f, 102f);
+                    var label = reportTransform.gameObject.AddComponent<TextMeshProUGUI>();
+                    label.font = font; label.fontSize = 22f; label.enableAutoSizing = true;
+                    label.fontSizeMin = 16f; label.fontSizeMax = 22f;
+                    label.alignment = TextAlignmentOptions.Top; label.color = new Color(.95f, .94f, .88f);
+                    label.textWrappingMode = TextWrappingModes.Normal; label.raycastTarget = false;
+                    label.text = "EARTHQUAKE\nSeismic isolator: MISSING\nNo seismic protection.";
+                }
+                entry.FindPropertyRelative("report").objectReferenceValue = reportTransform.GetComponent<TMP_Text>();
+                // These are report illustrations, not extra playable houses or upgrade targets.
+                foreach (var behaviour in root.GetComponentsInChildren<MonoBehaviour>(true))
+                    if (!(behaviour is UpgradeIcon) && behaviour.GetType().Namespace != null && behaviour.GetType().Namespace.StartsWith("CivilGameJam"))
+                    {
+                        behaviour.enabled = false;
+                        PrefabUtility.RecordPrefabInstancePropertyModifications(behaviour);
+                    }
+                var group = root.GetComponent<CanvasGroup>();
+                if (group != null)
+                {
+                    group.interactable = group.blocksRaycasts = false;
+                    PrefabUtility.RecordPrefabInstancePropertyModifications(group);
+                }
+            }
+            viewData.ApplyModifiedPropertiesWithoutUndo();
+            var points = overlay.Find("Card/Content/ApEarned/Count")?.GetComponent<TMP_Text>();
+            if (points != null) data.FindProperty("earnedPointsCount").objectReferenceValue = points;
+            data.ApplyModifiedPropertiesWithoutUndo();
+            WorkersTutorialAuthoring.BindWorkProgressBars(Object.FindFirstObjectByType<WorkersTutorial>(FindObjectsInactive.Include));
+            EditorSceneManager.MarkSceneDirty(scene);
+            if (!EditorSceneManager.SaveScene(scene)) throw new InvalidOperationException("Could not save the authored result bindings.");
+            Debug.Log("Bound four existing result cards to their real houses, saved four report labels and kept all authored card/panel transforms.");
+        }
+
         [MenuItem("Tools/Card Game/Save Sequence Results Panel")]
         public static void SaveForBatch()
         {

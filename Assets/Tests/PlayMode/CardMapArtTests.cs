@@ -260,7 +260,7 @@ public sealed partial class CardGamePlayModeTests
         var travel = rig.Tsunami.transform.InverseTransformPoint(wave.transform.position).z - waveWorldZ;
         Assert.That(travel, Is.EqualTo(.3f).Within(.0001f));
         Assert.That(rig.Tsunami.transform.InverseTransformPoint(rig.Monster.Model.position).z - monsterZ,
-            Is.EqualTo(travel).Within(.0001f), "The monster must use the wave's actual distance after a live speed change.");
+            Is.EqualTo(travel * .8f).Within(.0001f), "The boss stays slower than the wave after a live speed change.");
         rig.For(rig.Monster.RiseDuration + .1f - ControlField<float>(rig.Tsunami, "sequenceElapsed"));
         Assert.That(rig.Monster.EmergenceProgress, Is.EqualTo(1f));
         Assert.That(rig.Monster.HasFinishedEmerging, Is.False);
@@ -273,6 +273,10 @@ public sealed partial class CardGamePlayModeTests
         Assert.That(rig.Sequence.Stage, Is.EqualTo(MonsterSequenceStage.Emerging));
         Assert.That(rig.Tsunami.FloodCoverage, Is.Zero);
         rig.For(.1f);
+        Assert.That(rig.Monster.HasFinishedEmerging, Is.False, "Landfall must not teleport the trailing boss to shore.");
+        Assert.That(rig.Quake.IsRunning, Is.False);
+        Assert.That(rig.Tsunami.FloodCoverage, Is.GreaterThan(0f));
+        rig.Until(() => rig.Sequence.Stage == MonsterSequenceStage.WalkingToFirstPoint);
         Assert.That(rig.Monster.HasFinishedEmerging, Is.True);
         Assert.That(rig.Quake.IsRunning, Is.True);
         Assert.That(rig.Sequence.Stage, Is.EqualTo(MonsterSequenceStage.WalkingToFirstPoint));
@@ -296,7 +300,7 @@ public sealed partial class CardGamePlayModeTests
     }
 
     [UnityTest]
-    public IEnumerator MonsterTravelsWithTheSavedArtistWaveWhileTheNewMapAndExistingFloodRemainIntact()
+    public IEnumerator MonsterTrailsTheFasterSavedArtistWaveWhileTheNewMapAndExistingFloodRemainIntact()
     {
         game.GetComponent<CardDock>().SetExpanded(false, true);
         var tsunami = Object.FindFirstObjectByType<TsunamiTestController>();
@@ -328,7 +332,11 @@ public sealed partial class CardGamePlayModeTests
         var waveTravel = tsunami.transform.InverseTransformPoint(wave.transform.position).z - firstWaveZ;
         var monsterTravel = tsunami.transform.InverseTransformPoint(monster.Model.position).z - firstMonsterZ;
         Assert.That(waveTravel, Is.EqualTo(.8f * tsunami.WaveSpeed).Within(.0001f));
-        Assert.That(monsterTravel, Is.EqualTo(waveTravel).Within(.0001f), "The monster approaches with the wave instead of rising at one fixed sea position.");
+        Assert.That(monsterTravel, Is.EqualTo(waveTravel * .8f).Within(.0001f), "The moving boss must fall behind the faster wave.");
+        var initialSeparation = wave.StartDistance - (tsunami.transform.InverseTransformPoint(monster.EmergedWorldPosition).z - monster.ApproachDistance);
+        Assert.That(initialSeparation, Is.GreaterThanOrEqualTo(4f), "The crest starts ahead of the boss.");
+        Assert.That(wave.FrontDistance - tsunami.transform.InverseTransformPoint(monster.Model.position).z,
+            Is.GreaterThan(initialSeparation), "The gap must grow during the approach.");
         Assert.That(wave.Surface.transform.lossyScale, Is.EqualTo(originalScale));
         CaptureCityWorldFrame(Path.Combine(directory, "03-map-wave-travelling.png"));
         var shoreTime = (ControlField<float>(tsunami, "shorelineDistance") - ControlField<float>(tsunami, "startDistance")) / tsunami.WaveSpeed;

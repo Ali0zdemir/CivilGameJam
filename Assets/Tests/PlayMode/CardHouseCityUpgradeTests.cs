@@ -20,12 +20,11 @@ public sealed partial class CardGamePlayModeTests
         var station = Station(CardKind.Factory);
         var factory = station.GetComponent<FactoryProduction>();
         factory.enabled = false;
-        EnsurePresentationWorkers(game.Vault.IsDiscovered(kind) ? 1 : 2);
+        EnsurePresentationWorkers(FactoryProduction.RequiredWorkersFor(kind) + (game.Vault.IsDiscovered(kind) ? 0 : 1));
         var plan = ResearchPlan((int)kind - 1);
         for (int i = 0; i < batches; i++)
         {
-            EnsurePresentationWorkers(1);
-            Assert.That(station.TryAssign(People().First(person => person.CanStartWork && !person.IsStored)), Is.True);
+            AssignFactoryWorkers(kind);
             Assert.That(factory.TryInsertBlueprint(plan), Is.True);
             factory.AdvanceWork(factory.ProductionSeconds + 0.01f);
         }

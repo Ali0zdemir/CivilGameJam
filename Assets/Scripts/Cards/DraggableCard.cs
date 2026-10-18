@@ -17,6 +17,7 @@ namespace CivilGameJam.Cards
         [SerializeField] private CardDropTargetFeedback dropTargetFeedback;
         [SerializeField] private UpgradeKind upgradeType;
         [SerializeField] private Image newItemOutline;
+        [SerializeField] private Image unavailableOverlay;
         [Tooltip("Starting grid slot, numbered from 0. Use -1 for loose cards or automatic placement.")]
         [SerializeField] private int initialGridCell = -1;
         private RectTransform rect;
@@ -51,6 +52,7 @@ namespace CivilGameJam.Cards
         public int InitialGridCell => initialGridCell;
         public BuildingStation AssignedTo { get; internal set; }
         public bool IsDragging { get; private set; }
+        public bool IsHeld => pressed || IsDragging;
         public bool IsMovingInGrid => game != null && game.Grid != null && game.Grid.IsMoving(this);
         public bool IsFlying => flight != null || IsReturningFromFolder || returningBlueprintFrom != null;
         public bool IsReturningFromFolder => returningFrom != null;
@@ -70,8 +72,11 @@ namespace CivilGameJam.Cards
 
         private void RefreshAvailability()
         {
+            bool returning = IsReturningFromFolder || returningBlueprintFrom != null;
+            if (unavailableOverlay != null)
+                unavailableOverlay.gameObject.SetActive(IsPerson && UsedThisTurn && !returning);
             if (canvasGroup == null) return;
-            canvasGroup.alpha = IsReturningFromFolder || returningBlueprintFrom != null ? 0f : UsedThisTurn ? .45f : 1f;
+            canvasGroup.alpha = returning ? 0f : UsedThisTurn ? .45f : 1f;
             canvasGroup.interactable = !UsedThisTurn;
             canvasGroup.blocksRaycasts = !IsReturningFromFolder && returningBlueprintFrom == null;
         }
@@ -80,7 +85,7 @@ namespace CivilGameJam.Cards
         public bool IsBuilding => Kind == CardKind.House || Kind == CardKind.School ||
             Kind == CardKind.Factory || Kind == CardKind.ResearchCenter;
         public Vector3 LayoutScale => feedback.LayoutScale;
-        public bool CanShowHover => game != null && !game.ActionsLocked && !game.IsChoosingBlueprint && !IsDragging &&
+        public bool CanShowHover => game != null && !game.ActionsLocked && !game.IsTutorialActive && !game.IsChoosingBlueprint && !IsDragging &&
             !game.IsDraggingAnyCard && !IsStored && !IsFlying && !IsMovingInGrid && !IsInstallingUpgrade && !IsStoringBlueprint && (station == null || !station.IsAnimatingWorkers);
         public Vector2 TablePosition => game != null
             ? (Vector2)game.CardLayer.InverseTransformPoint(flight != null
@@ -132,7 +137,7 @@ namespace CivilGameJam.Cards
         public void OnPointerDown(PointerEventData eventData)
         {
             if (eventData.button != PointerEventData.InputButton.Left || pressed || IsDragging ||
-                IsStored || UsedThisTurn || IsReturningFromFolder || game.IsChoosingBlueprint || game.ActionsLocked ||
+                IsStored || UsedThisTurn || IsReturningFromFolder || game.IsChoosingBlueprint || game.ActionsLocked || !game.CanInteractWithCard(this) ||
                 IsBuilding && game.BuildingPlacementLocked ||
                 houseUpgrades != null && houseUpgrades.IsDestroyed) return;
             pressed = true;
@@ -155,7 +160,7 @@ namespace CivilGameJam.Cards
         public void OnBeginDrag(PointerEventData eventData)
         {
             if (eventData.button != PointerEventData.InputButton.Left || IsDragging ||
-                IsStored || UsedThisTurn || IsReturningFromFolder || game.IsChoosingBlueprint || game.ActionsLocked ||
+                IsStored || UsedThisTurn || IsReturningFromFolder || game.IsChoosingBlueprint || game.ActionsLocked || !game.CanInteractWithCard(this) ||
                 IsBuilding && game.BuildingPlacementLocked ||
                 houseUpgrades != null && houseUpgrades.IsDestroyed ||
                 (pressed && pointerId != eventData.pointerId)) return;
@@ -304,8 +309,7 @@ namespace CivilGameJam.Cards
             StopFlight();
             returningFrom = source;
             feedback.SetDisplayedScale(1f);
-            canvasGroup.alpha = 0f;
-            canvasGroup.blocksRaycasts = false;
+            RefreshAvailability();
         }
 
         internal void EndFolderReturn(WorkerSlot source)

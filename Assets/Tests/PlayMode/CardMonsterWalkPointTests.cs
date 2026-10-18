@@ -12,7 +12,7 @@ using UnityEngine.UI;
 public sealed partial class CardGamePlayModeTests
 {
     [UnityTest]
-    public IEnumerator MonsterButtonsEmergeNearbyWalkToTheScenePointThenBreatheDownAtFortySevenDegreesInCardScene()
+    public IEnumerator MonsterButtonsEmergeNearbyWalkToTheScenePointThenBreatheDownAtTheConfiguredAngleInCardScene()
     {
         var directory = Path.GetFullPath(Path.Combine(Application.dataPath, "../Library/MonsterWalkPointWork"));
         Directory.CreateDirectory(directory);
@@ -57,7 +57,7 @@ public sealed partial class CardGamePlayModeTests
             Assert.That(Vector3.Distance(monster.Model.Find("Right_Foot").position, rightFoot), Is.LessThan(0.0001f));
             var target = ControlField<Vector3>(fire, "ignitionPoint");
             var direction = (target - breath.Mouth.position).normalized;
-            Assert.That(Mathf.Asin(-direction.y) * Mathf.Rad2Deg, Is.InRange(45f, 50f));
+            Assert.That(Mathf.Asin(-direction.y) * Mathf.Rad2Deg, Is.EqualTo(55.5f).Within(.01f));
             Assert.That(Vector3.Angle(breath.Mouth.forward, direction), Is.LessThan(0.1f), "The head and actual fire jet share the same downward aim.");
             Assert.That(Vector3.Distance(breath.Mouth.position, breath.AimedMouthPosition), Is.LessThan(0.001f));
             Assert.That(Vector3.Angle(Vector3.ProjectOnPlane(direction, Vector3.up), monster.Model.forward), Is.LessThan(0.1f),

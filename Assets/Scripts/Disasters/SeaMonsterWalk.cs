@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace CivilGameJam.Disasters
 {
-    /// <summary>Animates alternating, planted steps using the saved cube limbs.</summary>
+    /// <summary>Animates alternating, planted steps using the saved monster's limb controls.</summary>
     [DisallowMultipleComponent]
     public sealed class SeaMonsterWalk : MonoBehaviour
     {
@@ -168,7 +168,8 @@ namespace CivilGameJam.Disasters
                 for (var step = lastFootstep + 1; step <= completed; step++)
                 {
                     ApplyWalkPose(step * StepDuration);
-                    footstepFeedback.EmitFootfall((step & 1) == 1 ? leftFoot : rightFoot);
+                    // A long frame catches up visual footprints, but never queues old impact sounds late.
+                    footstepFeedback.EmitFootfall((step & 1) == 1 ? leftFoot : rightFoot, playSound: step == completed);
                 }
             lastFootstep = completed;
             ApplyWalkPose(seconds);

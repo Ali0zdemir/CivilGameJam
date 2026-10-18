@@ -14,6 +14,7 @@ namespace CivilGameJam.Cards
             public string title;
             public GameObject prefab;
             public Button button;
+            public Image unavailableOverlay;
             public GameObject productPrefab;
             [Min(1)] public int productCount = 2;
         }
@@ -33,6 +34,7 @@ namespace CivilGameJam.Cards
         [Header("Saved drag destination outlines")]
         [SerializeField] private CardDropTargetFeedback vaultDropTarget;
         [SerializeField] private CardDropTargetFeedback peopleDropTarget;
+        [SerializeField] private CardDropTargetFeedback upgradesDropTarget;
 
         [Header("Turn personnel")]
         [SerializeField] private GameObject normalPersonPrefab;
@@ -58,6 +60,30 @@ namespace CivilGameJam.Cards
         private string defaultHint;
         private DraggableCard draggedCard;
         private CardHover inspectedCard;
+        private WorkersTutorial workersTutorial;
+        private UpgradeKind researchRestriction;
+
+        public event Action<DraggableCard, DraggableCard> PersonEducated;
+        public event Action<BuildingStation> BlueprintChoiceOpened;
+        public event Action<DraggableCard> BlueprintDiscovered;
+        public event Action<DraggableCard> BlueprintProduced;
+        public bool IsTutorialActive => workersTutorial != null && workersTutorial.IsOpen;
+        public bool TutorialAllowsReady => IsTutorialActive && workersTutorial.AllowsReady;
+        public bool TutorialKeepsBoardOpen => IsTutorialActive && workersTutorial.KeepsBoardOpen;
+        internal void SetWorkersTutorial(WorkersTutorial tutorial)
+        {
+            workersTutorial = tutorial;
+            if (IsChoosingBlueprint) RefreshBlueprintChoices();
+        }
+        public bool CanInteractWithCard(DraggableCard card) => !IsTutorialActive || workersTutorial.AllowsCardInteraction(card);
+        public bool CanAssignWorker(BuildingStation station, DraggableCard worker) =>
+            !IsTutorialActive || workersTutorial.AllowsAssignment(station, worker);
+        public bool CanInsertBlueprint(FactoryProduction factory, DraggableCard blueprint) =>
+            !IsTutorialActive || workersTutorial.AllowsBlueprintInsertion(factory, blueprint);
+        public bool CanSelectBlueprint(UpgradeKind kind) =>
+            IsResearchAllowed(kind) && (!IsTutorialActive || workersTutorial.AllowsBlueprintSelection(kind));
+        public bool CanInstallUpgrade(HouseUpgrades house, DraggableCard upgrade) =>
+            !IsTutorialActive || workersTutorial.AllowsUpgradeInstallation(house, upgrade);
 
         public IReadOnlyList<DraggableCard> Cards => cards;
         public RectTransform CardLayer => cardLayer;
@@ -80,7 +106,27 @@ namespace CivilGameJam.Cards
         }
         public bool IsDraggingAnyCard => draggedCard != null;
         public bool CanUseBlueprint(UpgradeKind kind) => kind != UpgradeKind.None && !completedBlueprints.Contains(kind);
-        public bool CanResearchBlueprint(UpgradeKind kind) => CanUseBlueprint(kind) && !vault.IsDiscovered(kind);
+        public bool CanResearchBlueprint(UpgradeKind kind) => IsResearchAllowed(kind) && CanUseBlueprint(kind) && !vault.IsDiscovered(kind);
+
+        private bool IsResearchAllowed(UpgradeKind kind) => researchRestriction == UpgradeKind.None || kind == researchRestriction;
+
+        public void RestrictResearchTo(UpgradeKind kind)
+        {
+            if (researchRestriction == kind) return;
+            researchRestriction = kind;
+            if (IsChoosingBlueprint) RefreshBlueprintChoices();
+        }
+
+        public static int RequiredResearchers(UpgradeKind kind) => 1;
+        public bool CanResearchBlueprint(UpgradeKind kind, int workerCount) =>
+            workerCount >= RequiredResearchers(kind) && CanResearchBlueprint(kind);
+
+        public bool HasResearchForWorkers(int workerCount)
+        {
+            foreach (var option in blueprints)
+                if (CanResearchBlueprint(option.prefab.GetComponent<DraggableCard>().UpgradeType, workerCount)) return true;
+            return false;
+        }
 
         public void CompleteBlueprint(UpgradeKind kind)
         {
@@ -246,6 +292,7 @@ namespace CivilGameJam.Cards
                 ReturnToTable(product, origin);
             }
             ShowMessage($"Production complete: {recipe.productCount} {recipe.title} items. Install them on houses.");
+            BlueprintProduced?.Invoke(blueprint);
         }
 
         private DraggableCard Spawn(GameObject prefab)
@@ -326,6 +373,12 @@ namespace CivilGameJam.Cards
                 }
             }
             if (card.Kind == CardKind.Blueprint && vault.Store(card, card.Rect.position)) return;
+            if (IsTutorialActive && card.Kind == CardKind.Upgrade)
+            {
+                // Keep practice items reachable if released outside the highlighted houses.
+                RestoreRejectedDrop(card, dragStart);
+                return;
+            }
             if (sidebar.TrySnap(card, card.Rect.position)) return;
             ClampToTable(card);
         }
@@ -384,6 +437,7 @@ namespace CivilGameJam.Cards
             vaultDropTarget?.SetAvailable(canDrop && incoming.Kind == CardKind.Blueprint && incoming.Owner == this &&
                 !incoming.IsStored && vault.SlotFor(incoming.UpgradeType) != null);
             peopleDropTarget?.SetAvailable(canDrop && incoming.IsPerson && incoming.Owner == this && !incoming.IsStored);
+            upgradesDropTarget?.SetAvailable(canDrop && incoming.Kind == CardKind.Upgrade && incoming.Owner == this && !incoming.IsStored);
         }
 
         private void ClearPreview()
@@ -453,6 +507,7 @@ namespace CivilGameJam.Cards
             sidebar.TransferRememberedPosition(student, educated);
             ReturnToTable(educated, schoolPosition, animate);
             ShowMessage("Education complete: 1 person became educated.");
+            PersonEducated?.Invoke(student, educated);
             return educated;
         }
 
@@ -465,6 +520,7 @@ namespace CivilGameJam.Cards
                 if (product.Kind != CardKind.Upgrade || product.UpgradeType != kind) continue;
                 product.InstalledIn?.DiscardInstalled(product);
                 product.StopFlight();
+                sidebar.ForgetPosition(product);
                 cards.RemoveAt(i);
                 product.gameObject.SetActive(false);
                 Destroy(product.gameObject);
@@ -592,26 +648,34 @@ namespace CivilGameJam.Cards
         {
             if (IsChoosingBlueprint) return;
             if (!HasUndiscoveredBlueprints) { station.FinishResearch(); return; }
+            if (!HasResearchForWorkers(station.WorkerCount)) return;
             CloseInspection();
             choosingStation = station;
             ClearPreview();
+            BlueprintChoiceOpened?.Invoke(station);
+            RefreshBlueprintChoices();
+            choicePanel.SetAsLastSibling();
+            choicePanel.gameObject.SetActive(true);
+        }
+
+        private void RefreshBlueprintChoices()
+        {
             foreach (var option in blueprints)
             {
                 var kind = option.prefab.GetComponent<DraggableCard>().UpgradeType;
-                bool discovered = vault.IsDiscovered(kind);
-                option.button.interactable = CanResearchBlueprint(kind);
-                var label = option.button.transform.Find("Name")?.GetComponent<TextMeshProUGUI>();
-                if (label != null) label.text = option.title + (!CanUseBlueprint(kind) ? "\nCOMPLETED" : discovered ? "\nDISCOVERED" : string.Empty);
+                bool available = CanResearchBlueprint(kind, choosingStation != null ? choosingStation.WorkerCount : 0) && CanSelectBlueprint(kind);
+                option.button.interactable = available;
+                // During the tutorial the saved spotlight already darkens the other cards.
+                if (option.unavailableOverlay != null) option.unavailableOverlay.gameObject.SetActive(!available && !IsTutorialActive);
+                // Choice text is authored in the scene; refreshing only changes availability.
             }
-            choicePanel.SetAsLastSibling();
-            choicePanel.gameObject.SetActive(true);
         }
 
         public void SelectBlueprint(int index)
         {
             if (!IsChoosingBlueprint || index < 0 || index >= blueprints.Length) return;
             var kind = blueprints[index].prefab.GetComponent<DraggableCard>().UpgradeType;
-            if (!CanResearchBlueprint(kind)) return;
+            if (!CanResearchBlueprint(kind, choosingStation.WorkerCount) || !CanSelectBlueprint(kind)) return;
             var station = choosingStation;
             choosingStation = null;
             choicePanel.gameObject.SetActive(false);
@@ -621,6 +685,7 @@ namespace CivilGameJam.Cards
             station.FinishResearch();
             blueprint.GetComponent<BlueprintDiscoveryEffects>()?.BeginDiscovery();
             ShowMessage(blueprints[index].title + " discovered. Blueprint added to the Vault.");
+            BlueprintDiscovered?.Invoke(blueprint);
         }
 
         private void ShowMessage(string message)

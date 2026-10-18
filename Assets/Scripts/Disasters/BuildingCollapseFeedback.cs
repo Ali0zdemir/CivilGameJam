@@ -9,13 +9,19 @@ namespace CivilGameJam.Disasters
         [SerializeField] private BuildingModelGeometry geometry;
         [SerializeField] private Material constructionDustMaterial;
         [SerializeField, Range(.1f, 3f)] private float dustAmount = 1.4f;
+        [Header("Building collapse sound")]
+        [SerializeField] private AudioClip collapseSound;
+        [SerializeField, Range(0f, 1f)] private float collapseSoundVolume = .12f;
+        [Tooltip("Skip the recording's leading silence so its attack starts with the visible collapse.")]
+        [SerializeField, Min(0f)] private float collapseSoundStartSeconds;
         private readonly System.Random random = new System.Random();
+        private AudioSource collapseAudio;
         private GameObject effects;
         private ParticleSystem[] dust;
         private Mesh[] meshes;
         private Bounds[] foundations;
         private float dustElapsed;
-        private bool prepared;
+        private bool prepared, playCollapseSound;
         private const float DustLifetime = 1.2f;
 
         public bool Reported { get; private set; }
@@ -27,9 +33,25 @@ namespace CivilGameJam.Disasters
             get { var count = 0; if (dust != null) foreach (var puff in dust) if (puff != null) count += puff.particleCount; return count; }
         }
 
-        public void PrepareCollapse()
+        private void Awake()
+        {
+            if (collapseSound == null) return;
+            // Prepare the decoded clip and voice before any house starts falling.
+            collapseSound.LoadAudioData();
+            collapseAudio = gameObject.AddComponent<AudioSource>();
+            collapseAudio.playOnAwake = false;
+            collapseAudio.clip = collapseSound;
+            collapseAudio.volume = collapseSoundVolume;
+            collapseAudio.loop = false;
+            collapseAudio.spatialBlend = 0f;
+            collapseAudio.dopplerLevel = 0f;
+            collapseAudio.priority = 96;
+        }
+
+        public void PrepareCollapse(bool withSound = false)
         {
             if (Reported || geometry == null) return;
+            playCollapseSound = withSound;
             var parts = geometry.IsCollection ? geometry.Parts : new[] { geometry };
             foundations = new Bounds[parts.Length];
             for (var i = 0; i < parts.Length; i++) foundations[i] = parts[i].WorldFoundationBounds;
@@ -46,6 +68,12 @@ namespace CivilGameJam.Disasters
                 if (!prepared) return;
                 EnsureEffects();
                 Reported = true;
+                if (playCollapseSound && collapseAudio != null)
+                {
+                    collapseAudio.timeSamples = Mathf.Clamp(Mathf.RoundToInt(collapseSoundStartSeconds * collapseSound.frequency), 0, collapseSound.samples - 1);
+                    // This is the same sampled frame that first reports visible damage; no timer or coroutine.
+                    collapseAudio.Play();
+                }
             }
             if (IsDustEmitting) return;
             IsDustEmitting = true;
@@ -103,7 +131,8 @@ namespace CivilGameJam.Disasters
 
         public void ResetFeedback()
         {
-            Reported = prepared = false;
+            Reported = prepared = playCollapseSound = false;
+            if (collapseAudio != null) collapseAudio.Stop();
             FinishCollapse();
             if (dust != null) foreach (var puff in dust) if (puff != null) puff.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         }

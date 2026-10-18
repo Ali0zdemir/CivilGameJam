@@ -8,20 +8,55 @@ using UnityEngine;
 public sealed partial class CardGamePlayModeTests
 {
     [Test]
+    public void TutorialOutcomeOnlyExplainsTheCorrectReportAndCancellationClearsIt()
+    {
+        var results = Object.FindFirstObjectByType<MonsterSequenceResults>();
+        var outcome = ControlField<TMP_Text>(results, "tutorialOutcomeLabel");
+        if (outcome == null)
+        {
+            // The authored tutorial now explains this in LessonPanel; the legacy label is optional.
+            results.ShowRound(2, 4, 16, 2); results.Hide();
+            var preview = new GameObject("OptionalOutcomeTest", typeof(RectTransform), typeof(TextMeshProUGUI));
+            preview.transform.SetParent(results.transform, false);
+            outcome = preview.GetComponent<TMP_Text>();
+            PresentationField(results, "tutorialOutcomeLabel", outcome);
+        }
+        results.ShowRound(2, 4, 16, 2);
+        Assert.That(outcome.gameObject.activeSelf, Is.False);
+        results.ExplainNextRoundResult();
+        results.ShowRound(2, 4, 16, 2);
+        Assert.That(outcome.gameObject.activeSelf, Is.True);
+        Assert.That(outcome.text, Does.Contain("Half of your houses survived"));
+        results.Retry();
+        results.ShowRound(2, 4, 16, 2);
+        Assert.That(outcome.gameObject.activeSelf, Is.False);
+        results.ExplainNextRoundResult();
+        results.Hide();
+        results.ShowRound(2, 4, 16, 2);
+        Assert.That(outcome.gameObject.activeSelf, Is.False, "STOP/cancellation cannot leave a pending tutorial explanation.");
+        results.ExplainNextRoundResult();
+        results.ShowRound(1, 4, 19, 3);
+        Assert.That(outcome.gameObject.activeSelf, Is.False, "Never claim half survived for a different outcome.");
+        results.Retry();
+    }
+
+    [Test]
     public void ResultsShowTheProtectedSnapshotAndKeepTheAwardAndDiagnosticDamageCounts()
     {
         var results = Object.FindFirstObjectByType<MonsterSequenceResults>();
         var label = ControlField<TMP_Text>(results, "destroyedCountLabel");
         var earned = ControlField<TMP_Text>(results, "earnedPointsLabel");
+        var points = ControlField<TMP_Text>(results, "earnedPointsCount");
         results.ShowRound(3, 4, 16, 1);
         Assert.That(results.ProtectedHouseCount, Is.EqualTo(1));
         Assert.That(results.DestroyedHouseCount, Is.EqualTo(3));
         Assert.That(label.text, Is.EqualTo("1 / 4"));
-        Assert.That(earned.text, Is.EqualTo("AP EARNED: +16"));
+        Assert.That(earned.text, Is.EqualTo("AP EARNED"));
+        Assert.That(points.text, Is.EqualTo("+16"));
         // Rebuilt houses can all be standing while only two were protected in the completed turn.
         results.ShowRound(0, 4, 18, 2);
         Assert.That(label.text, Is.EqualTo("2 / 4"));
-        Assert.That(earned.text, Is.EqualTo("AP EARNED: +18"));
+        Assert.That(points.text, Is.EqualTo("+18"));
         results.ShowRound(0, 4, 46, 4);
         Assert.That(label.text, Is.EqualTo("4 / 4"));
         results.ShowRound(4, 4, 6, 0);

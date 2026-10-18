@@ -34,6 +34,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
     [UnitySetUp]
     public IEnumerator LoadRound()
     {
+        SceneManager.sceneLoaded += DisableIntroForEconomyTests;
         yield return SceneManager.LoadSceneAsync("2DCardScene"); yield return null;
         game = Object.FindFirstObjectByType<CardGameController>(); bank = game.AbilityPoints;
         round = Object.FindFirstObjectByType<EarthquakeRoundController>();
@@ -48,7 +49,18 @@ public sealed partial class CardAbilityPointsPlayModeTests
         var dock = game.GetComponent<CardDock>(); dock.enabled = false; dock.SetExpanded(false, true);
         houses = game.GetComponentsInChildren<HouseCityUpgradeLink>().OrderBy(link => link.House.Card.InitialGridCell).ToArray();
         Assert.That(bank.CurrentPoints, Is.EqualTo(10)); Assert.That(round.RoundNumber, Is.EqualTo(1));
+        Assert.That(Field<TMP_Text>(round, "roundLabel"), Is.Not.Null, "The authored Turn UI must be bound to the playable round.");
+        Assert.That(Field<TMP_Text>(round, "roundLabel").text, Is.EqualTo("1"));
     }
+
+    private static void DisableIntroForEconomyTests(Scene scene, LoadSceneMode mode)
+    {
+        var tutorial = Object.FindFirstObjectByType<WorkersTutorial>();
+        if (tutorial != null) tutorial.enabled = false;
+    }
+
+    [TearDown]
+    public void RestoreIntroEconomySceneBootstrap() => SceneManager.sceneLoaded -= DisableIntroForEconomyTests;
 
     private BuildingStation Station(CardKind kind) => game.Cards.Single(card => card.Kind == kind).Station;
     private DraggableCard Person() => game.Cards.First(card => card.Kind == CardKind.Person && !card.IsStored && !card.UsedThisTurn);
@@ -59,12 +71,19 @@ public sealed partial class CardAbilityPointsPlayModeTests
     }
     private DraggableCard Research(DraggableCard worker, UpgradeKind kind = UpgradeKind.RailSystem)
     {
-        Assert.That(research.TryAssign(worker), Is.True); research.AdvanceWork(100f);
+        // Synchronous setup skips completed researchers' return animations before reusing both pockets.
+        foreach (var person in game.Cards.Where(card => card.IsPerson && card.UsedThisTurn && card.IsFlying)) person.StopFlight();
+        Assert.That(research.TryAssign(worker), Is.True);
+        for (int i = 1; i < CardGameController.RequiredResearchers(kind); i++)
+            Assert.That(research.TryAssign(Person()), Is.True);
+        research.AdvanceWork(100f);
         Assert.That(game.IsChoosingBlueprint, Is.True); game.SelectBlueprint((int)kind - 1);
         return game.Cards.Single(card => card.Kind == CardKind.Blueprint && card.UpgradeType == kind);
     }
     private DraggableCard Produce(DraggableCard plan)
     {
+        while (factoryStation.WorkerCount < FactoryProduction.RequiredWorkersFor(plan.UpgradeType))
+            Assert.That(factoryStation.TryAssign(Person()), Is.True);
         Assert.That(factory.TryInsertBlueprint(plan), Is.True); factory.AdvanceWork(100f);
         return game.Cards.Last(card => card.Kind == CardKind.Upgrade && !card.IsStored);
     }
@@ -121,18 +140,19 @@ public sealed partial class CardAbilityPointsPlayModeTests
     {
         var educated = Educate(); var plan = Research(Person());
         Assert.That(bank.CurrentPoints, Is.EqualTo(4));
+        bank.AddPoints(1);
         Assert.That(factoryStation.TryAssign(educated), Is.True);
         var normal = Person(); Assert.That(factoryStation.TryAssign(normal), Is.True);
         Assert.That(factory.CurrentOrderCost, Is.EqualTo(8));
-        Assert.That(factory.TryInsertBlueprint(plan), Is.False); Assert.That(bank.CurrentPoints, Is.EqualTo(4));
+        Assert.That(factory.TryInsertBlueprint(plan), Is.False); Assert.That(bank.CurrentPoints, Is.EqualTo(5));
         Assert.That(educated.UsedThisTurn || normal.UsedThisTurn, Is.False);
         factoryStation.ReleaseWorker(1, false);
-        Assert.That(bank.CurrentPoints, Is.EqualTo(4), "An idle worker has no AP charge to refund.");
-        Assert.That(factory.TryInsertBlueprint(plan), Is.True); Assert.That(bank.CurrentPoints, Is.EqualTo(1));
+        Assert.That(bank.CurrentPoints, Is.EqualTo(5), "An idle worker has no AP charge to refund.");
+        Assert.That(factory.TryInsertBlueprint(plan), Is.True); Assert.That(bank.CurrentPoints, Is.EqualTo(2));
         Assert.That(factoryStation.TryAssign(normal), Is.False); Assert.That(normal.UsedThisTurn, Is.False);
         factory.AdvanceWork(100f);
         Assert.That(factoryStation.WorkerCount, Is.Zero); Assert.That(educated.UsedThisTurn, Is.True);
-        Assert.That(factoryStation.TryAssign(educated), Is.False); Assert.That(bank.CurrentPoints, Is.EqualTo(1));
+        Assert.That(factoryStation.TryAssign(educated), Is.False); Assert.That(bank.CurrentPoints, Is.EqualTo(2));
         Assert.That(game.Cards.Count(card => card.Kind == CardKind.Upgrade), Is.EqualTo(2));
         Assert.That(factory.TryInsertBlueprint(plan), Is.True);
         factory.AdvanceWork(100f);
@@ -225,6 +245,8 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(game.Vault.AvailableCount(UpgradeKind.RailSystem), Is.Zero);
         Assert.That(game.Vault.SlotFor(UpgradeKind.RailSystem).CardRect.gameObject.activeSelf, Is.False);
         Assert.That(game.CanResearchBlueprint(UpgradeKind.RailSystem), Is.True);
+        Assert.That(game.CanResearchBlueprint(UpgradeKind.Breakwater) || game.CanResearchBlueprint(UpgradeKind.Fire), Is.False,
+            "A failed earthquake keeps research restricted on the next preparation turn.");
         for (int i = 0; i < 4; i++) Assert.That(houses[i].Building.Find("Apartment_Ground").position, Is.EqualTo(grounds[i]));
         for (int i = 0; i < 6; i++) round.AdvanceRound(100f);
         Assert.That(bank.CurrentPoints, Is.EqualTo(16), "A transition must not pay twice.");
@@ -246,8 +268,9 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(round.LastProtectedHouseCount, Is.EqualTo(4)); Assert.That(round.LastSurvivalReward, Is.EqualTo(12));
         Assert.That(sequence.IsRunning && bank.ActionsLocked, Is.True, "Water follows the protected earthquake without another READY.");
         sequence.StopSequence(); round.AdvanceRound(0f); Invoke(navigation, "AdvanceNavigation", 2f);
-        Assert.That(bank.CurrentPoints, Is.EqualTo(18)); Assert.That(round.CanReady, Is.True);
+        Assert.That(bank.CurrentPoints, Is.Zero); Assert.That(round.CanReady, Is.True);
         Assert.That(round.LastRoundGrant, Is.EqualTo(6), "The first Tsunami preparation already uses the smaller bonus.");
+        bank.AddPoints(18); // Isolate obsolete-plan interactions from the deferred disaster payout.
         for (int i = 0; i < houses.Length; i++)
         {
             Assert.That(houses[i].House.GetInstalled(UpgradeKind.RailSystem), Is.SameAs(installed[i]));
@@ -267,6 +290,9 @@ public sealed partial class CardAbilityPointsPlayModeTests
         var caption = Field<TextMeshProUGUI>(game.Vault.SlotFor(UpgradeKind.RailSystem), "discovery");
         Assert.That(caption.text, Is.EqualTo("COMPLETED"));
         Assert.That(game.CanUseBlueprint(UpgradeKind.Breakwater) && game.CanUseBlueprint(UpgradeKind.Fire), Is.True);
+        Assert.That(game.CanResearchBlueprint(UpgradeKind.Breakwater) && game.CanResearchBlueprint(UpgradeKind.Fire), Is.True,
+            "Clearing the earthquake opens the other undiscovered protection blueprints.");
+        Assert.That(game.CanSelectBlueprint(UpgradeKind.Breakwater) && game.CanSelectBlueprint(UpgradeKind.Fire), Is.True);
         round.Ready(); Assert.That(sequence.ActiveSequence, Is.EqualTo(2));
         Assert.That(Field<TsunamiTestController>(round, "tsunami").IsRunning, Is.True);
         sequence.StopSequence(); round.AdvanceRound(0f);
@@ -280,6 +306,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(round.LastProtectedHouseCount, Is.Zero); Assert.That(bank.CurrentPoints, Is.EqualTo(20));
         Assert.That(round.LastRoundGrant, Is.EqualTo(10), "Earthquake retries keep their original bonus until the stage is cleared.");
         Assert.That(round.SequenceNumber, Is.EqualTo(1)); Assert.That(round.RoundNumber, Is.EqualTo(2));
+        Assert.That(Field<TMP_Text>(round, "roundLabel").text, Is.EqualTo("2"));
         Assert.That(houses.All(house => house.House.IsDestroyed), Is.True);
         sequence.Results.Retry();
         Assert.That(houses.Any(house => house.House.IsDestroyed || house.Building.GetComponent<EarthquakeHouseDamage>().IsDestroyed), Is.False);
@@ -301,6 +328,8 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(body.position, Is.EqualTo(position)); Assert.That(Quaternion.Angle(body.rotation, rotation), Is.LessThan(.001f));
         Assert.That(houses.Any(house => house.House.IsDestroyed || house.Building.GetComponent<EarthquakeHouseDamage>().IsDestroyed), Is.False);
         Assert.That(bank.ActionsLocked, Is.False); Assert.That(round.CanReady, Is.True);
+        Assert.That(round.RoundNumber, Is.EqualTo(1));
+        Assert.That(Field<TMP_Text>(round, "roundLabel").text, Is.EqualTo("1"), "Cancelling a disaster must not advance the Turn UI.");
         yield return null;
     }
 
@@ -345,6 +374,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
     {
         PrepareSeismic(1); yield return new WaitForSecondsRealtime(1.6f);
         round.Ready(); Until(() => round.RoundNumber == 2); Until(() => !navigation.IsEventCameraActive);
+        Assert.That(Field<TMP_Text>(round, "roundLabel").text, Is.EqualTo("2"));
         sequence.Results.Retry();
         Assert.That(game.Cards.Any(card => card.Kind == CardKind.Blueprint), Is.False);
         var plan = Research(Person());
@@ -358,10 +388,13 @@ public sealed partial class CardAbilityPointsPlayModeTests
         yield return new WaitForSecondsRealtime(1.6f);
         Assert.That(bank.CurrentPoints, Is.EqualTo(3)); round.Ready();
         Until(() => round.RoundNumber == 3);
+        Assert.That(Field<TMP_Text>(round, "roundLabel").text, Is.EqualTo("3"));
         Assert.That(round.SequenceNumber, Is.EqualTo(2)); Assert.That(round.LastRoundSurvived, Is.True);
-        Assert.That(bank.CurrentPoints, Is.EqualTo(21));
+        Assert.That(bank.CurrentPoints, Is.EqualTo(3), "Keep carried AP unchanged until the following tsunami has completed.");
         Assert.That(houses.All(house => house.House.GetInstalled(UpgradeKind.RailSystem) != null), Is.True);
         AssertFreshPeople(Array.Empty<DraggableCard>());
+        Until(() => sequence.Results.IsVisible);
+        Assert.That(bank.CurrentPoints, Is.EqualTo(27), "Carry three AP, then pay the deferred eighteen and the tsunami's six AP together.");
     }
 
     [Test]
@@ -458,6 +491,8 @@ public sealed partial class CardAbilityPointsPlayModeTests
     [UnityTest]
     public IEnumerator RollingBackOnlyNewDiscoveriesAlsoClearsAnIdleFactoryPlan()
     {
+        // Isolate cross-recipe rollback from the separately tested disaster research restriction.
+        game.RestrictResearchTo(UpgradeKind.None);
         var committed = Research(Person());
         game.EndBlueprintTurn(discardNewDiscoveries: false);
         var fresh = Research(Person(), UpgradeKind.Fire);
@@ -514,8 +549,6 @@ public sealed partial class CardAbilityPointsPlayModeTests
     }
     private void Step(float seconds)
     {
-        var roar = Field<AudioSource>(sequence, "earthquakeRoar");
-        var advanceRoar = roar != null && roar.isPlaying;
         if (earthquake.IsRunning) Invoke(earthquake, "AdvanceShake", seconds);
         var water = Field<TsunamiTestController>(round, "tsunami");
         if (water.IsRunning) Invoke(water, "AdvanceTsunami", seconds);
@@ -523,12 +556,6 @@ public sealed partial class CardAbilityPointsPlayModeTests
         if (flames.IsRunning) Invoke(flames, "AdvanceFire", seconds);
         var walk = Object.FindFirstObjectByType<SeaMonsterWalk>();
         if (walk.IsWalkingAfterEvent) Invoke(walk, "AdvanceAfterEventWalk", seconds);
-        // Manual scene time must also advance the independent audio clock.
-        if (advanceRoar && roar.isPlaying)
-        {
-            var nextTime = roar.time + seconds * roar.pitch;
-            if (nextTime >= roar.clip.length) roar.Stop(); else roar.time = nextTime;
-        }
         Invoke(sequence, "AdvanceSequence", seconds); Invoke(sequence, "LateUpdate");
         Invoke(navigation, "AdvanceNavigation", seconds);
         foreach (var house in houses)

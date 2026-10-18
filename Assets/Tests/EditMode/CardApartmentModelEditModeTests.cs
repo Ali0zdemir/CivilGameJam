@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using CivilGameJam;
+using CivilGameJam.Disasters;
 using CivilGameJam.Upgrades;
 using NUnit.Framework;
 using TMPro;
@@ -56,6 +57,25 @@ public sealed class CardApartmentModelEditModeTests
         var originalMeshes = AssetDatabase.LoadAllAssetsAtPath("Assets/EfeArts/EmreArts/Apartments(Elevated).fbx").OfType<Mesh>().ToArray();
         foreach (var part in geometry.Parts)
         {
+            var burnt = part.GetComponent<ApartmentBurntAppearance>();
+            Assert.That(burnt, Is.Not.Null);
+            Assert.That(burnt.IsBurnt, Is.False);
+            var burntData = new SerializedObject(burnt);
+            Assert.That(Quaternion.Angle(burntData.FindProperty("burntTilt").quaternionValue, Quaternion.identity), Is.GreaterThan(.1f));
+            var burntVariants = burntData.FindProperty("variants");
+            Assert.That(burntVariants.arraySize, Is.EqualTo(2));
+            Assert.That(AssetDatabase.GetAssetPath(burntVariants.GetArrayElementAtIndex(0).FindPropertyRelative("burntMesh").objectReferenceValue),
+                Is.EqualTo("Assets/emreAnimation/Apartment(Burnt).fbx"));
+            for (var variant = 0; variant < 2; variant++)
+            {
+                var item = burntVariants.GetArrayElementAtIndex(variant);
+                Assert.That(item.FindPropertyRelative("body").objectReferenceValue, Is.Not.Null);
+                var burntMaterials = item.FindPropertyRelative("burntMaterials");
+                Assert.That(burntMaterials.arraySize, Is.EqualTo(3));
+                for (var slot = 0; slot < burntMaterials.arraySize; slot++)
+                    Assert.That(AssetDatabase.GetAssetPath(burntMaterials.GetArrayElementAtIndex(slot).objectReferenceValue),
+                        Is.EqualTo("Assets/emreAnimation/Apartment(Burnt).fbx"));
+            }
             var surface = new SerializedObject(part);
             Assert.That(surface.FindProperty("elevatedDefinition").objectReferenceValue, Is.Not.Null);
             var body = (MeshFilter)surface.FindProperty("elevatedMesh").objectReferenceValue;

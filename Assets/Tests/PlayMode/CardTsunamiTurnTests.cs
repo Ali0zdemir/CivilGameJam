@@ -15,7 +15,7 @@ using Object = UnityEngine.Object;
 public sealed partial class CardAbilityPointsPlayModeTests
 {
     [UnityTest]
-    public IEnumerator BossTsunamiReportsThreeSecondsAfterTheLastHouseFalls()
+    public IEnumerator BossTsunamiReportsFourSecondsAfterTheLastHouseFalls()
     {
         yield return ReachTsunami();
         var water = Field<TsunamiTestController>(round, "tsunami");
@@ -42,13 +42,13 @@ public sealed partial class CardAbilityPointsPlayModeTests
             "lastFall=" + lastFall + ", report=" + clock + ", difference=" + (clock - lastFall) + "; " + state);
         Assert.That(lastFall, Is.GreaterThan(0f));
         Assert.That(sequence.Results.IsVisible, Is.True);
-        Assert.That(clock - lastFall, Is.EqualTo(3f).Within(.06f), "Start the result delay at the final authored collapse, without an extra dust/water/walk wait.");
+        Assert.That(clock - lastFall, Is.EqualTo(4f).Within(.06f), "Add three seconds to the saved one-second delay after the final authored collapse.");
         AssertVisibleTsunamiRuins();
         Assert.That(bank.CurrentPoints, Is.EqualTo(24));
     }
 
     [UnityTest]
-    public IEnumerator ReadyTsunamiKeepsRuinsVisibleAndReportsAfterThreeSecondsOfSmoothRecession()
+    public IEnumerator ReadyTsunamiKeepsRuinsVisibleAndReportsAfterFourSecondsOfSmoothRecession()
     {
         yield return ReachTsunami();
         Set(navigation, "targetPan", new Vector2(.7f, -.3f));
@@ -59,7 +59,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
         var water = Field<TsunamiTestController>(round, "tsunami");
         var wave = Field<AuthoredTsunamiWave>(water, "authoredWave");
         var fullScale = wave.transform.localScale;
-        Assert.That(sequence.TsunamiAftermathSeconds, Is.EqualTo(3f));
+        Assert.That(sequence.TsunamiAftermathSeconds, Is.EqualTo(4f));
         Set(water, "floodRunoffTime", 25f);
         Set(round, "bossDepartureSeconds", 50f);
         round.Ready();
@@ -96,19 +96,19 @@ public sealed partial class CardAbilityPointsPlayModeTests
         while (Field<float>(sequence, "tsunamiAftermathElapsed") < untilLastFrame - .00001f)
         {
             Step(Mathf.Min(.05f, untilLastFrame - Field<float>(sequence, "tsunamiAftermathElapsed")));
-            Assert.That(navigation.PanOffset, Is.EqualTo(cityPan), "Hold the city for the full three-second watch.");
+            Assert.That(navigation.PanOffset, Is.EqualTo(cityPan), "Hold the city for the brief aftermath.");
             Assert.That(Field<float>(navigation, "currentZoom"), Is.EqualTo(cityZoom));
             Assert.That(Field<bool>(navigation, "eventReturning"), Is.False);
             Assert.That(Field<Object>(navigation, "eventFocusOwner"), Is.SameAs(sequence));
             AssertVisibleTsunamiRuins();
         }
-        Assert.That(round.RoundNumber, Is.EqualTo(2), "Keep watching for three seconds after the last house collapse.");
+        Assert.That(round.RoundNumber, Is.EqualTo(2), "Finish the four-second recession after the last house collapse.");
         Assert.That(sequence.Results.IsVisible, Is.False);
         Assert.That(bank.CurrentPoints, Is.EqualTo(18));
         Assert.That(sequence.IsRunning && navigation.InputBlocked, Is.True);
-        CaptureWorld("tsunami-three-second-visible-ruins.png");
+        CaptureWorld("tsunami-four-second-visible-ruins.png");
         Step(.06f);
-        Assert.That(Field<float>(sequence, "tsunamiAftermathElapsed"), Is.EqualTo(3.01f).Within(.001f));
+        Assert.That(Field<float>(sequence, "tsunamiAftermathElapsed"), Is.EqualTo(4.01f).Within(.001f));
         Assert.That(sequence.PresentationFinished, Is.True, "The remaining boss route and original 25-second runoff cannot extend the report delay.");
         Assert.That(water.IsRunning, Is.False);
         Assert.That(water.WaterRecessionProgress, Is.GreaterThan(.999f), "Finish the gradual recession before clearing the water.");
@@ -149,6 +149,11 @@ public sealed partial class CardAbilityPointsPlayModeTests
         // The uninterrupted cinematic and its water loss have their own integration test.
         sequence.StopSequence(); round.AdvanceRound(0f); Invoke(navigation, "AdvanceNavigation", 2f);
         Assert.That(round.SequenceNumber, Is.EqualTo(2));
+        Assert.That(bank.CurrentPoints, Is.Zero, "Cancelling the handoff cannot collect the pending earthquake AP.");
+        // These fixtures isolate planning prices with a fixed 18 AP budget; the uninterrupted
+        // handoff and STOP/retry tests verify the actual deferred award separately.
+        Set(round, "pendingTransitionPoints", 0);
+        bank.AddPoints(18);
         Assert.That(bank.CurrentPoints, Is.EqualTo(18));
         AssertFreshPeople(System.Array.Empty<DraggableCard>());
     }
@@ -159,11 +164,11 @@ public sealed partial class CardAbilityPointsPlayModeTests
         yield return ReachTsunami();
         Assert.That(school.AbilityPointCost(CardKind.Person), Is.EqualTo(2));
         Assert.That(research.AbilityPointCost(CardKind.EducatedPerson), Is.EqualTo(3));
-        Assert.That(factoryStation.AbilityPointCost(CardKind.EducatedPerson), Is.EqualTo(5));
-        Assert.That(research.AbilityPointCost(CardKind.Person), Is.EqualTo(6));
-        Assert.That(factoryStation.AbilityPointCost(CardKind.Person), Is.EqualTo(7));
+        Assert.That(factoryStation.AbilityPointCost(CardKind.EducatedPerson), Is.EqualTo(7));
+        Assert.That(research.AbilityPointCost(CardKind.Person), Is.EqualTo(9));
+        Assert.That(factoryStation.AbilityPointCost(CardKind.Person), Is.EqualTo(12));
         Assert.That(research.transform.Find("FolderArt/APEducated").GetComponentInChildren<TMP_Text>(true).text, Is.EqualTo("3 AP"));
-        Assert.That(factoryStation.transform.Find("FolderArt/APEducated").GetComponentInChildren<TMP_Text>(true).text, Is.EqualTo("5 AP"));
+        Assert.That(factoryStation.transform.Find("FolderArt/APEducated").GetComponentInChildren<TMP_Text>(true).text, Is.EqualTo("7 AP"));
 
         var graduate = Educate();
         Assert.That(bank.CurrentPoints, Is.EqualTo(16));
@@ -183,13 +188,18 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(bank.CurrentPoints, Is.EqualTo(11));
         Assert.That(factoryStation.TryAssign(maker), Is.True);
         Assert.That(factory.TryInsertBlueprint(plan), Is.True);
-        Assert.That(bank.CurrentPoints, Is.EqualTo(6));
+        Assert.That(bank.CurrentPoints, Is.EqualTo(4));
         factory.AdvanceWork(.2f);
         factoryStation.ReleaseWorker(0, false);
         Assert.That(bank.CurrentPoints, Is.EqualTo(11));
         Assert.That(factory.Progress, Is.Zero);
         Assert.That(factoryStation.TryAssign(maker), Is.True);
-        Assert.That(bank.CurrentPoints, Is.EqualTo(6));
+        Assert.That(bank.CurrentPoints, Is.EqualTo(4));
+        factory.AdvanceWork(100f);
+        Assert.That(factory.Progress, Is.Zero, "One educated worker still waits for a second person.");
+        bank.AddPoints(8);
+        Assert.That(factoryStation.TryAssign(Person()), Is.True);
+        Assert.That(bank.CurrentPoints, Is.Zero);
         factory.AdvanceWork(100f);
         Assert.That(maker.UsedThisTurn, Is.True);
         Assert.That(game.Cards.Count(card => card.Kind == CardKind.Upgrade && card.UpgradeType == UpgradeKind.Breakwater), Is.EqualTo(2));
@@ -200,6 +210,9 @@ public sealed partial class CardAbilityPointsPlayModeTests
         var plan = Research(Person(), UpgradeKind.Breakwater);
         for (int i = 0; i < batches; i++)
         {
+            // Multi-order fixtures span worker turns while preserving their AP accounting.
+            if (game.Cards.Count(card => card.Kind == CardKind.Person && card.CanStartWork && !card.IsStored) < 2)
+                game.ResetTurnPeople();
             Assert.That(factoryStation.TryAssign(Person()), Is.True);
             Produce(plan);
         }
@@ -211,8 +224,8 @@ public sealed partial class CardAbilityPointsPlayModeTests
     public IEnumerator FourWaterProtectedHousesPayTwentyFourAPAndUnlockFireKeepingBothSystems()
     {
         yield return ReachTsunami();
-        // Two carried AP cover the four-house normal-worker route at the higher tsunami prices.
-        bank.AddPoints(2);
+        // Carried AP cover one researcher and two complete factory crews.
+        bank.AddPoints(39);
         PrepareElevators(2);
         Assert.That(bank.CurrentPoints, Is.Zero);
         var rails = houses.Select(house => house.House.GetInstalled(UpgradeKind.RailSystem)).ToArray();
@@ -255,6 +268,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
     public IEnumerator TwoElevatedHousesPayTwelveAPAndRetryWaterWithAllSeismicProtectionIntact()
     {
         yield return ReachTsunami();
+        bank.AddPoints(20); // Nine AP research, two twelve-AP workers and five AP carried.
         PrepareElevators(1);
         Assert.That(bank.CurrentPoints, Is.EqualTo(5));
         yield return new WaitForSecondsRealtime(1.6f);
@@ -328,7 +342,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(bank.TrySpend(bank.CurrentPoints), Is.True);
         Invoke(game, "LateUpdate");
         Assert.That(research.Card.DropTargetFeedback.IsAvailable, Is.False);
-        Assert.That(factoryStation.Card.DropTargetFeedback.IsAvailable, Is.True, "An idle factory worker does not spend AP yet.");
+        Assert.That(factoryStation.Card.DropTargetFeedback.IsAvailable, Is.False, "Idle factory workers must still be affordable.");
         Assert.That(Object.FindObjectsByType<RectTransform>(FindObjectsInactive.Include, FindObjectsSortMode.None)
             .Select(rect => rect.GetInstanceID()).OrderBy(id => id).ToArray(), Is.EqualTo(uiIds), "Drag guides use the saved artwork, never new UI.");
         pointer.position = RectTransformUtility.WorldToScreenPoint(null, game.Sidebar.PeopleArea.position);
@@ -370,6 +384,8 @@ public sealed partial class CardAbilityPointsPlayModeTests
     [UnityTest]
     public IEnumerator BlueprintAndItemGuidesRejectBusyFactoriesAndOccupiedHouseSockets()
     {
+        // Test destination guides independently of the earthquake's seismic-only research gate.
+        game.RestrictResearchTo(UpgradeKind.None);
         bank.AddPoints(20);
         var plan = Research(Person());
         Assert.That(factory.TryInsertBlueprint(plan), Is.True);

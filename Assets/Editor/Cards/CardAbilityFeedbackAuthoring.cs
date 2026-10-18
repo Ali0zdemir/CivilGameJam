@@ -51,6 +51,10 @@ namespace CivilGameJam.Cards.Editor
             var ready = (Button)new SerializedObject(round).FindProperty("readyButton").objectReferenceValue;
             var hud = counter.GetComponent<AbilityPointFeedback>() ?? counter.gameObject.AddComponent<AbilityPointFeedback>();
             var hudData = new SerializedObject(hud);
+            var notEnoughSound = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Art/not enough_.wav");
+            if (notEnoughSound == null) throw new InvalidOperationException("Missing insufficient-AP sound.");
+            hudData.FindProperty("notEnoughSound").objectReferenceValue = notEnoughSound;
+            hudData.FindProperty("notEnoughVolume").floatValue = .75f;
             hudData.FindProperty("bank").objectReferenceValue = bank;
             hudData.FindProperty("counter").objectReferenceValue = counter;
             hudData.FindProperty("balanceLabel").objectReferenceValue = balance;

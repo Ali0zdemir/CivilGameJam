@@ -11,7 +11,7 @@ namespace CivilGameJam
 
     /// <summary>Playable disaster turns, stage-specific AP rewards and the four-house survival gates.</summary>
     [DisallowMultipleComponent, DefaultExecutionOrder(300)]
-    public sealed class EarthquakeRoundController : MonoBehaviour
+    public sealed class EarthquakeRoundController : MonoBehaviour, IWorkersTutorialRound
     {
         [Serializable]
         private sealed class House
@@ -57,6 +57,7 @@ namespace CivilGameJam
         private EarthquakeRoundPhase previousPreparation;
         private bool rebuildAfterResults;
         private UpgradeKind upgradesToDiscard;
+        private int pendingTransitionPoints;
         public int RoundNumber { get; private set; } = 1;
         public int SequenceNumber { get; private set; } = 1;
         public EarthquakeRoundPhase Phase { get; private set; }
@@ -65,12 +66,33 @@ namespace CivilGameJam
         public int LastSurvivalReward { get; private set; }
         public int LastRoundGrant { get; private set; }
         public float NextTurnAfterCollapseSeconds => Mathf.Max(0f, nextTurnAfterCollapseSeconds);
+        public CardGameController Owner => game;
+        public Button ReadyButton => readyButton;
+        public bool IsRoundActive => Phase == EarthquakeRoundPhase.Earthquake;
+        public bool IsResultsVisible => sequence != null && sequence.Results != null && sequence.Results.IsVisible;
+        public RectTransform ResultsRewardArea => sequence != null && sequence.Results != null ? sequence.Results.EarnedPointsArea : null;
+        public event Action TurnStarted;
+        public void ExplainNextRoundResult()
+        {
+            if (sequence != null && sequence.Results != null) sequence.Results.ExplainNextRoundResult();
+        }
+        public bool IsUpgradePresentationActive
+        {
+            get
+            {
+                if (upgradePresentation != null && upgradePresentation.IsPresenting || navigation != null && navigation.IsEventCameraActive) return true;
+                foreach (var house in houses)
+                    if (house.link != null && (house.link.RailSystem != null && house.link.RailSystem.IsTransitioning ||
+                        house.link.FloodProtection != null && house.link.FloodProtection.IsTransitioning)) return true;
+                return false;
+            }
+        }
         public bool CanReady
         {
             get
             {
                 if (rebuildAfterResults || Phase == EarthquakeRoundPhase.Earthquake || game == null || abilityPoints == null || sequence == null || earthquake == null ||
-                    game.IsChoosingBlueprint || game.IsDraggingAnyCard || game.HasActiveCardAnimation || sequence.IsRunning || earthquake.IsRunning ||
+                    (game.IsTutorialActive && !game.TutorialAllowsReady) || game.IsChoosingBlueprint || game.IsDraggingAnyCard || game.HasActiveCardAnimation || sequence.IsRunning || earthquake.IsRunning ||
                     tsunami != null && tsunami.IsRunning || fire != null && fire.IsRunning || navigation != null && navigation.IsEventCameraActive ||
                     upgradePresentation != null && upgradePresentation.IsPresenting) return false;
                 foreach (var card in game.Cards)
@@ -95,6 +117,7 @@ namespace CivilGameJam
 
         private void OnEnable()
         {
+            if (game != null) game.RestrictResearchTo(SequenceNumber == 1 ? UpgradeKind.RailSystem : UpgradeKind.None);
             if (sequence != null && sequence.Results != null)
             {
                 sequence.Results.Dismissed += RestoreCityAfterResults;
@@ -108,6 +131,8 @@ namespace CivilGameJam
         private void ApplySequencePrices()
         {
             if (game == null) return;
+            // The first disaster must be cleared before researching other protection.
+            game.RestrictResearchTo(SequenceNumber == 1 ? UpgradeKind.RailSystem : UpgradeKind.None);
             foreach (var card in game.Cards) card.Station?.UseSequencePrices(SequenceNumber);
         }
 
@@ -127,6 +152,7 @@ namespace CivilGameJam
             if (!sequence.IsRunning) { abilityPoints.SetActionsLocked(false); RestoreDebugButtons(); return; }
             previousPreparation = Phase;
             Phase = EarthquakeRoundPhase.Earthquake;
+            TurnStarted?.Invoke();
             if (dock != null) dock.BeginCityPresentation();
             Refresh();
         }
@@ -263,10 +289,13 @@ namespace CivilGameJam
             ApplySequencePrices();
             RoundNumber++;
             if (!continueToTsunami) Phase = EarthquakeRoundPhase.NextRoundPreparation;
-            abilityPoints.AddPoints(LastSurvivalReward + LastRoundGrant);
+            var awardedPoints = LastSurvivalReward + LastRoundGrant;
             game.ResetTurnPeople();
             if (continueToTsunami)
             {
+                // Seismic survival is recorded now, but its AP waits for the uninterrupted tsunami's report.
+                pendingTransitionPoints += awardedPoints;
+                awardedPoints = 0;
                 ResetHouseDamage();
                 if (fire != null) fire.StopFire();
                 // This is a new water-stage turn in the same cinematic. STOP preserves the earthquake win.
@@ -277,8 +306,11 @@ namespace CivilGameJam
                 if (sequence.ContinueWithTsunami()) return;
                 Phase = EarthquakeRoundPhase.NextRoundPreparation;
             }
+            awardedPoints += pendingTransitionPoints;
+            pendingTransitionPoints = 0;
+            abilityPoints.AddPoints(awardedPoints);
             rebuildAfterResults = true;
-            sequence.ShowRoundResults(destroyedHouses, totalHouses, LastSurvivalReward + LastRoundGrant, LastProtectedHouseCount);
+            sequence.ShowRoundResults(destroyedHouses, totalHouses, awardedPoints, LastProtectedHouseCount);
             if (sequence.Results == null || !sequence.Results.IsVisible) RestoreCityAfterResults();
             abilityPoints.SetActionsLocked(false);
             RestoreDebugButtons();
@@ -309,6 +341,7 @@ namespace CivilGameJam
 
         private void OnDisable()
         {
+            if (game != null) game.RestrictResearchTo(UpgradeKind.None);
             if (sequence != null && sequence.Results != null) sequence.Results.Dismissed -= RestoreCityAfterResults;
             abilityFeedback?.SetReadyPrompt(false);
             if (Phase != EarthquakeRoundPhase.Earthquake) return;
@@ -321,7 +354,7 @@ namespace CivilGameJam
             bool canReady = CanReady;
             if (readyButton != null) readyButton.interactable = canReady;
             abilityFeedback?.SetReadyPrompt(canReady && abilityPoints != null && abilityPoints.CurrentPoints == 0);
-            if (roundLabel != null) roundLabel.text = "ROUND " + RoundNumber;
+            if (roundLabel != null) roundLabel.SetText("{0}", RoundNumber);
             if (statusLabel != null) statusLabel.text = Phase == EarthquakeRoundPhase.Earthquake ? string.Empty
                 : Phase == EarthquakeRoundPhase.NextRoundPreparation ? "Sequence " + SequenceNumber + "  |  " + LastProtectedHouseCount + " safe houses  +" + LastSurvivalReward + " AP  |  Round bonus  +" + LastRoundGrant + " AP"
                 : CanReady ? "Spend AP, protect your houses, then press READY." : string.Empty;

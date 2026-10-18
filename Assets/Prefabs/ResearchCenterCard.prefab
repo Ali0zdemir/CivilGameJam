@@ -817,7 +817,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 21300000, guid: 89c662d36a03ea342a67842728194538, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 567f38c672049654f967c04293b9db2e, type: 3}
   m_Type: 0
   m_PreserveAspect: 1
   m_FillCenter: 1
@@ -1482,6 +1482,7 @@ GameObject:
   - component: {fileID: 3598936760026424532}
   - component: {fileID: 49059754746159610}
   - component: {fileID: 220987608205798022}
+  - component: {fileID: 5250610000000000003}
   m_Layer: 5
   m_Name: ResearchCenterCard
   m_TagString: Untagged
@@ -1489,6 +1490,22 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
+--- !u!114 &5250610000000000003
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4551122702813775966}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5250e61b014a45efb723572fc9a8380b, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  startClip: {fileID: 8300000, guid: a735432a33e4900498f729185dcf93f5, type: 3}
+  loopClip: {fileID: 8300000, guid: 3bcdf5dfb2282954f95c25f4d70a2bd6, type: 3}
+  endClip: {fileID: 8300000, guid: 963dc8337fa1e644a93eabfc52b42e55, type: 3}
+  volume: 0.3
 --- !u!224 &1510205013851205850
 RectTransform:
   m_ObjectHideFlags: 0
@@ -1640,10 +1657,10 @@ MonoBehaviour:
   dropOutline: {fileID: 296597797645829262}
   normalAbilityPointCost: 4
   educatedAbilityPointCost: 2
-  tsunamiNormalAbilityPointCost: 6
+  tsunamiNormalAbilityPointCost: 9
   tsunamiEducatedAbilityPointCost: 3
-  fireNormalAbilityPointCost: 8
-  fireEducatedAbilityPointCost: 5
+  fireNormalAbilityPointCost: 12
+  fireEducatedAbilityPointCost: 4
   normalCostLabel: {fileID: 947389457472057711}
   educatedCostLabel: {fileID: 3715439495129067326}
   normalCostFeedback: {fileID: 3457862675055299939}
@@ -1915,8 +1932,8 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: Assign up to 2 workers to discover blueprints. Educated people research
-    faster. New discoveries are stored in the Vault.
+  m_text: Assign 1 or 2 researchers to discover any blueprint. Educated people research
+    faster. Discoveries go to the Vault.
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 60e75f4c2ff43464d882249013bc23d0, type: 2}
   m_sharedMaterial: {fileID: 3628592581146971286, guid: 60e75f4c2ff43464d882249013bc23d0, type: 2}

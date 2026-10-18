@@ -18,6 +18,13 @@ namespace CivilGameJam.Cards
         public RectTransform Area => area;
         public IReadOnlyList<BlueprintVaultSlot> Slots => slots;
         public bool CanDrag => game != null && !game.ActionsLocked && !game.IsChoosingBlueprint && !game.IsDraggingAnyCard;
+        public bool CanWithdraw(UpgradeKind kind)
+        {
+            if (!CanDrag) return false;
+            foreach (var plan in plans)
+                if (plan != null && plan.UpgradeType == kind && !plan.IsFlying && game.CanInteractWithCard(plan)) return true;
+            return false;
+        }
         public bool IsDiscovered(UpgradeKind kind) => discoveries.Contains(kind);
         public int AvailableCount(UpgradeKind kind)
         {
@@ -62,6 +69,9 @@ namespace CivilGameJam.Cards
             if (origin.HasValue || source != null)
             {
                 slot.BeginArrival(firstDiscovery);
+                // The moving plan can cross neighbouring opaque slot backgrounds.
+                // Raise its complete slot, just as the saved hover presentation does.
+                slot.transform.SetAsLastSibling();
                 plan.Rect.SetParent(slot.transform, true);
                 plan.Rect.anchorMin = plan.Rect.anchorMax = new Vector2(0.5f, 0.5f);
                 plan.gameObject.SetActive(true);
@@ -113,6 +123,7 @@ namespace CivilGameJam.Cards
         public DraggableCard Withdraw(DraggableCard plan)
         {
             if (game.IsChoosingBlueprint || game.ActionsLocked || plan == null || !game.CanUseBlueprint(plan.UpgradeType) ||
+                !game.CanInteractWithCard(plan) ||
                 plan.StoredInVault != this || !plans.Remove(plan)) return null;
             CancelArrival(plan);
             plan.StoredInVault = null;

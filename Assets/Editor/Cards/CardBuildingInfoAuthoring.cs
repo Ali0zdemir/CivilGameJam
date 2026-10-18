@@ -252,10 +252,10 @@ namespace CivilGameJam.Cards.Editor
             {
                 case CardKind.ResearchCenter:
                     title = "Research Center"; accent = Research;
-                    description = "Assign up to 2 workers to discover blueprints. Educated people research faster. New discoveries are stored in the Vault."; break;
+                    description = "Assign 1 or 2 researchers to discover any blueprint. Educated people research faster. Discoveries go to the Vault."; break;
                 case CardKind.Factory:
                     title = "Factory"; accent = Factory;
-                    description = "Add a discovered blueprint and up to 2 workers to produce 2 upgrade items. Educated people work faster. Workers and blueprints are kept."; break;
+                    description = "Rail System needs 1 worker. Elevator and Fire Sprinkler need 2. Produce 2 items per order. Educated people work faster. Blueprints are kept."; break;
                 case CardKind.School:
                     title = "School"; accent = School;
                     description = "Assign up to 2 people to train them as educated workers. Each student trains independently, then returns to the People area."; break;

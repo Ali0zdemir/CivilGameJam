@@ -24,7 +24,6 @@ namespace CivilGameJam.Cards.Editor
                 var station = root.GetComponent<BuildingStation>();
                 var worker = folder.GetComponentsInChildren<WorkerSlot>(true).Single(slot => slot.Index == 0);
                 var workerData = new SerializedObject(worker);
-                var personSprite = (Sprite)workerData.FindProperty("normalPortrait").objectReferenceValue;
                 var view = Ensure<FactoryFolderPresentation>(root);
                 var pocket = Rect("BlueprintPocket", folder, new Vector2(88f, 67.5f), new Vector2(82f, 265f));
                 pocket.SetSiblingIndex(folder.Find("WorkerPockets").GetSiblingIndex());
@@ -47,25 +46,10 @@ namespace CivilGameJam.Cards.Editor
                 flightShadow.effectColor = new Color(0f, 0f, 0f, .12f); flightShadow.effectDistance = new Vector2(4f, -5f);
                 stored.gameObject.SetActive(false); preview.gameObject.SetActive(false);
 
-                var hint = Rect("OneWorkerNeeded", folder, new Vector2(-21.3f, -9f), new Vector2(80f, 112f));
-                hint.localScale = Vector3.one * 1.6f;
-                var group = Ensure<CanvasGroup>(hint.gameObject);
-                group.alpha = 1f; group.interactable = false; group.blocksRaycasts = false;
-                var person = Picture("Person", hint, personSprite, Vector2.zero, new Vector2(48f, 48f));
-                person.color = new Color(.85f, 1f, .9f, .8f);
-                var outline = Ensure<Outline>(person.gameObject);
-                outline.effectColor = new Color(.48f, 1f, .7f, .6f); outline.effectDistance = new Vector2(1.3f, -1.3f);
-                var plus = Rect("AddPerson", person.transform, new Vector2(22f, 18f), new Vector2(16f, 16f));
-                var mint = new Color(.72f, 1f, .81f);
-                Bar("Horizontal", plus, Vector2.zero, new Vector2(12f, 3f), 0f, mint);
-                Bar("Vertical", plus, Vector2.zero, new Vector2(3f, 12f), 0f, mint);
-                var arrow = Rect("IntoWorkerPocket", hint, new Vector2(0f, -37f), new Vector2(22f, 16f));
-                Bar("Left", arrow, new Vector2(-4f, 0f), new Vector2(12f, 3f), -45f, mint);
-                Bar("Right", arrow, new Vector2(4f, 0f), new Vector2(12f, 3f), 45f, mint);
-                hint.gameObject.SetActive(true);
                 Refs(view, ("factory", factory), ("station", station), ("pocket", pocket),
                     ("storedBlueprint", stored), ("entryImage", preview), ("entryCanvas", previewCanvas),
-                    ("entryMouth", mouth), ("workerHint", group), ("personHint", person.rectTransform), ("arrowHint", arrow));
+                    ("entryMouth", mouth));
+                ConfigureWorkerHint(folder, view);
                 var data = new SerializedObject(view);
                 data.FindProperty("entrySeconds").floatValue = workerData.FindProperty("entrySeconds").floatValue;
                 data.ApplyModifiedPropertiesWithoutUndo();
@@ -74,7 +58,29 @@ namespace CivilGameJam.Cards.Editor
             }
             finally { PrefabUtility.UnloadPrefabContents(root); }
             AssetDatabase.SaveAssets();
-            Debug.Log("Saved the text-free one-person guide and blueprint folder pocket in FactoryCard; scene instances inherit them.");
+            Debug.Log("Saved the Insert Card Ui worker guide and blueprint folder pocket in FactoryCard; scene instances inherit them.");
+        }
+
+        public static void ConfigureWorkerHint(Transform folder, FactoryFolderPresentation view)
+        {
+            var hint = (folder.Find("InsertCardHint") ?? folder.Find("OneWorkerNeeded")) as RectTransform;
+            if (hint == null)
+            {
+                hint = Rect("InsertCardHint", folder, new Vector2(-21.3f, -9f), new Vector2(80f, 112f));
+                hint.localScale = Vector3.one * 1.6f;
+            }
+            hint.name = "InsertCardHint";
+            foreach (var child in hint.Cast<Transform>().ToArray())
+                if (child.name != "InsertCardUi") Object.DestroyImmediate(child.gameObject);
+            var group = Ensure<CanvasGroup>(hint.gameObject);
+            group.alpha = 1f; group.interactable = false; group.blocksRaycasts = false;
+            var sprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/EfeArts/Insert Card Ui.png");
+            if (sprite == null) throw new InvalidOperationException("Insert Card Ui sprite is missing.");
+            var guide = Picture("InsertCardUi", hint, sprite, Vector2.zero, Vector2.zero);
+            guide.rectTransform.anchorMin = Vector2.zero;
+            guide.rectTransform.anchorMax = Vector2.one;
+            hint.gameObject.SetActive(true);
+            Refs(view, ("workerHint", group), ("personHint", guide.rectTransform), ("arrowHint", guide.rectTransform));
         }
 
         private static RectTransform Rect(string name, Transform parent, Vector2 position, Vector2 size)
@@ -97,12 +103,6 @@ namespace CivilGameJam.Cards.Editor
             var image = Ensure<Image>(rect.gameObject);
             image.sprite = sprite; image.color = Color.white; image.preserveAspect = true; image.raycastTarget = false;
             return image;
-        }
-
-        private static void Bar(string name, Transform parent, Vector2 position, Vector2 size, float rotation, Color color)
-        {
-            var image = Picture(name, parent, null, position, size);
-            image.color = color; image.rectTransform.localRotation = Quaternion.Euler(0f, 0f, rotation);
         }
 
         private static void Refs(Object target, params (string, Object)[] values)

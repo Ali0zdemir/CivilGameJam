@@ -34,7 +34,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(result.TotalHouseCount, Is.EqualTo(4));
         Assert.That(result.ProtectedHouseCount, Is.Zero);
         Assert.That(Field<TMP_Text>(result, "destroyedCountLabel").text, Is.EqualTo("0 / 4"));
-        Assert.That(Field<TMP_Text>(result, "earnedPointsLabel").text, Is.EqualTo("AP EARNED: +10"));
+        Assert.That(Field<TMP_Text>(result, "earnedPointsCount").text, Is.EqualTo("+10"));
         Assert.That(bank.CurrentPoints, Is.EqualTo(20));
         Assert.That(round.SequenceNumber, Is.EqualTo(1));
         Assert.That(houses.All(house => house.House.IsDestroyed), Is.True);
@@ -76,20 +76,21 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(round.LastProtectedHouseCount, Is.EqualTo(4));
         Assert.That(round.LastSurvivalReward + round.LastRoundGrant, Is.EqualTo(18));
         Assert.That(round.SequenceNumber, Is.EqualTo(2));
-        Assert.That(bank.CurrentPoints, Is.EqualTo(18));
+        Assert.That(bank.CurrentPoints, Is.Zero, "No AP is paid at the earthquake-to-tsunami handoff.");
         Assert.That(houses.Select(house => house.House.GetInstalled(UpgradeKind.RailSystem)), Is.EqualTo(installed));
         Assert.That(houses.All(house => house.Building.GetComponent<ApartmentUpgradeModel>().HasSeismic), Is.True);
         Assert.That(houses.Any(house => house.Building.GetComponent<ApartmentEarthquakeAnimation>().IsRunning), Is.False);
         Assert.That(sequence.IsRunning && sequence.ActiveSequence == 2, Is.True);
         sequence.StopSequence(); round.AdvanceRound(0f);
         Assert.That(result.IsVisible, Is.False, "Cancellation must not show a completed-round report.");
-        Assert.That(bank.CurrentPoints, Is.EqualTo(18));
+        Assert.That(bank.CurrentPoints, Is.Zero, "Cancelling the tsunami cannot collect the pending earthquake award.");
     }
 
     [UnityTest]
     public IEnumerator AuthoredWaterRetryKeepsSeismicAndElevatorsAndReportsOnlyTheTwoFloodedHouses()
     {
         yield return ReachTsunami();
+        bank.AddPoints(20); // Nine AP research, two twelve-AP workers and five AP carried.
         PrepareElevators(1);
         yield return new WaitForSecondsRealtime(1.6f);
         round.Ready(); Until(() => round.RoundNumber == 3);
@@ -98,7 +99,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(result.DestroyedHouseCount, Is.EqualTo(2));
         Assert.That(result.ProtectedHouseCount, Is.EqualTo(2));
         Assert.That(Field<TMP_Text>(result, "destroyedCountLabel").text, Is.EqualTo("2 / 4"));
-        Assert.That(Field<TMP_Text>(result, "earnedPointsLabel").text, Is.EqualTo("AP EARNED: +18"));
+        Assert.That(Field<TMP_Text>(result, "earnedPointsCount").text, Is.EqualTo("+18"));
         Assert.That(bank.CurrentPoints, Is.EqualTo(23));
         Assert.That(round.SequenceNumber, Is.EqualTo(2));
         Assert.That(houses.All(house => house.Building.GetComponent<ApartmentUpgradeModel>().HasSeismic), Is.True);

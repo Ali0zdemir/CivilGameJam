@@ -28,6 +28,7 @@ public sealed partial class CardGamePlayModeTests
         Vector3[] supportPositions = isolators.Select(t => t.position).ToArray();
         var railProduct = ProduceCityProducts(UpgradeKind.RailSystem)[0];
         var elevatorProduct = ProduceCityProducts(UpgradeKind.Breakwater)[0];
+        yield return null; // Complete the setup turn's deferred worker destruction before comparing UI objects.
         var ui = UIIds(game);
         Assert.That(model.IsElevated || model.HasSeismic, Is.False);
         Assert.That(link.House.TryInstall(railProduct), Is.True);

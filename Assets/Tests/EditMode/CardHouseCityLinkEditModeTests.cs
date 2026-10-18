@@ -12,7 +12,7 @@ public sealed class CardHouseCityLinkEditModeTests
     public void FourDistinctHouseLinksAndTheirUpgradeTargetsAreSavedBeforePlay()
     {
         EditorSceneManager.OpenScene("Assets/2DCardScene.unity");
-        var houses = Object.FindFirstObjectByType<CardGameController>().GetComponentsInChildren<HouseUpgrades>(true)
+        var houses = Object.FindFirstObjectByType<CardGameController>().GetComponentsInChildren<HouseUpgrades>()
             .Where(house => house.GetComponent<DraggableCard>().InitialGridCell >= 0)
             .OrderBy(house => house.GetComponent<DraggableCard>().InitialGridCell).ToArray();
         Assert.That(houses.Length, Is.EqualTo(4));
@@ -27,7 +27,7 @@ public sealed class CardHouseCityLinkEditModeTests
             Assert.That(link.FireProtection, Is.Not.Null);
             Assert.That(link.FloodProtection.Building, Is.SameAs(link.Building));
             Assert.That(link.FireProtection.Building, Is.SameAs(link.Building));
-            Assert.That(PrefabUtility.IsAddedComponentOverride(link), Is.True,
+            Assert.That(!EditorUtility.IsPersistent(link) && link.Building.gameObject.scene == houses[i].gameObject.scene, Is.True,
                 "City references belong to the scene instance, rather than a reusable card prefab.");
         }
         Assert.That(houses.Select(house => house.GetComponent<HouseCityUpgradeLink>().Building).Distinct().Count(), Is.EqualTo(4));

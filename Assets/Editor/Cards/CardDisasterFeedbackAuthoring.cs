@@ -18,6 +18,16 @@ namespace CivilGameJam.Cards.Editor
             if (dust == null) throw new InvalidOperationException("Missing construction dust material.");
             foreach (var name in new[] { "House", "Apartment_02", "Apartment_03", "Apartment_04" })
             {
+                var soundPath = "Assets/Art/BinaYıkılmaSound/afet sonucu bina yıkılma sesi 4.wav";
+                var importer = (AudioImporter)AssetImporter.GetAtPath(soundPath);
+                if (importer == null) throw new InvalidOperationException("Missing collapse sound: " + soundPath);
+                var audioSettings = importer.defaultSampleSettings;
+                audioSettings.loadType = AudioClipLoadType.DecompressOnLoad;
+                audioSettings.compressionFormat = AudioCompressionFormat.PCM;
+                audioSettings.preloadAudioData = true;
+                importer.defaultSampleSettings = audioSettings;
+                importer.loadInBackground = false;
+                importer.SaveAndReimport();
                 var path = "Assets/Art/Buildings/Prefabs/" + name + ".prefab";
                 var root = PrefabUtility.LoadPrefabContents(path);
                 try
@@ -26,6 +36,9 @@ namespace CivilGameJam.Cards.Editor
                     var settings = new SerializedObject(feedback);
                     settings.FindProperty("geometry").objectReferenceValue = root.GetComponent<BuildingModelGeometry>();
                     settings.FindProperty("constructionDustMaterial").objectReferenceValue = dust;
+                    settings.FindProperty("collapseSound").objectReferenceValue = AssetDatabase.LoadAssetAtPath<AudioClip>(soundPath);
+                    settings.FindProperty("collapseSoundVolume").floatValue = .12f;
+                    settings.FindProperty("collapseSoundStartSeconds").floatValue = .025f;
                     settings.ApplyModifiedPropertiesWithoutUndo();
                     foreach (var collapse in new Component[] { root.GetComponent<ApartmentEarthquakeAnimation>(), root.GetComponent<ApartmentTsunamiCollapse>() })
                     {
@@ -49,6 +62,19 @@ namespace CivilGameJam.Cards.Editor
             data.FindProperty("tsunami").objectReferenceValue = tsunami;
             data.FindProperty("seaSurface").objectReferenceValue = sea != null ? sea.transform : null;
             data.FindProperty("constructionDustMaterial").objectReferenceValue = dust;
+            data.FindProperty("footstepVolume").floatValue = .7f;
+            foreach (var surface in new[] { "Water", "Land" })
+            {
+                var sounds = data.FindProperty(surface.ToLowerInvariant() + "Sounds");
+                sounds.arraySize = 4;
+                for (var i = 0; i < sounds.arraySize; i++)
+                {
+                    var soundPath = "Assets/Art/GodzillaStep" + surface + "/godzilla step " + (i + 1) + " (on " + surface.ToLowerInvariant() + ").wav";
+                    var sound = AssetDatabase.LoadAssetAtPath<AudioClip>(soundPath);
+                    if (sound == null) throw new InvalidOperationException("Missing footstep sound: " + soundPath);
+                    sounds.GetArrayElementAtIndex(i).objectReferenceValue = sound;
+                }
+            }
             data.ApplyModifiedPropertiesWithoutUndo();
             data = new SerializedObject(walk);
             data.FindProperty("footstepFeedback").objectReferenceValue = footsteps;

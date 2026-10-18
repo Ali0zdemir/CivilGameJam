@@ -76,13 +76,13 @@ public sealed class CardAbilityPointEditModeTests
         Assert.That(station.AbilityPointCost(CardKind.Person), Is.EqualTo(normal));
         Assert.That(station.AbilityPointCost(CardKind.EducatedPerson), Is.EqualTo(educated));
         var prices = new SerializedObject(station);
-        Assert.That(prices.FindProperty("tsunamiNormalAbilityPointCost").intValue, Is.EqualTo(name == "SchoolCard" ? 2 : name == "FactoryCard" ? 7 : 6));
+        Assert.That(prices.FindProperty("tsunamiNormalAbilityPointCost").intValue, Is.EqualTo(name == "SchoolCard" ? 2 : name == "FactoryCard" ? 12 : 9));
         Assert.That(prices.FindProperty("tsunamiEducatedAbilityPointCost").intValue,
-            Is.EqualTo(name == "SchoolCard" ? 0 : name == "FactoryCard" ? 5 : 3));
+            Is.EqualTo(name == "SchoolCard" ? 0 : name == "FactoryCard" ? 7 : 3));
         Assert.That(prices.FindProperty("fireNormalAbilityPointCost").intValue,
-            Is.EqualTo(name == "SchoolCard" ? 4 : name == "FactoryCard" ? 12 : 8));
+            Is.EqualTo(name == "SchoolCard" ? 4 : 12));
         Assert.That(prices.FindProperty("fireEducatedAbilityPointCost").intValue,
-            Is.EqualTo(name == "SchoolCard" ? 0 : name == "FactoryCard" ? 8 : 5));
+            Is.EqualTo(name == "SchoolCard" ? 0 : 4));
         Assert.That(root.transform.Find("FolderArt/APNormalPeople").GetComponentInChildren<TMP_Text>(true).text, Is.EqualTo(normal + " AP"));
         Assert.That(root.transform.Find("FolderArt/APEducated").GetComponentInChildren<TMP_Text>(true).text, Is.EqualTo(name == "SchoolCard" ? "N/A" : educated + " AP"));
     }

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
+using Unity.Profiling;
 
 namespace CivilGameJam.Disasters
 {
@@ -32,6 +33,12 @@ namespace CivilGameJam.Disasters
         private const float HistoryStep = 1f / 60f;
         private const float HydraulicDiffusivity = 0.55f;
         private const int RunoffSegments = 24;
+        private const int MaximumSimulationStepsPerFrame = 16;
+        private static readonly ProfilerMarker SimulationMarker = new ProfilerMarker("Tsunami.Flood.Simulation");
+        private static readonly ProfilerMarker MeshMarker = new ProfilerMarker("Tsunami.Flood.Mesh");
+        private readonly float stableStep;
+        private int remainingSimulationSteps;
+        private bool hasReceivedWater;
         private readonly WaterVertex[] runoffA = new WaterVertex[RunoffSegments + 1];
         private readonly WaterVertex[] runoffB = new WaterVertex[RunoffSegments + 1];
         private readonly float[] runoffHistory;
@@ -78,6 +85,9 @@ namespace CivilGameJam.Disasters
             rows = Mathf.Clamp(Mathf.CeilToInt(area.size.z / cellSize), 16, 96);
             dx = area.size.x / columns;
             dz = area.size.z / rows;
+            var rate = flowSpeed / dz + 2f * HydraulicDiffusivity * (1f / (dx * dx) + 1f / (dz * dz)) +
+                Mathf.Sqrt(24f * maximumSurgeDepth) * (1f / dx + 1f / dz);
+            stableStep = Mathf.Min(0.008f, 0.8f / rate);
             depth = new float[columns * rows];
             recessionDepth = new float[depth.Length];
             solid = new bool[depth.Length];
@@ -124,6 +134,8 @@ namespace CivilGameJam.Disasters
         public void Clear()
         {
             receding = false;
+            hasReceivedWater = false;
+            BeginFrame();
             Array.Clear(depth, 0, depth.Length);
             Array.Clear(fluxX, 0, fluxX.Length);
             Array.Clear(fluxZ, 0, fluxZ.Length);
@@ -135,8 +147,14 @@ namespace CivilGameJam.Disasters
             historyCursor = 0;
             DischargedVolume = RunoffAmount = 0f;
             WetCoverage = MeanDepth = MaximumDepth = 0f;
+            for (var z = 0; z <= rows; z++)
+            for (var x = 0; x <= columns; x++)
+                corners[z * (columns + 1) + x] = new WaterVertex(
+                    new Vector3(area.min.x + x * dx, floor, area.min.z + z * dz), Vector3.up, Color.clear);
             Mesh.Clear();
         }
+
+        public void BeginFrame() => remainingSimulationSteps = MaximumSimulationStepsPerFrame;
 
         public void BeginRecession()
         {
@@ -173,19 +191,32 @@ namespace CivilGameJam.Disasters
 
         public void Advance(float deltaTime, float inletLevel)
         {
+            using var marker = SimulationMarker.Auto();
             if (deltaTime <= 0f) return;
-            // Account for both transport and diffusion when cell size or flow speed is adjusted.
-            var rate = flowSpeed / dz + 2f * HydraulicDiffusivity * (1f / (dx * dx) + 1f / (dz * dz)) +
-                Mathf.Sqrt(24f * maximumSurgeDepth) * (1f / dx + 1f / dz);
-            var stableStep = Mathf.Min(0.008f, 0.8f / rate);
-            var steps = Mathf.Max(1, Mathf.CeilToInt(deltaTime / stableStep));
-            var step = deltaTime / steps;
-            for (var i = 0; i < steps; i++) Step(step, Mathf.Max(0f, inletLevel - floor));
+            var inletDepth = Mathf.Max(0f, inletLevel - floor);
+            if (!hasReceivedWater && inletDepth <= 0f)
+            {
+                // The city is completely dry until landfall; no hydraulic solve or empty history is needed.
+                clock += deltaTime;
+                nextHistoryTime = clock + HistoryStep;
+                return;
+            }
+            hasReceivedWater = true;
+            var steps = Mathf.Min(remainingSimulationSteps, Mathf.Max(1, Mathf.CeilToInt(deltaTime / stableStep)));
+            var simulatedTime = Mathf.Min(deltaTime, steps * stableStep);
+            // Keep numerical steps stable and bound work across ALL catch-up slices of this frame.
+            // Skipped visual solves never become debt for the next frame; the disaster clock still advances fully.
+            clock += deltaTime - simulatedTime;
+            remainingSimulationSteps -= steps;
+            if (steps == 0) { RecordRunoffHistory(); return; }
+            var step = simulatedTime / steps;
+            for (var i = 0; i < steps; i++) Step(step, inletDepth);
         }
 
         private void Step(float dt, float inletDepth)
         {
             clock += dt;
+            var foamDecay = Mathf.Exp(-dt * 1.3f);
             // One incoming pulse; all other boundaries discharge water out of the city.
             for (var z = 0; z < rows; z++)
             {
@@ -280,7 +311,7 @@ namespace CivilGameJam.Disasters
                 var atWall = (x > 0 && solid[i - 1]) || (x < columns - 1 && solid[i + 1]) ||
                     (z > 0 && solid[i - columns]) || (z < rows - 1 && solid[i + columns]);
                 var sourceFoam = atWall ? Mathf.Clamp01(speed * 0.45f) : Mathf.Clamp01((speed - 1.2f) * 0.22f);
-                foam[i] = Mathf.Max(foam[i] * Mathf.Exp(-dt * 1.3f), sourceFoam);
+                foam[i] = Mathf.Max(foam[i] * foamDecay, sourceFoam);
             }
             RecordRunoffHistory();
         }
@@ -320,6 +351,8 @@ namespace CivilGameJam.Disasters
 
         public void UpdateMesh(float targetDepth, float fade)
         {
+            using var marker = MeshMarker.Auto();
+            if (!hasReceivedWater) return;
             vertices.Clear(); normals.Clear(); colors.Clear(); triangles.Clear();
             var wet = 0; var open = 0; var totalDepth = 0f; var maxDepth = 0f;
             for (var z = 0; z <= rows; z++)

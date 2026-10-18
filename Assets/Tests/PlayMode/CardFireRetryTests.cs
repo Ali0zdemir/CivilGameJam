@@ -13,6 +13,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
     public IEnumerator FailedFireTurnDiscardsInstalledAndLooseFireItemsButKeepsEarlierProtection()
     {
         yield return ReachFire();
+        bank.AddPoints(8); // Cover the revised research price while preserving this retry's carried AP.
         var rails = houses.Select(house => house.House.GetInstalled(UpgradeKind.RailSystem)).ToArray();
         var elevators = houses.Select(house => house.House.GetInstalled(UpgradeKind.Breakwater)).ToArray();
         var plan = Research(Person(), UpgradeKind.Fire);
@@ -30,28 +31,24 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(round.LastRoundSurvived, Is.False);
         Assert.That(round.LastProtectedHouseCount, Is.EqualTo(1));
         Assert.That(round.LastSurvivalReward, Is.EqualTo(10));
-        Assert.That(bank.CurrentPoints, Is.EqualTo(26), "10 carried + 10 survival + 6 turn bonus.");
+        Assert.That(bank.CurrentPoints, Is.EqualTo(18), "2 carried + 10 survival + 6 turn bonus.");
         var fire = Field<CivilGameJam.Disasters.FireTestController>(round, "fire");
         Assert.That(sequence.Results.IsVisible, Is.True);
         Assert.That(houses.Count(house => fire.WasHouseBurnt(house.Building)), Is.EqualTo(3));
         Assert.That(houses[0].House.GetInstalled(UpgradeKind.Fire), Is.SameAs(items[0]));
-        var renderer = houses[1].Building.GetComponentsInChildren<MeshRenderer>().First(surface =>
-        {
-            var properties = new MaterialPropertyBlock(); surface.GetPropertyBlock(properties, 0);
-            return properties.GetColor("_BaseColor") == Field<Color>(fire, "burntBuildingColor");
-        });
-        var tint = new MaterialPropertyBlock(); renderer.GetPropertyBlock(tint, 0);
-        Assert.That(Vector4.Distance(tint.GetColor("_BaseColor"), Field<Color>(fire, "burntBuildingColor")), Is.LessThan(.0001f));
+        var appearances = houses[1].Building.GetComponentsInChildren<CivilGameJam.Disasters.ApartmentBurntAppearance>();
+        Assert.That(appearances.All(appearance => appearance.IsBurnt), Is.True);
+        var renderer = houses[1].Building.GetComponentsInChildren<MeshRenderer>().First(surface => surface.sharedMaterials.All(material => material.name.StartsWith("burnt")));
+        var burntMaterials = renderer.sharedMaterials;
         Step(4f);
         yield return null;
         Assert.That(fire.WasHouseBurnt(houses[1].Building), Is.True, "Keep the burnt city throughout the report.");
-        renderer.GetPropertyBlock(tint, 0);
-        Assert.That(Vector4.Distance(tint.GetColor("_BaseColor"), Field<Color>(fire, "burntBuildingColor")), Is.LessThan(.0001f));
+        Assert.That(renderer.sharedMaterials, Is.EqualTo(burntMaterials));
         CaptureWorld("held-fire-damage-behind-report.png");
         sequence.Results.Retry();
         Assert.That(houses.Any(house => fire.WasHouseBurnt(house.Building)), Is.False);
-        renderer.GetPropertyBlock(tint, 0);
-        Assert.That(Vector4.Distance(tint.GetColor("_BaseColor"), Field<Color>(fire, "burntBuildingColor")), Is.GreaterThan(.01f));
+        Assert.That(appearances.Any(appearance => appearance.IsBurnt), Is.False);
+        Assert.That(renderer.sharedMaterials.Any(material => material.name.StartsWith("burnt")), Is.False);
         CaptureWorld("held-fire-rebuilt-after-close.png");
         Assert.That(game.Cards.Any(card => card.Kind == CardKind.Upgrade && card.UpgradeType == UpgradeKind.Fire), Is.False);
         for (int i = 0; i < houses.Length; i++)
@@ -76,7 +73,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
     public IEnumerator StoppingFireKeepsItsSystemsAndCompletingFireRetainsAllFour()
     {
         yield return ReachFire();
-        bank.AddPoints(2);
+        bank.AddPoints(30); // Include twelve AP research and both complete factory crews.
         PrepareFireProtection(2);
         var systems = houses.Select(house => house.House.GetInstalled(UpgradeKind.Fire)).ToArray();
         yield return new WaitForSecondsRealtime(1.6f);

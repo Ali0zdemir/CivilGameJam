@@ -91,7 +91,7 @@ namespace CivilGameJam.Disasters
                 }
             }
             IsRunning = true;
-            if (!IsProtected && collapseFeedback != null) collapseFeedback.PrepareCollapse();
+            if (!IsProtected && collapseFeedback != null) collapseFeedback.PrepareCollapse(withSound: true);
             SetEarthquakeProgress(0f);
             return true;
         }

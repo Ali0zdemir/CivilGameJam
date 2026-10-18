@@ -29,7 +29,7 @@ public sealed partial class CardGamePlayModeTests
         var overlay = ControlField<GameObject>(result, "overlay");
         var retry = ControlField<Button>(result, "retryButton");
         var label = ControlField<TMP_Text>(result, "destroyedCountLabel");
-        var ap = overlay.transform.Find("Card/Content/AP_Label").GetComponent<TMP_Text>();
+        var ap = ControlField<TMP_Text>(result, "earnedPointsLabel");
         var ids = SequenceUIIds();
         Assert.That(result.IsVisible, Is.False);
         for (var number = 1; number <= 3; number++)
@@ -44,6 +44,20 @@ public sealed partial class CardGamePlayModeTests
             Assert.That(result.DestroyedHouseCount, Is.EqualTo(expectedDestroyed), "Each house is counted once even when several disasters reach it.");
             Assert.That(result.ProtectedHouseCount, Is.EqualTo(4 - expectedDestroyed));
             Assert.That(label.text, Is.EqualTo((4 - expectedDestroyed) + " / 4"));
+            var reportCards = overlay.GetComponentsInChildren<DraggableCard>(true).OrderBy(card => card.Rect.anchoredPosition.x).ToArray();
+            Assert.That(reportCards.Length, Is.EqualTo(4));
+            for (int i = 0; i < reportCards.Length; i++)
+            {
+                var reportCard = reportCards[i];
+                Assert.That(reportCard.enabled, Is.False, "A result illustration must never become another playable house.");
+                foreach (var icon in reportCard.GetComponentsInChildren<UpgradeIcon>(true).Where(icon => icon.name == "InstalledIcon"))
+                    Assert.That(icon.gameObject.activeSelf, Is.EqualTo(links[i].House.GetInstalled(icon.Kind) != null), "Each slot mirrors its own real house.");
+                var text = reportCard.transform.Find("HouseReport").GetComponent<TMP_Text>().text;
+                Assert.That(text, Does.StartWith(number == 1 ? "EARTHQUAKE" : number == 2 ? "TSUNAMI" : "FIRE"));
+                Assert.That(text, Does.Contain(number == 1 ? "Seismic isolator" : number == 2 ? "Elevator" : "Sprinklers"));
+                Assert.That(reportCard.transform.Find("EarthquakeDamage").gameObject.activeSelf,
+                    Is.EqualTo(result.IsHouseDestroyed(links[i].Building.GetComponent<CivilGameJam.BuildingModelGeometry>())));
+            }
             if (number >= 2)
             {
                 foreach (var link in links)
@@ -65,6 +79,11 @@ public sealed partial class CardGamePlayModeTests
             Directory.CreateDirectory(directory);
             yield return CaptureCanvas(Path.Combine(directory, "sequence-" + number + "-result.png"), afterRender: camera =>
             {
+                foreach (var reportCard in reportCards)
+                {
+                    var text = reportCard.transform.Find("HouseReport").GetComponent<TMP_Text>();
+                    text.ForceMeshUpdate(); Assert.That(text.isTextOverflowing, Is.False, "The per-house report must fit its saved text area.");
+                }
                 AssertTopButton(retry, camera);
                 var city = Object.FindFirstObjectByType<CityViewport>();
                 var point = RectTransformUtility.WorldToScreenPoint(camera, city.ViewRect.TransformPoint(city.ViewRect.rect.center));

@@ -25,11 +25,12 @@ public sealed partial class CardGamePlayModeTests
         yield return CaptureCanvas(Path.Combine(directory, "english-empty-vault.png"));
         var worker = People()[0];
         research.TryAssign(worker);
+        research.TryAssign(People()[1]);
         research.AdvanceWork(25.01f);
         Vector3 origin = research.Card.Rect.position;
-        game.SelectBlueprint(1);
+        game.SelectBlueprint(0);
         var plan = game.Cards.Single(card => card.Kind == CardKind.Blueprint);
-        var target = game.Vault.SlotFor(UpgradeKind.Breakwater);
+        var target = game.Vault.SlotFor(UpgradeKind.RailSystem);
         Assert.That(plan.StoredInVault, Is.SameAs(game.Vault));
         Assert.That(plan.IsFlying, Is.True);
         Assert.That(Vector3.Distance(plan.Rect.position, origin), Is.LessThan(0.01f));
@@ -43,8 +44,16 @@ public sealed partial class CardGamePlayModeTests
         Assert.That(plan.gameObject.activeSelf, Is.False);
         Assert.That(target.CardRect.gameObject.activeSelf, Is.True);
         Assert.That(target.IsArriving, Is.False);
-        Assert.That(game.Vault.AvailableCount(UpgradeKind.Breakwater), Is.EqualTo(1));
+        Assert.That(game.Vault.AvailableCount(UpgradeKind.RailSystem), Is.EqualTo(1));
         Assert.That(game.Vault.SlotFor(UpgradeKind.Fire).CardRect.gameObject.activeSelf, Is.False);
+        Canvas.ForceUpdateCanvases();
+        // The moving plan has its own Canvas. Check the saved preview after
+        // arrival, where its depth shares the neighbours' Canvas and is comparable.
+        var artwork = target.CardRect.GetComponentInChildren<UpgradeIcon>();
+        foreach (var backdrop in game.Vault.Area.GetComponentsInChildren<UnityEngine.UI.Image>()
+            .Where(image => image.transform.parent == game.Vault.Area && image.name.StartsWith("BlueprintSlot")))
+            Assert.That(artwork.depth, Is.GreaterThan(backdrop.depth),
+                "The arrived blueprint must remain in front of neighbouring opaque slot backgrounds: " + backdrop.name);
         dock.SetExpanded(true, true);
         Hover(target.gameObject, true);
         yield return new WaitForSecondsRealtime(0.32f);
@@ -318,7 +327,8 @@ public sealed partial class CardGamePlayModeTests
     [UnityTest]
     public IEnumerator CancellingAndReturningADiscoveryFlightLeavesOnePlanAndNoGhostCards()
     {
-        research.TryAssign(People()[0]); research.AdvanceWork(25.01f); game.SelectBlueprint(2);
+        research.TryAssign(People()[0]); research.TryAssign(People()[1]);
+        research.AdvanceWork(25.01f); game.SelectBlueprint(2);
         var plan = game.Cards.Single(card => card.Kind == CardKind.Blueprint);
         var slot = game.Vault.SlotFor(UpgradeKind.Fire);
         var factory = Station(CardKind.Factory).GetComponent<FactoryProduction>(); factory.enabled = false;

@@ -17,6 +17,11 @@ public sealed class CardAbilityFeedbackEditModeTests
         var all = scene.GetRootGameObjects().SelectMany(root => root.GetComponentsInChildren<MonoBehaviour>(true)).ToArray();
         var hud = all.OfType<AbilityPointFeedback>().Single();
         var data = new SerializedObject(hud);
+        var sound = (AudioClip)data.FindProperty("notEnoughSound").objectReferenceValue;
+        Assert.That(sound, Is.SameAs(AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Art/not enough_.wav")));
+        var audioSettings = ((AudioImporter)AssetImporter.GetAtPath(AssetDatabase.GetAssetPath(sound))).defaultSampleSettings;
+        Assert.That(audioSettings.preloadAudioData, Is.True);
+        Assert.That(audioSettings.loadType, Is.EqualTo(AudioClipLoadType.DecompressOnLoad));
         Assert.That(data.FindProperty("bank").objectReferenceValue, Is.SameAs(all.OfType<AbilityPoints>().Single()));
         var round = new SerializedObject(all.OfType<EarthquakeRoundController>().Single());
         Assert.That(round.FindProperty("abilityFeedback").objectReferenceValue, Is.SameAs(hud));

@@ -142,7 +142,7 @@ namespace CivilGameJam.Disasters
             mesh.RecalculateBounds();
         }
 
-        public void Update(float seconds, float release, float[] suppression)
+        public void Update(float seconds, float release, float[] suppression, float visibility = 1f)
         {
             properties.SetFloat("_FireTime", seconds); root.GetComponent<MeshRenderer>().SetPropertyBlock(properties);
             ActiveCellCount = 0;
@@ -151,7 +151,7 @@ namespace CivilGameJam.Disasters
                 var cell = Cells[i];
                 cell.Strength = Mathf.SmoothStep(0f, 1f, (seconds - cell.Delay) / 0.5f) * release * suppression[cell.Owner];
                 if (cell.Strength > 0.01f) ActiveCellCount++;
-                var color = new Color(1f, 0.5f, 0.035f, cell.Strength * 0.72f);
+                var color = new Color(1f, 0.5f, 0.035f, cell.Strength * 0.72f * visibility);
                 for (var corner = 0; corner < 4; corner++) colors[i * 4 + corner] = color;
             }
             mesh.colors32 = colors;

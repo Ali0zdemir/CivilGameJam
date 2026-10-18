@@ -18,6 +18,7 @@ namespace CivilGameJam.Cards
         [SerializeField] private Outline outline;
         [SerializeField] private FactoryFolderPresentation folderPresentation;
         private CardGameController game;
+        private BuildingWorkAudio workAudio;
         private DraggableCard card;
         private readonly Dictionary<DraggableCard, int> paidWorkers = new Dictionary<DraggableCard, int>();
         private readonly Dictionary<DraggableCard, float> contributions = new Dictionary<DraggableCard, float>();
@@ -65,11 +66,14 @@ namespace CivilGameJam.Cards
         public bool IsAnimatingBlueprint => folderPresentation != null && folderPresentation.IsAnimating;
         public float ProductionSeconds => Mathf.Max(0.1f, productionSeconds);
         public float EducatedWorkerMultiplier => Mathf.Max(1f, educatedWorkerMultiplier);
+        public static int RequiredWorkersFor(UpgradeKind kind) => kind == UpgradeKind.Breakwater || kind == UpgradeKind.Fire ? 2 : 1;
+        public int RequiredWorkers => RequiredWorkersFor(PendingBlueprint != null ? PendingBlueprint.UpgradeType : UpgradeKind.None);
+        public bool HasEnoughWorkers => station != null && station.WorkerCount >= RequiredWorkers;
         public float WorkRate
         {
             get
             {
-                if (station == null) return 0f;
+                if (!HasEnoughWorkers) return 0f;
                 float rate = 0f;
                 for (int i = 0; i < BuildingStation.Capacity; i++)
                 {
@@ -84,6 +88,7 @@ namespace CivilGameJam.Cards
         {
             game = owner;
             card = building;
+            workAudio = GetComponent<BuildingWorkAudio>();
             if (station == null) station = GetComponent<BuildingStation>();
             if (progressRoot == null) progressRoot = transform.Find("ProgressBar") as RectTransform;
             if (progressFill == null && progressRoot != null) progressFill = progressRoot.Find("BlueProgress")?.GetComponent<Image>();
@@ -98,6 +103,7 @@ namespace CivilGameJam.Cards
         private bool CanAccept(DraggableCard blueprint, bool requirePayment) => game != null && !game.IsChoosingBlueprint && !game.ActionsLocked &&
             (!requirePayment || game.AbilityPoints == null || game.AbilityPoints.CanSpend(CurrentOrderCost)) &&
             PendingBlueprint == null && !IsAnimatingBlueprint && blueprint != null && blueprint.Kind == CardKind.Blueprint &&
+            game.CanInsertBlueprint(this, blueprint) &&
             blueprint.UpgradeType != UpgradeKind.None && blueprint.Owner == game &&
             game.CanUseBlueprint(blueprint.UpgradeType) &&
             (!blueprint.IsStored || blueprint.StoredInVault == game.Vault) && game.RecipeFor(blueprint.UpgradeType) != null;
@@ -227,6 +233,7 @@ namespace CivilGameJam.Cards
                 if (progressRoot != null) progressRoot.gameObject.SetActive(pending);
                 if (progressFill != null) CardUI.SetProgress(progressFill.rectTransform, Progress);
             }
+            workAudio?.Refresh();
         }
     }
 }

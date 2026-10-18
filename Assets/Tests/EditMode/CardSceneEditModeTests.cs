@@ -47,10 +47,16 @@ public sealed class CardSceneEditModeTests
         Assert.That(game.Sidebar, Is.Not.Null);
         Assert.That(game.Sidebar.Slots, Is.Empty);
         Assert.That(game.Sidebar.PeopleArea, Is.Not.Null);
-        Assert.That(game.Sidebar.PeopleArea.rect.width, Is.EqualTo(game.Sidebar.PeopleArea.rect.height).Within(0.01f));
+        Assert.That(game.Sidebar.PeopleArea.rect.width, Is.GreaterThan(game.Sidebar.PeopleArea.rect.height));
         Assert.That(game.Sidebar.PeopleArea.rect.width, Is.GreaterThanOrEqualTo(500f));
         Assert.That(game.Sidebar.GetComponentsInChildren<Transform>(true).Any(child => child.name.StartsWith("PeopleSlot")), Is.False);
         Assert.That(game.Sidebar.PeopleArea.GetComponent<LayoutGroup>(), Is.Null);
+        Assert.That(game.Sidebar.UpgradesArea, Is.SameAs(game.FactoryOutputArea));
+        Assert.That(game.Sidebar.UpgradesArea.GetComponent<LayoutGroup>(), Is.Null);
+        Assert.That(game.Sidebar.UpgradesArea.GetComponent<Image>().raycastTarget, Is.True);
+        Assert.That(game.Sidebar.UpgradesArea.GetComponent<CardDropTargetFeedback>(), Is.Not.Null);
+        Assert.That(game.Sidebar.UpgradesArea.parent.Find("Title").GetComponent<TMPro.TMP_Text>().text, Is.EqualTo("UPGRADES"));
+        Assert.That(game.Sidebar.UpgradesArea.position.y, Is.GreaterThan(game.Sidebar.PeopleArea.position.y));
         Assert.That(game.Vault.Area.Cast<Transform>().Count(child => child.name.StartsWith("BlueprintSlot")), Is.EqualTo(4));
         var viewport = canvas.transform.Find("CityView").GetComponent<CityViewport>();
         Assert.That(viewport, Is.Not.Null);
@@ -73,7 +79,7 @@ public sealed class CardSceneEditModeTests
         Assert.That(game.Grid, Is.Not.Null);
         Assert.That(game.CardLayer, Is.Not.Null);
         Assert.That(game.FactoryOutputArea, Is.Not.Null);
-        Assert.That(game.FactoryOutputArea.parent, Is.SameAs(game.CardLayer));
+        Assert.That(game.FactoryOutputArea.IsChildOf(game.Sidebar.transform), Is.True);
         Assert.That(game.FactoryOutputArea.rect.width, Is.GreaterThanOrEqualTo(100f));
         var cards = game.GetComponentsInChildren<DraggableCard>();
         Assert.That(cards.Length, Is.EqualTo(11));
@@ -130,8 +136,10 @@ public sealed class CardSceneEditModeTests
         Assert.That(hover.Details, Is.Not.Null);
         bool product = card.Kind == CardKind.Upgrade;
         Assert.That(hover.Details.localScale, Is.EqualTo(Vector3.one * (product ? 1f : card.IsPerson ? 0.7176f : 0.8f)));
-        Assert.That(hover.Details.GetComponentsInChildren<Image>(true).Length, Is.EqualTo(product ? 0 : card.IsBuilding ? 1 : 2));
-        Assert.That(hover.Details.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true).Length, Is.EqualTo(product ? 1 : card.Kind == CardKind.House ? 8 : card.IsBuilding ? 2 : 4));
+        Assert.That(hover.Details.GetComponentsInChildren<Image>(true).Length, Is.EqualTo(product ? 0 : card.Kind == CardKind.House ? 4 : card.IsBuilding ? 1 : 2));
+        int labels = hover.Details.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true).Length;
+        if (card.Kind == CardKind.House) Assert.That(labels, Is.GreaterThanOrEqualTo(8), "Authored house details may have extra decorative labels.");
+        else Assert.That(labels, Is.EqualTo(product ? 1 : card.IsBuilding ? 2 : 4));
         Assert.That(hover.Details.GetComponent<CanvasGroup>().blocksRaycasts, Is.False);
         var motion = new SerializedObject(prefab.GetComponent<CardFeedback>());
         Assert.That(motion.FindProperty("dragTiltDegrees").floatValue, Is.EqualTo(4f));
@@ -212,6 +220,7 @@ public sealed class CardSceneEditModeTests
         if (card.Kind == CardKind.Upgrade)
         {
             var title = hover.Details.Find("ProductName").GetComponent<TMPro.TextMeshProUGUI>();
+            Assert.That(title.gameObject.activeSelf, Is.False, "Product names are shown above the icons instead of in duplicate hover labels.");
             Assert.That(title.color, Is.EqualTo(Color.white));
             Assert.That(title.fontSharedMaterial.GetFloat(TMPro.ShaderUtilities.ID_OutlineWidth), Is.GreaterThan(0f));
             Assert.That(hover.Details.anchorMin, Is.EqualTo(new Vector2(0.5f, 1f)));
@@ -229,7 +238,14 @@ public sealed class CardSceneEditModeTests
             Assert.That(outline.fillCenter, Is.False);
             Assert.That(outline.sprite, Is.Not.Null);
             Assert.That(new SerializedObject(card).FindProperty("newItemOutline").objectReferenceValue, Is.SameAs(outline));
-            Assert.That(card.Rect.sizeDelta, Is.EqualTo(new Vector2(200f, 200f)));
+            Assert.That(card.Rect.sizeDelta, Is.EqualTo(new Vector2(200f, 280f)));
+            var inventoryName = prefab.transform.Find("InventoryName").GetComponent<TMPro.TMP_Text>();
+            string inventoryTitle = card.UpgradeType == UpgradeKind.RailSystem ? "Rail System"
+                : card.UpgradeType == UpgradeKind.Breakwater ? "Elevator" : "Fire Sprinkler";
+            Assert.That(inventoryName.text, Is.EqualTo(inventoryTitle));
+            Assert.That(inventoryName.gameObject.activeSelf, Is.True);
+            Assert.That(inventoryName.raycastTarget, Is.False);
+            Assert.That(inventoryName.font, Is.SameAs(title.font));
             var artwork = prefab.GetComponentInChildren<UpgradeIcon>(true).Artwork;
             string spriteName = card.UpgradeType == UpgradeKind.RailSystem ? "Siesmic Isolator logo" :
                 card.UpgradeType == UpgradeKind.Breakwater ? "Elevated Floor Logo" : "Fire Extingusiher Logo";
@@ -321,14 +337,34 @@ public sealed class CardSceneEditModeTests
             foreach (string path in new[] { "Information/Title", "Information/Description", "Properties/Title", "Properties/Description" })
                 Assert.That(hover.Details.Find(path), Is.Not.Null, "Vault information must be saved in the Hierarchy: " + path);
             var button = (RectTransform)choice.Find("BlueprintOption" + i);
-            Assert.That(button.rect.width, Is.EqualTo(310f));
-            Assert.That(button.rect.height, Is.EqualTo(450f));
+            var firstButton = (RectTransform)choice.Find("BlueprintOption0");
+            Assert.That(button.rect.width / button.rect.height, Is.EqualTo(.75f).Within(.0001f));
+            Assert.That(button.rect.size, Is.EqualTo(firstButton.rect.size));
             var preview = button.Find("CardPreview").GetComponent<RectTransform>();
             Assert.That(preview.rect.size, Is.EqualTo(slot.CardRect.rect.size));
-            Assert.That(preview.localScale, Is.EqualTo(slot.CardRect.localScale));
+            var previewArt = preview.Find("CardSymbol").GetComponent<UpgradeIcon>();
+            var rect = previewArt.rectTransform.rect;
+            float ratio = previewArt.Artwork.rect.width / previewArt.Artwork.rect.height;
+            float height = Mathf.Min(rect.height, rect.width / ratio);
+            var drawing = new Rect(rect.center - new Vector2(height * ratio, height) * .5f, new Vector2(height * ratio, height));
+            var min = Vector2.positiveInfinity; var max = Vector2.negativeInfinity;
+            foreach (var corner in new[] { drawing.min, new Vector2(drawing.xMin, drawing.yMax), drawing.max, new Vector2(drawing.xMax, drawing.yMin) })
+            {
+                Vector3 point = corner;
+                for (var current = previewArt.transform; current != button; current = current.parent)
+                    point = Matrix4x4.TRS(current.localPosition, current.localRotation, current.localScale).MultiplyPoint3x4(point);
+                min = Vector2.Min(min, point); max = Vector2.Max(max, point);
+            }
+            Assert.That(((min + max) * .5f).magnitude, Is.LessThan(.05f), "Each authored artwork is centered in its selection hit area.");
+            Assert.That(max.x - min.x, Is.LessThanOrEqualTo(button.rect.width + .05f));
+            Assert.That(max.y - min.y, Is.LessThanOrEqualTo(button.rect.height + .05f));
             if (i > 0)
-                Assert.That(button.anchoredPosition.x - ((RectTransform)choice.Find("BlueprintOption" + (i - 1))).anchoredPosition.x - button.rect.width,
-                    Is.EqualTo(24f).Within(0.01f));
+            {
+                var previous = (RectTransform)choice.Find("BlueprintOption" + (i - 1));
+                float stride = ((RectTransform)choice.Find("BlueprintOption1")).anchoredPosition.x - firstButton.anchoredPosition.x;
+                Assert.That(button.anchoredPosition.x - previous.anchoredPosition.x, Is.EqualTo(stride).Within(.01f));
+                Assert.That(stride, Is.GreaterThan(button.rect.width));
+            }
         }
         var vaultCorners = new Vector3[4]; game.Vault.Area.GetWorldCorners(vaultCorners);
         foreach (var corner in vaultCorners)
@@ -421,7 +457,7 @@ public sealed class CardSceneEditModeTests
         Assert.That(gapX, Is.GreaterThan(0f));
         Assert.That(gapY, Is.GreaterThan(0f));
         var panel = (RectTransform)game.transform;
-        Assert.That(panel.GetComponent<Image>().sprite, Is.EqualTo(FindArtwork("Deck Ui (2)")));
+        Assert.That(panel.GetComponent<Image>().sprite, Is.EqualTo(FindArtwork("Deck Ui Revised")));
         Assert.That(secondLocal.x - firstLocal.x, Is.EqualTo(panel.rect.width * .245f).Within(.01f));
         Assert.That(firstLocal.y - nextLocal.y, Is.EqualTo(panel.rect.height * .49f).Within(.01f));
         var people = cards.Where(c => c.IsPerson).OrderBy(c => c.name).ToArray();

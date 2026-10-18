@@ -29,6 +29,13 @@ namespace CivilGameJam.Disasters
         [Tooltip("Used when no saved monster walk is assigned; otherwise the steps and their delay determine the duration.")]
         [SerializeField, Min(3f)] private float duration = 7f;
 
+        [Header("Earthquake audio")]
+        [Tooltip("The short opening recording; playback starts with the first frame of shaking.")]
+        [SerializeField] private AudioSource earthquakeAudio;
+        [SerializeField] private AudioClip loopSound;
+        [SerializeField] private AudioClip endSound;
+        private AudioSource loopAudio, endAudio;
+
         [Header("Camera shake")]
         [SerializeField] private CityCameraController navigation;
         [SerializeField] private Transform cameraTransform;
@@ -77,6 +84,8 @@ namespace CivilGameJam.Disasters
 
         public bool IsRunning { get; private set; }
         public bool HasCompleted { get; private set; }
+        public bool IsEarthquakeAudioPlaying => IsRunning &&
+            (earthquakeAudio != null && earthquakeAudio.isPlaying || loopAudio != null && loopAudio.isPlaying || endAudio != null && endAudio.isPlaying);
         public float ElapsedSeconds => elapsed;
         public float TestDuration => animateMonster && seaMonsterWalk != null
             ? seaMonsterWalk.WalkDuration + Mathf.Max(0f, afterLastStepDelay)
@@ -86,6 +95,7 @@ namespace CivilGameJam.Disasters
 
         private void Awake()
         {
+            PrepareEarthquakeAudio();
             if (progressFeedback == null && progressFill != null) progressFeedback = progressFill.GetComponentInParent<ProgressBarFeedback>(true);
             ResetTest();
         }
@@ -123,8 +133,61 @@ namespace CivilGameJam.Disasters
             if (navigation != null) navigation.AcquireEventInputLock(this);
             if (animateMonster && seaMonsterWalk != null) seaMonsterWalk.BeginWalk(preserveTsunami);
             PrepareBuildingAnimations();
+            StartEarthquakeAudio();
             if (testButton != null) testButton.interactable = false;
             if (statusLabel != null) statusLabel.text = "Earthquake started";
+        }
+
+        private void PrepareEarthquakeAudio()
+        {
+            if (earthquakeAudio == null) return;
+            earthquakeAudio.playOnAwake = earthquakeAudio.loop = false;
+            earthquakeAudio.pitch = 1f;
+            earthquakeAudio.spatialBlend = earthquakeAudio.dopplerLevel = 0f;
+            if (earthquakeAudio.clip != null) earthquakeAudio.clip.LoadAudioData();
+            loopAudio = CreateAudioVoice(loopSound, true);
+            endAudio = CreateAudioVoice(endSound, false);
+        }
+
+        private AudioSource CreateAudioVoice(AudioClip clip, bool loop)
+        {
+            if (clip == null) return null;
+            clip.LoadAudioData();
+            var voice = gameObject.AddComponent<AudioSource>();
+            voice.playOnAwake = false;
+            voice.clip = clip;
+            voice.loop = loop;
+            voice.volume = earthquakeAudio.volume;
+            voice.pitch = 1f;
+            voice.spatialBlend = voice.dopplerLevel = 0f;
+            voice.priority = earthquakeAudio.priority;
+            voice.outputAudioMixerGroup = earthquakeAudio.outputAudioMixerGroup;
+            return voice;
+        }
+
+        private void StartEarthquakeAudio()
+        {
+            StopEarthquakeAudio();
+            if (earthquakeAudio == null) return;
+            var startTime = AudioSettings.dspTime;
+            var openingSeconds = earthquakeAudio.clip != null ? earthquakeAudio.clip.length : 0f;
+            var endingSeconds = endSound != null ? endSound.length : 0f;
+            var endingTime = startTime + TestDuration - endingSeconds;
+            // Schedule the joins on the audio clock so frame rate cannot leave gaps between recordings.
+            if (earthquakeAudio.clip != null) earthquakeAudio.Play();
+            if (loopAudio != null)
+            {
+                loopAudio.PlayScheduled(startTime + openingSeconds);
+                loopAudio.SetScheduledEndTime(endingTime);
+            }
+            if (endAudio != null) endAudio.PlayScheduled(endingTime);
+        }
+
+        private void StopEarthquakeAudio()
+        {
+            if (earthquakeAudio != null) earthquakeAudio.Stop();
+            if (loopAudio != null) loopAudio.Stop();
+            if (endAudio != null) endAudio.Stop();
         }
 
         private void PrepareBuildingAnimations()
@@ -268,10 +331,12 @@ namespace CivilGameJam.Disasters
         private void OnDisable()
         {
             if (poseCaptured || IsRunning) ResetTest();
+            else StopEarthquakeAudio();
         }
 
         private void ResetTest(bool completed = false)
         {
+            StopEarthquakeAudio();
             IsRunning = false;
             HasCompleted = completed;
             foreach (var animation in buildingAnimations)

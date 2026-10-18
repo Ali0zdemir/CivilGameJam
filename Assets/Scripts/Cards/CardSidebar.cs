@@ -11,14 +11,18 @@ namespace CivilGameJam.Cards
         [SerializeField] private RectTransform canvasRoot;
         [SerializeField] private RectTransform[] slots;
         [SerializeField] private RectTransform peopleArea;
+        [SerializeField] private RectTransform upgradesArea;
         [Min(1f)] [SerializeField] private float width = 560f;
         [Min(0f)] [SerializeField] private float margin = 24f;
 
         public RectTransform Area => (RectTransform)transform;
         public IReadOnlyList<RectTransform> Slots => slots;
         public RectTransform PeopleArea => peopleArea;
+        public RectTransform UpgradesArea => upgradesArea;
         private readonly Dictionary<DraggableCard, Vector2> rememberedPositions = new Dictionary<DraggableCard, Vector2>();
-        public bool Owns(DraggableCard card) => card.Rect.IsChildOf(peopleArea != null ? peopleArea : transform);
+        private RectTransform InventoryFor(DraggableCard card) => card.IsPerson ? peopleArea : card.Kind == CardKind.Upgrade ? upgradesArea : null;
+        public bool Owns(DraggableCard card) => InventoryFor(card) is RectTransform area
+            ? card.Rect.IsChildOf(area) : peopleArea == null && card.IsPerson && card.Rect.IsChildOf(transform);
 
         private void Update() => RefreshLayout();
 
@@ -37,36 +41,61 @@ namespace CivilGameJam.Cards
         public bool TrySnap(DraggableCard card, Vector3 position)
         {
             if (!Area.rect.Contains(Area.InverseTransformPoint(position))) return false;
-            if (peopleArea != null)
-                return peopleArea.rect.Contains(peopleArea.InverseTransformPoint(position))
-                    ? ParkAt(card, peopleArea.InverseTransformPoint(position)) : TryPark(card);
+            var area = InventoryFor(card);
+            if (area != null)
+                return area.rect.Contains(area.InverseTransformPoint(position))
+                    ? ParkAt(card, area, area.InverseTransformPoint(position)) : TryPark(card);
             return TryPark(card, position);
         }
 
         public bool TryPark(DraggableCard card)
         {
-            if (peopleArea == null) return TryPark(card, null);
-            if (card.Owner != game || !card.IsPerson || card.IsStored) return false;
+            var area = InventoryFor(card);
+            if (area == null) return TryPark(card, null);
+            if (card.Owner != game || card.IsStored) return false;
             Vector2 size = Vector2.Scale(card.Rect.rect.size, card.LayoutScale);
-            Vector2 desired = rememberedPositions.TryGetValue(card, out var previous) ? previous : Vector2.zero;
-            desired = ClampPosition(card, desired);
-            if (HasRoom(card, desired, size)) return ParkAt(card, desired);
-            Vector2 stride = size + Vector2.one * 16f;
-            for (float y = peopleArea.rect.yMax - size.y / 2f - 12f; y >= peopleArea.rect.yMin + size.y / 2f + 12f; y -= stride.y)
-                for (float x = peopleArea.rect.xMin + size.x / 2f + 12f; x <= peopleArea.rect.xMax - size.x / 2f - 12f; x += stride.x)
+            bool upgrade = area == upgradesArea;
+            float inset = upgrade ? 8f : 12f;
+            Vector2 stride = size + Vector2.one * (upgrade ? 8f : 16f);
+            float firstX = area.rect.xMin + size.x / 2f + inset;
+            if (upgrade)
+            {
+                int columns = Mathf.Clamp(Mathf.FloorToInt((area.rect.width - inset * 2f) / (size.x + 8f)), 1, 3);
+                stride.x = (area.rect.width - inset * 2f) / columns;
+                firstX = area.rect.xMin + inset + stride.x / 2f;
+            }
+            float firstY = area.rect.yMax - size.y / 2f - inset;
+            bool hasPrevious = rememberedPositions.TryGetValue(card, out var previous);
+            Vector2 desired = hasPrevious ? previous
+                : upgrade ? new Vector2(firstX, firstY) : Vector2.zero;
+            desired = ClampPosition(card, area, desired);
+            // A free-placed upgrade owns its remembered spot, even when a full tray
+            // fans another item over it. Returning from a house must not fan it again.
+            if (upgrade && hasPrevious || HasRoom(card, area, desired, size)) return ParkAt(card, area, desired);
+            for (float y = firstY; y >= area.rect.yMin + size.y / 2f + inset; y -= stride.y)
+                for (float x = firstX; x <= area.rect.xMax - size.x / 2f - inset; x += stride.x)
                 {
                     Vector2 candidate = new Vector2(x, y);
-                    if (HasRoom(card, candidate, size)) return ParkAt(card, candidate);
+                    if (HasRoom(card, area, candidate, size)) return ParkAt(card, area, candidate);
                 }
-            return ParkAt(card, desired);
+            if (upgrade)
+            {
+                int count = 0;
+                foreach (var other in game.Cards)
+                    if (other != card && other.Kind == CardKind.Upgrade && !other.IsStored && Owns(other)) count++;
+                float offset = 10f * (1 + count % 4);
+                desired += new Vector2(offset, -offset);
+            }
+            return ParkAt(card, area, desired);
         }
 
         public void RememberPosition(DraggableCard card)
         {
-            if (peopleArea != null && card.IsPerson && Owns(card))
+            var area = InventoryFor(card);
+            if (area != null && Owns(card))
             {
-                Vector2 point = peopleArea.InverseTransformPoint(card.Rect.position);
-                if (peopleArea.rect.Contains(point)) rememberedPositions[card] = point;
+                Vector2 point = area.InverseTransformPoint(card.Rect.position);
+                if (area.rect.Contains(point)) rememberedPositions[card] = point;
             }
         }
 
@@ -79,35 +108,36 @@ namespace CivilGameJam.Cards
             rememberedPositions[to] = position;
         }
 
-        private bool ParkAt(DraggableCard card, Vector2 position)
+        private bool ParkAt(DraggableCard card, RectTransform area, Vector2 position)
         {
-            if (card.Owner != game || !card.IsPerson || card.IsStored) return false;
+            if (card.Owner != game || InventoryFor(card) != area || card.IsStored) return false;
             card.StopFlight();
-            card.Rect.SetParent(peopleArea, true);
+            card.Rect.SetParent(area, true);
             card.Rect.anchorMin = card.Rect.anchorMax = new Vector2(0.5f, 0.5f);
             // No layout group or slot snapping: the player's drop position is retained.
-            position = ClampPosition(card, position);
-            card.Rect.position = peopleArea.TransformPoint(position);
+            position = ClampPosition(card, area, position);
+            card.Rect.position = area.TransformPoint(position);
+            card.IsParkedInFactoryOutput = card.Kind == CardKind.Upgrade;
             card.Rect.SetAsLastSibling();
             rememberedPositions[card] = position;
             return true;
         }
 
-        private Vector2 ClampPosition(DraggableCard card, Vector2 position)
+        private Vector2 ClampPosition(DraggableCard card, RectTransform area, Vector2 position)
         {
             Vector2 half = Vector2.Scale(card.Rect.rect.size, card.LayoutScale) * 0.5f;
-            Rect bounds = peopleArea.rect;
+            Rect bounds = area.rect;
             position.x = Mathf.Clamp(position.x, bounds.xMin + half.x + 8f, bounds.xMax - half.x - 8f);
             position.y = Mathf.Clamp(position.y, bounds.yMin + half.y + 8f, bounds.yMax - half.y - 8f);
             return position;
         }
 
-        private bool HasRoom(DraggableCard incoming, Vector2 position, Vector2 size)
+        private bool HasRoom(DraggableCard incoming, RectTransform area, Vector2 position, Vector2 size)
         {
             foreach (var other in game.Cards)
             {
-                if (other == incoming || !other.IsPerson || other.IsStored || !other.gameObject.activeSelf || !Owns(other)) continue;
-                Vector2 target = peopleArea.InverseTransformPoint(game.CardLayer.TransformPoint(other.TablePosition));
+                if (other == incoming || InventoryFor(other) != area || other.IsStored || !other.gameObject.activeSelf || !Owns(other)) continue;
+                Vector2 target = area.InverseTransformPoint(game.CardLayer.TransformPoint(other.TablePosition));
                 Vector2 separation = (size + Vector2.Scale(other.Rect.rect.size, other.LayoutScale)) / 2f + Vector2.one * 8f;
                 if (Mathf.Abs(target.x - position.x) < separation.x && Mathf.Abs(target.y - position.y) < separation.y) return false;
             }

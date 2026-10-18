@@ -77,7 +77,9 @@ public sealed partial class CardGamePlayModeTests
         AdvanceTsunamiCamera(tsunami, navigation, tsunami.TestDuration - 0.2f - ControlField<float>(tsunami, "sequenceElapsed"));
         Assert.That(tsunami.IsRunning, Is.True);
         AssertOpaqueWaveAtPlayerZoom(camera, wave, navigation);
-        Assert.That(wave.transform.localPosition, Is.EqualTo(wave.EndPosition));
+        Assert.That(tsunami.IsWaterReceding, Is.True);
+        Assert.That(wave.FrontDistance, Is.LessThanOrEqualTo(tsunami.WaveEndDistance + .001f),
+            "The wave recedes from the city boundary instead of continuing to the old mountain endpoint.");
         Vector2 heldPan = navigation.PanOffset;
         float heldZoom = ControlField<float>(navigation, "currentZoom");
         Assert.That(navigation.InputBlocked, Is.True, "Keep the view locked through the final runoff.");

@@ -84,13 +84,14 @@ public sealed partial class CardGamePlayModeTests
         Assert.That(effect.IsCompleting, Is.True);
         TickCompletion(effect, 0.3f);
         Assert.That(effect.GetComponent<CanvasGroup>().alpha, Is.LessThan(1f));
+        EnsurePresentationWorkers(3);
         var nextPlan = ResearchPlan(1);
-        Assert.That(Station(CardKind.Factory).TryAssign(People().First(person => person.CanStartWork && !person.IsStored)), Is.True);
+        AssignFactoryWorkers(nextPlan.UpgradeType);
         Assert.That(factory.TryInsertBlueprint(nextPlan), Is.True);
         Assert.That(effect.IsCompleting, Is.False);
         Assert.That(effect.GetComponent<CanvasGroup>().alpha, Is.EqualTo(1f));
         Assert.That(BarProgress(fill), Is.Zero);
-        factory.AdvanceWork(factory.ProductionSeconds * 0.027f);
+        factory.AdvanceWork(factory.ProductionSeconds * 0.027f / factory.WorkRate);
         Assert.That(BarProgress(fill), Is.EqualTo(0.027f).Within(0.00001f));
         factory.AdvanceWork(factory.ProductionSeconds);
         AssertCompletionFlashAndFade(effect);

@@ -55,7 +55,7 @@ namespace CivilGameJam.Disasters
             // A flood takes over the pose without competing with the earthquake animation.
             if (TryGetComponent<ApartmentEarthquakeAnimation>(out var earthquake)) earthquake.ReleaseForTsunami();
             CapturePose();
-            if (collapseFeedback != null) collapseFeedback.PrepareCollapse();
+            if (collapseFeedback != null) collapseFeedback.PrepareCollapse(withSound: true);
             elapsed = 0f; HasCollapsed = true;
             SamplePose();
             return true;

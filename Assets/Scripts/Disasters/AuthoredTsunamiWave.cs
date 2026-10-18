@@ -9,7 +9,7 @@ namespace CivilGameJam.Disasters
     {
         [Header("Movement")]
         [Tooltip("Dalganın şehre ilerleme hızı (birim/saniye). Play Mode sırasında da değiştirilebilir.")]
-        [SerializeField, Min(.01f)] private float movementSpeed = 1.1f;
+        [SerializeField, Min(.01f)] private float movementSpeed = 1.25f;
         [SerializeField] private Vector3 startPosition = new Vector3(-9.536f, -.32f, -5.52f);
         [SerializeField] private Vector3 endPosition = new Vector3(-9.536f, -.32f, 48.5f);
         [Tooltip("Frame used by the flood simulation. Start and End Position remain local to this wave's parent.")]

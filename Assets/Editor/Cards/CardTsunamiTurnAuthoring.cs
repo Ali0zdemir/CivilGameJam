@@ -34,13 +34,13 @@ namespace CivilGameJam.Cards.Editor
                     {
                         var prices = new SerializedObject(station);
                         prices.FindProperty("tsunamiNormalAbilityPointCost").intValue = card.Kind == CardKind.School ? 2
-                            : card.Kind == CardKind.Factory ? 7 : 6;
+                            : card.Kind == CardKind.Factory ? 12 : 9;
                         prices.FindProperty("tsunamiEducatedAbilityPointCost").intValue = card.Kind == CardKind.School ? 0
-                            : card.Kind == CardKind.Factory ? 5 : 3;
+                            : card.Kind == CardKind.Factory ? 7 : 3;
                         prices.FindProperty("fireNormalAbilityPointCost").intValue = card.Kind == CardKind.School ? 4
-                            : card.Kind == CardKind.Factory ? 12 : 8;
+                            : 12;
                         prices.FindProperty("fireEducatedAbilityPointCost").intValue = card.Kind == CardKind.School ? 0
-                            : card.Kind == CardKind.Factory ? 8 : 5;
+                            : 4;
                         prices.ApplyModifiedPropertiesWithoutUndo();
                     }
                     PrefabUtility.SaveAsPrefabAsset(root, path);
@@ -90,7 +90,7 @@ namespace CivilGameJam.Cards.Editor
             return image;
         }
 
-        private static CardDropTargetFeedback ConfigureFeedback(GameObject owner, Graphic artwork, bool useArtworkAlpha = true)
+        internal static CardDropTargetFeedback ConfigureFeedback(GameObject owner, Graphic artwork, bool useArtworkAlpha = true)
         {
             if (artwork == null) throw new InvalidOperationException("Missing saved artwork for " + owner.name);
             var feedback = owner.GetComponent<CardDropTargetFeedback>() ?? owner.AddComponent<CardDropTargetFeedback>();

@@ -28,7 +28,8 @@ namespace CivilGameJam.Cards
         public RectTransform CardRect => cardRect;
         public RectTransform VaultArea => vault.Area;
         public bool IsArriving => incoming > 0;
-        public bool CanShowHover => discovered && cardRect.gameObject.activeSelf && !IsArriving && vault.CanDrag && dragged == null;
+        public bool CanShowHover => discovered && cardRect.gameObject.activeSelf && !IsArriving && vault.CanDrag && dragged == null &&
+            (!Owner.IsTutorialActive || vault.CanWithdraw(kind));
         public void BeginArrival(bool firstDiscovery) { incoming++; waitingForFirstArrival |= firstDiscovery; }
         public void EndArrival() { incoming = Mathf.Max(0, incoming - 1); if (incoming == 0) waitingForFirstArrival = false; }
         public void Refresh(bool discovered, int available)

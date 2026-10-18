@@ -32,6 +32,7 @@ namespace CivilGameJam.Cards
         }
         public bool CanAccept(DraggableCard upgrade) => game != null && !IsDestroyed && !game.ActionsLocked && !game.IsChoosingBlueprint && upgrade != null &&
             upgrade.Kind == CardKind.Upgrade && upgrade.UpgradeType != UpgradeKind.None && !upgrade.IsStored &&
+            game.CanInstallUpgrade(this, upgrade) &&
             GetInstalled(upgrade.UpgradeType) == null;
         public bool TryInstall(DraggableCard upgrade)
         {

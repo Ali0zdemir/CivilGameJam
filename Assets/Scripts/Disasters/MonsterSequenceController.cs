@@ -19,17 +19,14 @@ namespace CivilGameJam.Disasters
         [SerializeField] private CityCameraController navigation;
         [SerializeField] private MonsterSequenceResults results;
 
-        [Header("Offscreen earthquake")]
-        [SerializeField] private AudioSource earthquakeRoar;
-        [Tooltip("Play the roar this many seconds after the offscreen earthquake starts.")]
-        [SerializeField, Min(0f)] private float earthquakeRoarDelay = 2f;
+        [Header("Disaster aftermath")]
         [Tooltip("Show the boss tsunami result this many seconds after the last affected house finishes collapsing.")]
-        [SerializeField, Min(0f)] private float tsunamiAftermathSeconds = 3f;
+        [SerializeField, Min(0f)] private float tsunamiAftermathSeconds = 4f;
 
         [Header("Sequence camera")]
         [SerializeField, Range(1f, 1.6f)] private float cameraZoomFactor = 1.3f;
         [SerializeField, Min(0.1f)] private float cameraZoomSeconds = 1.8f;
-        [SerializeField, Min(0.1f)] private float cameraReturnSeconds = 1.8f;
+        [SerializeField, Min(0.1f)] private float cameraReturnSeconds = 0.8f;
 
         [Header("Saved test menu")]
         [SerializeField, Range(1, 3)] private int selectedSequence = 1;
@@ -48,7 +45,6 @@ namespace CivilGameJam.Disasters
         private bool waveCameraActive;
         private bool offscreenEarthquake;
         private bool continueWithTsunami;
-        private bool roarPlayed;
         private bool tsunamiAftermathStarted;
         private float tsunamiAftermathElapsed;
 
@@ -57,12 +53,12 @@ namespace CivilGameJam.Disasters
         public int ActiveSequence { get; private set; }
         public MonsterSequenceStage Stage { get; private set; }
         public bool HouseEffectsFinished => results == null || results.HouseEffectsFinished;
-        public bool IsEarthquakeRoarPlaying => offscreenEarthquake && roarPlayed && earthquakeRoar != null && earthquakeRoar.isPlaying;
+        public bool IsEarthquakeAudioPlaying => earthquake != null && earthquake.IsEarthquakeAudioPlaying;
         public float TsunamiAftermathSeconds => Mathf.Max(0f, tsunamiAftermathSeconds);
-        private bool HasFinishedTsunamiAftermath => ActiveSequence < 2 || tsunamiAftermathElapsed + .0001f >= TsunamiAftermathSeconds;
+        private bool HasFinishedTsunamiAftermath => ActiveSequence != 2 || tsunamiAftermathElapsed + .0001f >= TsunamiAftermathSeconds;
         private bool TsunamiCollapsesFinished => tsunami.HasFinishedHouseCollapses && (results == null || results.HouseCollapseAnimationsFinished);
         public bool PresentationFinished => (ActiveSequence == 2 && TsunamiCollapsesFinished || HouseEffectsFinished) &&
-            !IsEarthquakeRoarPlaying && HasFinishedTsunamiAftermath && (ActiveSequence <= 2 || !tsunami.IsRunning);
+            !IsEarthquakeAudioPlaying && HasFinishedTsunamiAftermath && (ActiveSequence <= 2 || !tsunami.IsRunning);
         public MonsterSequenceResults Results => results;
 
         public bool WasHouseBurnt(Transform house) => fire != null && fire.WasHouseBurnt(house);
@@ -111,11 +107,9 @@ namespace CivilGameJam.Disasters
             tsunami.StopTsunami();
             walk.CancelWalk();
             monster.ResetEmergence();
-            if (earthquakeRoar != null) earthquakeRoar.Stop();
             ActiveSequence = SelectedSequence;
             offscreenEarthquake = ActiveSequence == 1;
             continueWithTsunami = offscreenEarthquake && tsunamiAfterEarthquake;
-            roarPlayed = false;
             tsunamiAftermathStarted = false;
             tsunamiAftermathElapsed = 0f;
             departureElapsed = 0f;
@@ -131,10 +125,7 @@ namespace CivilGameJam.Disasters
             }
             if (offscreenEarthquake)
             {
-                // Match the earthquake to the original audio instead of stretching the roar.
-                var synchronizedDuration = earthquakeRoar != null && earthquakeRoar.clip != null
-                    ? Mathf.Max(0f, earthquakeRoarDelay) + earthquakeRoar.clip.length : 0f;
-                earthquake.StartOffscreenEarthquake(synchronizedDuration);
+                earthquake.StartOffscreenEarthquake();
                 if (!earthquake.IsRunning) { StopSequence(); return; }
             }
             if (ActiveSequence >= 2) tsunami.StartSequenceTsunami(this);
@@ -163,21 +154,21 @@ namespace CivilGameJam.Disasters
         private void AdvanceSequence(float deltaTime)
         {
             if (!IsRunning) return;
-            if (ActiveSequence >= 2)
+            if (ActiveSequence == 2)
             {
-                if (ActiveSequence == 2 && TsunamiCollapsesFinished ||
+                if (TsunamiCollapsesFinished ||
                     tsunami.HasReachedCityEnd && !earthquake.IsRunning && HouseEffectsFinished)
                 {
                     if (tsunamiAftermathStarted) tsunamiAftermathElapsed += Mathf.Max(0f, deltaTime);
                     else
                     {
                         tsunamiAftermathStarted = true;
-                        if (ActiveSequence == 2) tsunami.BeginSequenceRecession(TsunamiAftermathSeconds);
+                        tsunami.BeginSequenceRecession(TsunamiAftermathSeconds);
                     }
                 }
                 else { tsunamiAftermathStarted = false; tsunamiAftermathElapsed = 0f; }
                 // A tsunami report follows the final collapse, independently of the boss's remaining route.
-                if (ActiveSequence == 2 && HasFinishedTsunamiAftermath)
+                if (HasFinishedTsunamiAftermath)
                 {
                     FinishRoundPresentation();
                     return;
@@ -186,19 +177,10 @@ namespace CivilGameJam.Disasters
             switch (Stage)
             {
                 case MonsterSequenceStage.Earthquake:
-                    if (!roarPlayed && earthquake.IsRunning && earthquake.ElapsedSeconds >= Mathf.Max(0f, earthquakeRoarDelay))
-                    {
-                        roarPlayed = true;
-                        if (earthquakeRoar != null && earthquakeRoar.clip != null)
-                        {
-                            earthquakeRoar.pitch = 1f;
-                            earthquakeRoar.Play();
-                        }
-                    }
                     if (earthquake.IsRunning) return;
                     if (!earthquake.HasCompleted) { StopSequence(); return; }
                     if (!PresentationFinished) return;
-                    // The playable round records seismic survival and its AP before water can damage a house.
+                    // Record seismic survival before the water can damage a house; its AP waits for the final report.
                     if (continueWithTsunami) { Stage = MonsterSequenceStage.AwaitingTsunami; break; }
                     CompleteSequence();
                     break;
@@ -216,7 +198,7 @@ namespace CivilGameJam.Disasters
                     }
                     if (ActiveSequence == 3)
                     {
-                        if (earthquake.IsRunning || tsunami.IsRunning || !HasFinishedTsunamiAftermath) return;
+                        if (earthquake.IsRunning || tsunami.IsRunning) return;
                         fire.StartFire();
                         FocusCity(monster.Model);
                         Stage = MonsterSequenceStage.Fire;
@@ -261,7 +243,6 @@ namespace CivilGameJam.Disasters
         {
             tsunamiAftermathStarted = false;
             tsunamiAftermathElapsed = 0f;
-            if (earthquakeRoar != null) earthquakeRoar.Stop();
             if (results != null) results.Hide();
             if (!IsRunning) return;
             IsRunning = false;
@@ -310,7 +291,6 @@ namespace CivilGameJam.Disasters
             selectedSequence = ActiveSequence = 2;
             tsunamiAftermathStarted = false;
             tsunamiAftermathElapsed = 0f;
-            if (earthquakeRoar != null) earthquakeRoar.Stop();
             Stage = MonsterSequenceStage.Emerging;
             tsunami.StartSequenceTsunami(this);
             if (!tsunami.IsRunning) { StopSequence(); return false; }
@@ -327,7 +307,6 @@ namespace CivilGameJam.Disasters
             }
             IsRunning = false;
             Stage = MonsterSequenceStage.Complete;
-            if (earthquakeRoar != null) earthquakeRoar.Stop();
             ReturnCamera();
             SetIndividualButtons(true);
             // Playable rounds snapshot damage and rewards before rebuilding the next turn.

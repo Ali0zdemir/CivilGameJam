@@ -27,16 +27,19 @@ public sealed partial class CardAbilityPointsPlayModeTests
         bank.AddPoints(5);
         yield return new WaitForSecondsRealtime(.25f);
         Assert.That(view.IsWorkerHintVisible, Is.True);
-        factoryStation.UseSequencePrices(2); // Tsunami normal factory: 7 AP.
+        factoryStation.UseSequencePrices(2); // Tsunami normal factory: 12 AP.
         yield return null;
         Assert.That(view.IsWorkerHintVisible, Is.False);
-        bank.AddPoints(2);
+        bank.AddPoints(7);
         yield return new WaitForSecondsRealtime(.25f);
         Assert.That(view.IsWorkerHintVisible, Is.True);
         factoryStation.UseSequencePrices(3); // Fire normal factory: 12 AP.
         yield return null;
+        Assert.That(view.IsWorkerHintVisible, Is.True, "Both later sequences charge twelve AP for a normal factory worker.");
+        Assert.That(bank.TrySpend(1), Is.True);
+        yield return null;
         Assert.That(view.IsWorkerHintVisible, Is.False);
-        bank.AddPoints(5);
+        bank.AddPoints(1);
         yield return new WaitForSecondsRealtime(.25f);
         Assert.That(view.IsWorkerHintVisible, Is.True);
         Assert.That(bank.CurrentPoints, Is.EqualTo(12), "Displaying the guide must never spend AP.");
