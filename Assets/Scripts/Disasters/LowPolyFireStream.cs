@@ -42,6 +42,9 @@ namespace CivilGameJam.Disasters
                 {
                     animatedFlame = UnityEngine.Object.Instantiate(preset.BreathAnimationPrefab, root).transform;
                     animatedFlame.name = "Authored_Flame_Animation";
+                    // Imported Generic clips require an Animator for direct sampling in a player.
+                    if (!preset.BreathAnimation.legacy && !animatedFlame.TryGetComponent<Animator>(out _))
+                        animatedFlame.gameObject.AddComponent<Animator>();
                     animatedFlame.localScale = Vector3.one * .65f;
                     animatedFlameMesh = animatedFlame.GetComponentInChildren<MeshFilter>(true);
                     var points = animatedFlameMesh.sharedMesh.vertices;

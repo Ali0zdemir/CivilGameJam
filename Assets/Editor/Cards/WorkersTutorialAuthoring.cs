@@ -417,7 +417,7 @@ namespace CivilGameJam.Cards.Editor
             var controls = Rect("Navigation", panel); Stretch(controls);
             var back = Button("Back", controls, "<  BACK", new Vector2(0f, 0f), new Vector2(72f, 40f), new Vector2(240f, 76f), false);
             var skip = Button("Skip", controls, "SKIP TUTORIAL", new Vector2(.5f, 0f), new Vector2(-75f, 40f), new Vector2(390f, 76f), false);
-            var next = Button("Continue", controls, "CONTINUE  >", new Vector2(1f, 0f), new Vector2(-72f, 34f), new Vector2(440f, 90f), true);
+            var next = Button("Continue", controls, "CONTINUE", new Vector2(1f, 0f), new Vector2(-72f, 34f), new Vector2(440f, 90f), true);
             back.GetComponent<RectTransform>().pivot = Vector2.zero;
             next.GetComponent<RectTransform>().pivot = new Vector2(1f, 0f);
             skip.GetComponent<RectTransform>().pivot = new Vector2(.5f, 0f);

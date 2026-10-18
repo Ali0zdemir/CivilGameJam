@@ -218,9 +218,7 @@ namespace CivilGameJam.Cards
             if (note != null) note.text = Format(lesson.note);
             if (CurrentStep == 1 && EducationCompleted && description != null)
                 description.text = Format("School educated this person for {school} AP.\nThey are ready for one job this turn.");
-            if (nextLabel != null) nextLabel.text = CurrentStep == StepCount - 1 ? "LET'S PLAY" : RequiredAction ? "FOLLOW THE GUIDE" : "CONTINUE  >";
-            if (CurrentStep == 7 && nextLabel != null) nextLabel.text = "CHOOSE HOUSES";
-            if (CurrentStep == 11 && nextLabel != null) nextLabel.text = "BACK TO RESULTS";
+            if (nextLabel != null) nextLabel.text = "CONTINUE";
             if (back != null) { back.gameObject.SetActive(CurrentStep == 2); back.interactable = CurrentStep == 2; }
             next.interactable = !RequiredAction;
             if (skip != null) skip.interactable = true;
@@ -295,10 +293,9 @@ namespace CivilGameJam.Cards
             ShowStep(10);
         }
 
-        private void SetInstruction(string value, string button)
+        private void SetInstruction(string value)
         {
             if (description != null && description.text != value) { description.text = value; copyVisibility = 0f; }
-            if (nextLabel != null) nextLabel.text = button;
         }
 
         private void FocusWorker(BuildingStation station, TutorialSpotlight.Workplaces place, DraggableCard worker)
@@ -324,7 +321,7 @@ namespace CivilGameJam.Cards
                     FocusWorker(school, TutorialSpotlight.Workplaces.School, practiceGraduate != null ? practiceGraduate : practiceStudent);
                     if (!WaitingForEducation) break;
                     bool training = practiceGraduate != null || practiceStudent != null && practiceStudent.AssignedTo == school;
-                    SetInstruction(training ? trainingDescription : Format(lessons[1].description), training ? "TRAINING..." : "EDUCATE A PERSON");
+                    SetInstruction(training ? trainingDescription : Format(lessons[1].description));
                     if (practiceGraduate != null && !practiceGraduate.IsFlying && !school.IsAnimatingWorkers)
                     { EducationCompleted = true; ShowStep(2); }
                     break;
@@ -334,7 +331,7 @@ namespace CivilGameJam.Cards
                 case 3:
                     FocusWorker(research, TutorialSpotlight.Workplaces.ResearchCenter, practiceGraduate);
                     bool researching = practiceGraduate != null && practiceGraduate.AssignedTo == research;
-                    SetInstruction(researching ? researchingDescription : Format(lessons[3].description), researching ? "RESEARCHING..." : "ASSIGN A PERSON");
+                    SetInstruction(researching ? researchingDescription : Format(lessons[3].description));
                     break;
                 case 4:
                     if (game.IsChoosingBlueprint)
@@ -344,7 +341,7 @@ namespace CivilGameJam.Cards
                     }
                     else if (practiceBlueprint != null)
                     {
-                        SetInstruction(blueprintArrivalDescription, "WAIT FOR THE BLUEPRINT");
+                        SetInstruction(blueprintArrivalDescription);
                         spotlight.SetAreaFocus(0, true, null, practiceBlueprint.Rect);
                         var slot = game.Vault.SlotFor(UpgradeKind.RailSystem);
                         if (!practiceBlueprint.IsFlying && !slot.IsArriving && !research.IsAnimatingWorkers) ShowStep(5);
@@ -363,14 +360,14 @@ namespace CivilGameJam.Cards
                         spotlight.SetPracticeTargets(null, factory.Card.Rect);
                         spotlight.SetAreaFocus(TutorialSpotlight.Workplaces.Factory, true, null, area,
                             practiceBlueprint != null && !practiceBlueprint.IsFlying && !slot.IsArriving);
-                        SetInstruction(Format(lessons[5].description), "USE YOUR BLUEPRINT");
+                        SetInstruction(Format(lessons[5].description));
                     }
                     break;
                 case 6:
                     if (!producedBlueprint && production.PendingBlueprint != practiceBlueprint) { ShowStep(5); break; }
                     FocusWorker(factory, TutorialSpotlight.Workplaces.Factory, factoryWorker);
                     bool producing = producedBlueprint || factoryWorker != null && factoryWorker.AssignedTo == factory;
-                    SetInstruction(producing ? producingDescription : Format(lessons[6].description), producing ? "PRODUCING..." : "ASSIGN A FRESH PERSON");
+                    SetInstruction(producing ? producingDescription : Format(lessons[6].description));
                     if (producedBlueprint && ProductionHasSettled()) { ProductionCompleted = true; ShowStep(7); }
                     break;
                 case 7:
@@ -386,7 +383,7 @@ namespace CivilGameJam.Cards
                     break;
                 case 9:
                     spotlight.SetAreaFocus(0, true, null, (RectTransform)round.ReadyButton.transform, true);
-                    SetInstruction(Format(lessons[9].description), "PRESS READY");
+                    SetInstruction(Format(lessons[9].description));
                     break;
                 case 10:
                     spotlight.SetAreaFocus(0, false, null, round.ResultsRewardArea);

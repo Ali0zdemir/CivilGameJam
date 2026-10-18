@@ -18,6 +18,7 @@ public sealed class CardApartmentTsunamiEditModeTests
         Assert.That(saved.FindProperty("animationRoot").objectReferenceValue, Is.Not.Null);
         var clip = (AnimationClip)saved.FindProperty("collapseAnimation").objectReferenceValue;
         Assert.That(clip, Is.Not.Null);
+        Assert.That(clip.legacy, Is.True, "Directly sampled flood clips must also animate in standalone builds without an Animator.");
         Assert.That(clip.length, Is.EqualTo(4.125f).Within(.001f));
         Assert.That(clip.isLooping, Is.False);
         var parts = saved.FindProperty("parts");

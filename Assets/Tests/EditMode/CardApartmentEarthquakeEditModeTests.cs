@@ -18,6 +18,7 @@ public sealed class CardApartmentEarthquakeEditModeTests
         var sourcePath = "Assets/emreAnimation/" + file + ".fbx";
         var sourceClip = AssetDatabase.LoadAllAssetsAtPath(sourcePath).OfType<AnimationClip>().Single(item => !item.name.StartsWith("__preview"));
         Assert.That(clip, Is.Not.Null);
+        Assert.That(clip.legacy, Is.True, "Directly sampled house clips must also animate in standalone builds without an Animator.");
         Assert.That(clip.length, Is.EqualTo(sourceClip.length).Within(.001f));
         Assert.That(clip.isLooping, Is.False);
         var bindings = AnimationUtility.GetCurveBindings(clip);

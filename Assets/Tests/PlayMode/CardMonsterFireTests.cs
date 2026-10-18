@@ -187,6 +187,10 @@ public sealed partial class CardGamePlayModeTests
         fire.StartFire();
         AdvanceMonsterFireTo(fire, breath.FlameStartTime + 1.1f);
         var stream = ControlField<GameObject>(fire, "visuals").transform.Find("Mouth_Fire_Stream");
+        var authoredFlame = stream.Find("Authored_Flame_Animation");
+        var preset = ControlField<FireVisualPreset>(fire, "visualPreset");
+        Assert.That(preset.BreathAnimation.legacy || authoredFlame.GetComponent<Animator>() != null, Is.True,
+            "Imported non-Legacy clips need an Animator to sample the flame in standalone builds.");
         var gas = stream.Find("Rolling_Gas_Wisps").GetComponent<ParticleSystem>();
         foreach (var system in new[] { gas, ControlField<ParticleSystem>(fire, "flames"), ControlField<ParticleSystem>(fire, "softFlames") })
         {

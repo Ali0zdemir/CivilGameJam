@@ -58,7 +58,8 @@ namespace CivilGameJam.Cards.Editor
         private static AnimationClip BakeClip(Transform normal)
         {
             var source = AssetDatabase.LoadAllAssetsAtPath(AnimationPath).OfType<AnimationClip>().Single(clip => !clip.name.StartsWith("__preview"));
-            var result = new AnimationClip { name = "Apartment Tsunami Collapse", frameRate = source.frameRate, wrapMode = WrapMode.ClampForever };
+            // Direct sampling requires a Legacy clip when there is no Animator in a standalone player.
+            var result = new AnimationClip { name = "Apartment Tsunami Collapse", legacy = true, frameRate = source.frameRate, wrapMode = WrapMode.ClampForever };
             var bindings = AnimationUtility.GetCurveBindings(source);
             for (int i = 1; i <= 6; i++)
             {

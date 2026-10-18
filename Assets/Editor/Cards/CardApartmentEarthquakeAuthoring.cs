@@ -93,7 +93,8 @@ namespace CivilGameJam.Cards.Editor
         {
             var source = AssetDatabase.LoadAllAssetsAtPath("Assets/emreAnimation/" + file + ".fbx").OfType<AnimationClip>()
                 .Single(clip => !clip.name.StartsWith("__preview"));
-            var result = new AnimationClip { name = name, frameRate = source.frameRate, wrapMode = WrapMode.ClampForever };
+            // These transform clips are sampled directly, without an Animator, in standalone players too.
+            var result = new AnimationClip { name = name, legacy = true, frameRate = source.frameRate, wrapMode = WrapMode.ClampForever };
             var bindings = AnimationUtility.GetCurveBindings(source);
             var rotations = SampleRotations(source, file, targetRoot, sourceSuffix, targetSuffix);
             // The original ground and isolators remain fixed; transfer the six animated buildings.
