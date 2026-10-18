@@ -87,7 +87,7 @@ namespace CivilGameJam.Cards.Editor
             {
                 // The scene object was moved to demonstrate the destination; retain the asset's offshore start.
                 settings.FindProperty("startPosition").vector3Value = waveSource.localPosition;
-                settings.FindProperty("movementSpeed").floatValue = 1f;
+                settings.FindProperty("movementSpeed").floatValue = 1.25f;
             }
             var start = settings.FindProperty("startPosition").vector3Value;
             settings.FindProperty("endPosition").vector3Value = new Vector3(-21.3f, start.y, -26.53f);
@@ -102,9 +102,13 @@ namespace CivilGameJam.Cards.Editor
             var monster = (SeaMonsterEmergence)data.FindProperty("seaMonster").objectReferenceValue;
             var approach = data.FindProperty("shorelineDistance").floatValue - data.FindProperty("startDistance").floatValue;
             var monsterData = new SerializedObject(monster);
-            monsterData.FindProperty("waveApproachOffset").vector3Value = monster.Model.parent.InverseTransformVector(tsunami.transform.TransformVector(Vector3.back * approach));
-            monsterData.FindProperty("waveApproachDuration").floatValue = Mathf.Min(approach / controller.MovementSpeed,
-                Mathf.Max(.01f, monster.RiseDuration - monster.WaveReleaseDelay));
+            // Moving the crest's start must preserve the independently tuned boss approach.
+            if (firstSetup || monsterData.FindProperty("waveApproachOffset").vector3Value.sqrMagnitude < .0001f)
+            {
+                monsterData.FindProperty("waveApproachOffset").vector3Value = monster.Model.parent.InverseTransformVector(tsunami.transform.TransformVector(Vector3.back * approach));
+                monsterData.FindProperty("waveApproachDuration").floatValue = Mathf.Min(approach / controller.MovementSpeed,
+                    Mathf.Max(.01f, monster.RiseDuration - monster.WaveReleaseDelay));
+            }
             monsterData.ApplyModifiedPropertiesWithoutUndo();
             PrefabUtility.RecordPrefabInstancePropertyModifications(controller);
             PrefabUtility.RecordPrefabInstancePropertyModifications(surface);

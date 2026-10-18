@@ -25,6 +25,7 @@ namespace CivilGameJam.Cards.Editor
                 var worker = folder.GetComponentsInChildren<WorkerSlot>(true).Single(slot => slot.Index == 0);
                 var workerData = new SerializedObject(worker);
                 var personSprite = (Sprite)workerData.FindProperty("normalPortrait").objectReferenceValue;
+                var educatedSprite = (Sprite)workerData.FindProperty("educatedPortrait").objectReferenceValue;
                 var view = Ensure<FactoryFolderPresentation>(root);
                 var pocket = Rect("BlueprintPocket", folder, new Vector2(88f, 67.5f), new Vector2(82f, 265f));
                 pocket.SetSiblingIndex(folder.Find("WorkerPockets").GetSiblingIndex());
@@ -51,11 +52,16 @@ namespace CivilGameJam.Cards.Editor
                 hint.localScale = Vector3.one * 1.6f;
                 var group = Ensure<CanvasGroup>(hint.gameObject);
                 group.alpha = 1f; group.interactable = false; group.blocksRaycasts = false;
-                var person = Picture("Person", hint, personSprite, Vector2.zero, new Vector2(48f, 48f));
+                var person = Picture("Person", hint, personSprite, new Vector2(-7f, 0f), new Vector2(48f, 48f));
                 person.color = new Color(.85f, 1f, .9f, .8f);
                 var outline = Ensure<Outline>(person.gameObject);
                 outline.effectColor = new Color(.48f, 1f, .7f, .6f); outline.effectDistance = new Vector2(1.3f, -1.3f);
-                var plus = Rect("AddPerson", person.transform, new Vector2(22f, 18f), new Vector2(16f, 16f));
+                var educated = Picture("EducatedPerson", person.transform, educatedSprite, new Vector2(14f, 0f), new Vector2(48f, 48f));
+                educated.color = new Color(1f, 1f, 1f, .8f);
+                educated.transform.SetAsFirstSibling();
+                var educatedOutline = Ensure<Outline>(educated.gameObject);
+                educatedOutline.effectColor = outline.effectColor; educatedOutline.effectDistance = outline.effectDistance;
+                var plus = Rect("AddPerson", person.transform, new Vector2(36f, 18f), new Vector2(16f, 16f));
                 var mint = new Color(.72f, 1f, .81f);
                 Bar("Horizontal", plus, Vector2.zero, new Vector2(12f, 3f), 0f, mint);
                 Bar("Vertical", plus, Vector2.zero, new Vector2(3f, 12f), 0f, mint);
@@ -74,7 +80,7 @@ namespace CivilGameJam.Cards.Editor
             }
             finally { PrefabUtility.UnloadPrefabContents(root); }
             AssetDatabase.SaveAssets();
-            Debug.Log("Saved the text-free one-person guide and blueprint folder pocket in FactoryCard; scene instances inherit them.");
+            Debug.Log("Saved the overlapping normal and educated worker guide and blueprint folder pocket in FactoryCard; scene instances inherit them.");
         }
 
         private static RectTransform Rect(string name, Transform parent, Vector2 position, Vector2 size)

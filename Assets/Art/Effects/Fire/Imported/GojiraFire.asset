@@ -1,0 +1,29 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 79bbf424803344f2b29395a7745bd068, type: 3}
+  m_Name: GojiraFire
+  m_EditorClassIdentifier: 
+  flameMeshes:
+  - {fileID: 4300000, guid: 38dd56c40945bcd4199ab01ff55710c7, type: 2}
+  - {fileID: 4300000, guid: f986fbb0b53f46e4abfb58ef4329a09a, type: 2}
+  - {fileID: 4300000, guid: 0899788e0aa6a534895039edea5e093e, type: 2}
+  - {fileID: 4300000, guid: aa2d053fda36edf4fb107f1feb11833d, type: 2}
+  smokeMeshes:
+  - {fileID: 4300000, guid: 3e181bbf048f4b6489a3cdbd2c30a957, type: 2}
+  - {fileID: 4300000, guid: 118ecaec9e8a12b48ae5d9fcc7757568, type: 2}
+  - {fileID: 4300000, guid: 132086c7a9240424cbc47782f12d79e6, type: 2}
+  flameMaterial: {fileID: 2100000, guid: f654871ce8fdec84ca59a2a6bf599ff4, type: 2}
+  smokeMaterial: {fileID: 2100000, guid: 26c0b206e989e6b48b89f400907e9aa3, type: 2}
+  sequenceSeed: 7351
+  breathAnimationPrefab: {fileID: 8432410119232622691, guid: 2c515475336bca641be9a95122903413, type: 3}
+  breathAnimation: {fileID: -623603649343465320, guid: 0551feed6fdbcff4a91549cdb6c34a3b, type: 3}
+  breathAnimationRange: {x: 1.3333335, y: 4.291667}

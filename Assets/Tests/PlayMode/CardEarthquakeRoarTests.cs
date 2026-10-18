@@ -91,7 +91,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
         var waveTravel = water.transform.InverseTransformPoint(wave.transform.position).z - waveZ;
         var monsterTravel = water.transform.InverseTransformPoint(monster.Model.position).z - monsterZ;
         Assert.That(waveTravel, Is.GreaterThan(0f));
-        Assert.That(monsterTravel, Is.EqualTo(waveTravel).Within(.0001f));
+        Assert.That(monsterTravel, Is.EqualTo(waveTravel * .8f).Within(.0001f), "The boss follows behind the faster wave.");
         Assert.That(source.isPlaying, Is.False);
         CaptureWorld("roar-followed-by-monster-and-wave.png");
         Until(() => round.RoundNumber == 3);

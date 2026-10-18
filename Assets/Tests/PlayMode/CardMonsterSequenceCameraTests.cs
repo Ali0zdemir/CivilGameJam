@@ -241,15 +241,18 @@ public sealed partial class CardGamePlayModeTests
         var minimum = Vector2.positiveInfinity;
         var maximum = Vector2.negativeInfinity;
         foreach (var subject in subjects)
-        foreach (var mesh in subject.GetComponentsInChildren<MeshFilter>())
+        foreach (var renderer in subject.GetComponentsInChildren<Renderer>())
         {
-            if (!mesh.TryGetComponent<MeshRenderer>(out var renderer) || !renderer.enabled || mesh.sharedMesh == null) continue;
-            var bounds = mesh.sharedMesh.bounds;
+            if (!renderer.enabled) continue;
+            Bounds bounds;
+            if (renderer is SkinnedMeshRenderer skin && skin.sharedMesh != null) bounds = skin.localBounds;
+            else if (renderer is MeshRenderer && renderer.TryGetComponent<MeshFilter>(out var mesh) && mesh.sharedMesh != null) bounds = mesh.sharedMesh.bounds;
+            else continue;
             foreach (var x in new[] { bounds.min.x, bounds.max.x })
                 foreach (var y in new[] { bounds.min.y, bounds.max.y })
                     foreach (var z in new[] { bounds.min.z, bounds.max.z })
                     {
-                        Vector2 point = camera.WorldToViewportPoint(mesh.transform.TransformPoint(new Vector3(x, y, z)));
+                        Vector2 point = camera.WorldToViewportPoint(renderer.transform.TransformPoint(new Vector3(x, y, z)));
                         minimum = Vector2.Min(minimum, point);
                         maximum = Vector2.Max(maximum, point);
                     }

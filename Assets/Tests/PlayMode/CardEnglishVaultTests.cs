@@ -25,6 +25,7 @@ public sealed partial class CardGamePlayModeTests
         yield return CaptureCanvas(Path.Combine(directory, "english-empty-vault.png"));
         var worker = People()[0];
         research.TryAssign(worker);
+        research.TryAssign(People()[1]);
         research.AdvanceWork(25.01f);
         Vector3 origin = research.Card.Rect.position;
         game.SelectBlueprint(1);
@@ -318,7 +319,8 @@ public sealed partial class CardGamePlayModeTests
     [UnityTest]
     public IEnumerator CancellingAndReturningADiscoveryFlightLeavesOnePlanAndNoGhostCards()
     {
-        research.TryAssign(People()[0]); research.AdvanceWork(25.01f); game.SelectBlueprint(2);
+        research.TryAssign(People()[0]); research.TryAssign(People()[1]);
+        research.AdvanceWork(25.01f); game.SelectBlueprint(2);
         var plan = game.Cards.Single(card => card.Kind == CardKind.Blueprint);
         var slot = game.Vault.SlotFor(UpgradeKind.Fire);
         var factory = Station(CardKind.Factory).GetComponent<FactoryProduction>(); factory.enabled = false;

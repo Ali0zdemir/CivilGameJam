@@ -139,7 +139,7 @@ public sealed partial class CardGamePlayModeTests
                     Assert.That(rig.Fire.IsRunning, Is.True);
                     rig.For(rig.Breath.FlameStartTime + 0.2f);
                     Assert.That(rig.Breath.Lean, Is.GreaterThan(0.99f));
-                    Assert.That(Mathf.Asin(-rig.Breath.FireDirection.y) * Mathf.Rad2Deg, Is.InRange(45f, 50f));
+                    Assert.That(Mathf.Asin(-rig.Breath.FireDirection.y) * Mathf.Rad2Deg, Is.EqualTo(55.5f).Within(.01f));
                     Assert.That(Vector3.Angle(Vector3.ProjectOnPlane(rig.Breath.FireDirection, Vector3.up), model.forward), Is.LessThan(0.1f));
                 }
                 rig.Until(() => sequence.Stage == MonsterSequenceStage.WalkingToSecondPoint);
@@ -235,6 +235,28 @@ public sealed partial class CardGamePlayModeTests
     private static int[] SequenceUIIds() => Object.FindObjectsByType<RectTransform>(FindObjectsInactive.Include, FindObjectsSortMode.None)
         .Where(rect => rect.GetComponent<TMPro.TextMeshPro>() == null)
         .Select(rect => rect.GetInstanceID()).OrderBy(id => id).ToArray();
+
+    [UnityTest]
+    public IEnumerator FireSequenceDoesNotWaitForTheTsunamiReportDelay()
+    {
+        var rig = new SequencePreview();
+        PresentationField(rig.Sequence, "tsunamiAftermathSeconds", 60f);
+        rig.Sequence.SelectSequence(3);
+        rig.Sequence.StartSelectedSequence();
+        rig.Until(() => rig.Walk.HasReachedWalkPoint && !rig.Quake.IsRunning && !rig.Tsunami.IsRunning);
+        Assert.That(rig.Sequence.Stage, Is.EqualTo(MonsterSequenceStage.Fire),
+            "The tsunami report timer must not add an idle pause before the fire stage.");
+        Assert.That(rig.Fire.IsRunning, Is.True);
+        Assert.That(rig.Breath.FlameStartTime, Is.EqualTo(3.25f).Within(.001f));
+        Assert.That(ControlField<float>(rig.Fire, "elapsed"), Is.LessThanOrEqualTo(.05f));
+        rig.For(rig.Breath.FlameStartTime + .05f);
+        Assert.That(rig.Breath.Lean, Is.GreaterThan(.99f));
+        rig.Until(() => !rig.Sequence.IsRunning);
+        Assert.That(rig.Sequence.Stage, Is.EqualTo(MonsterSequenceStage.Complete));
+        InvokeCity(rig.Navigation, "AdvanceNavigation", .81f);
+        Assert.That(rig.Navigation.InputBlocked, Is.False);
+        yield return null;
+    }
 
     private sealed class SequencePreview
     {

@@ -20,9 +20,9 @@ public sealed partial class CardGamePlayModeTests
         var dock = game.GetComponent<CardDock>();
         for (int type = 0; type < 3; type++)
         {
-            EnsurePresentationWorkers(2);
+            EnsurePresentationWorkers(FactoryProduction.RequiredWorkersFor((UpgradeKind)(type + 1)) + 1);
             var plan = ResearchPlan(type);
-            Assert.That(station.TryAssign(People().First(person => person.CanStartWork && !person.IsStored)), Is.True);
+            AssignFactoryWorkers(plan.UpgradeType);
             factory.TryInsertBlueprint(plan);
             factory.AdvanceWork(factory.ProductionSeconds + 0.01f);
             // Completing production while the drawer is already moving must not leave
@@ -34,9 +34,16 @@ public sealed partial class CardGamePlayModeTests
         yield return new WaitForSecondsRealtime(0.5f);
         var products = game.Cards.Where(card => card.Kind == CardKind.Upgrade).ToArray();
         Assert.That(products.Length, Is.EqualTo(6));
+        var inventory = game.Sidebar.UpgradesArea;
         foreach (var product in products)
         {
-            Assert.That(product.Rect.parent, Is.SameAs(game.CardLayer));
+            Assert.That(product.Rect.parent, Is.SameAs(inventory));
+            Assert.That(game.Sidebar.Owns(product), Is.True);
+            var label = product.transform.Find("InventoryName").GetComponent<TMPro.TMP_Text>();
+            string expected = product.UpgradeType == UpgradeKind.RailSystem ? "Rail System"
+                : product.UpgradeType == UpgradeKind.Breakwater ? "Elevator" : "Fire Sprinkler";
+            Assert.That(label.text, Is.EqualTo(expected));
+            Assert.That(label.gameObject.activeInHierarchy, Is.True);
             Assert.That(product.IsNewProduct, Is.True);
             Assert.That(product.transform.Find("NewItemOutline").GetComponent<Image>().enabled, Is.True);
             AssertRectInside(product.Rect, game.FactoryOutputArea);
@@ -58,7 +65,9 @@ public sealed partial class CardGamePlayModeTests
             var details = product.GetComponent<CardHover>().Details;
             var name = details.Find("ProductName").GetComponent<TMPro.TextMeshProUGUI>();
             Assert.That(details.gameObject.activeSelf, Is.True);
-            Assert.That(name.text, Is.EqualTo(game.RecipeFor(product.UpgradeType).title));
+            Assert.That(name.gameObject.activeInHierarchy, Is.False, "Hover must not show a second product name.");
+            Assert.That(product.GetComponentsInChildren<TMPro.TMP_Text>().Length, Is.EqualTo(1), "Only the persistent inventory name remains visible.");
+            Assert.That(name.text, Is.EqualTo(product.transform.Find("InventoryName").GetComponent<TMPro.TMP_Text>().text));
             Assert.That(name.color, Is.EqualTo(Color.white));
             Assert.That(product.transform.Find("HoverOutline").GetComponent<Image>().enabled, Is.True);
             Assert.That(product.IsNewProduct, Is.True);
@@ -94,10 +103,22 @@ public sealed partial class CardGamePlayModeTests
         Assert.That(first.transform.Find("NewItemOutline").GetComponent<Image>().enabled, Is.False);
         Hover(first, false);
         Assert.That(products.Skip(1).All(card => card.IsNewProduct), Is.True, "A click acknowledges only that product.");
+        Vector3 chosenPosition = inventory.TransformPoint(inventory.InverseTransformPoint(first.Rect.position) + Vector3.left * 20f);
+        Drag(first, chosenPosition);
+        yield return new WaitForSecondsRealtime(.6f);
+        Assert.That(first.Rect.parent, Is.SameAs(inventory));
+        Assert.That(Vector3.Distance(first.Rect.position, chosenPosition), Is.LessThan(.01f), "Upgrade drops retain the player's free placement.");
+        Drag(first, inventory.TransformPoint(new Vector2(inventory.rect.xMax - 2f, inventory.rect.yMin + 2f)));
+        yield return new WaitForSecondsRealtime(.6f);
+        AssertRectInside(first.Rect, inventory);
+        Drag(first, chosenPosition);
+        yield return new WaitForSecondsRealtime(.6f);
         var house = game.Cards.First(card => card.Kind == CardKind.House).GetComponent<HouseUpgrades>();
         house.TryInstall(first);
         house.Release(first.UpgradeType, false);
         Assert.That(first.IsNewProduct, Is.False, "Taking a used item out of a house must not mark it as newly manufactured.");
+        Assert.That(first.Rect.parent, Is.SameAs(inventory));
+        Assert.That(Vector3.Distance(first.Rect.position, chosenPosition), Is.LessThan(.01f), "Released upgrades remember their inventory position.");
         yield return new WaitForSecondsRealtime(0.3f);
         string directory = Path.GetFullPath(Path.Combine(Application.dataPath, "../Library/CardGameTestResults"));
         yield return CaptureCanvas(Path.Combine(directory, "factory-items-outlined.png"));
@@ -244,16 +265,24 @@ public sealed partial class CardGamePlayModeTests
         }
     }
 
-    private static void AssertVisibleProductOutlines(string screenshot)
+    private void AssertVisibleProductOutlines(string screenshot)
     {
         var image = new Texture2D(2, 2);
         try
         {
             image.LoadImage(File.ReadAllBytes(screenshot));
             var pixels = image.GetPixels32();
+            var canvas = (RectTransform)game.GetComponentInParent<Canvas>().rootCanvas.transform;
+            var corners = new Vector3[4]; game.Sidebar.UpgradesArea.GetWorldCorners(corners);
+            var min = canvas.InverseTransformPoint(corners[0]);
+            var max = canvas.InverseTransformPoint(corners[2]);
+            int left = Mathf.Clamp(Mathf.FloorToInt((min.x - canvas.rect.xMin) / canvas.rect.width * image.width), 0, image.width - 1);
+            int right = Mathf.Clamp(Mathf.CeilToInt((max.x - canvas.rect.xMin) / canvas.rect.width * image.width), 0, image.width);
+            int bottom = Mathf.Clamp(Mathf.FloorToInt((min.y - canvas.rect.yMin) / canvas.rect.height * image.height), 0, image.height - 1);
+            int top = Mathf.Clamp(Mathf.CeilToInt((max.y - canvas.rect.yMin) / canvas.rect.height * image.height), 0, image.height);
             int gold = 0;
-            for (int y = 0; y < image.height; y++)
-                for (int x = image.width * 9 / 10; x < image.width; x++)
+            for (int y = bottom; y < top; y++)
+                for (int x = left; x < right; x++)
                 {
                     var pixel = pixels[y * image.width + x];
                     if (pixel.r > 230 && pixel.g > 170 && pixel.g < 235 && pixel.b < 120) gold++;

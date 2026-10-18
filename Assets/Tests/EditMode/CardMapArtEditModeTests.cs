@@ -56,7 +56,7 @@ public sealed class CardMapArtEditModeTests
         }
         Assert.That(wave.transform, Is.SameAs(scenery.Find("TSUNAMI")), "Animate the actual child inside the active main map.");
         Assert.That(wave.Surface.transform, Is.SameAs(wave.transform));
-        Assert.That(Vector3.Distance(wave.StartPosition, new Vector3(-21.25f, -.8049f, 11.2f)), Is.LessThan(.00001f),
+        Assert.That(Vector3.Distance(wave.StartPosition, new Vector3(-21.25f, -.8049f, 9.95f)), Is.LessThan(.00001f),
             "Use the adjusted offshore scene position instead of restoring the original FBX position on Play.");
         Assert.That(Vector3.Distance(wave.EndPosition, new Vector3(-21.3f, wave.StartPosition.y, -26.53f)), Is.LessThan(.00001f));
         Assert.That(wave.StartDistance, Is.LessThan(tsunami.CityBounds.min.z));
@@ -77,11 +77,14 @@ public sealed class CardMapArtEditModeTests
             "Arrival timing must use the adjusted mesh's physical front.");
         Assert.That(new SerializedObject(wave).FindProperty("movementSpeed"), Is.Not.Null);
         Assert.That(tsunami.WaveSpeed, Is.EqualTo(wave.MovementSpeed));
+        Assert.That(wave.MovementSpeed, Is.EqualTo(1.25f));
+        Assert.That(data.FindProperty("monsterApproachSpeedRatio").floatValue, Is.EqualTo(.8f));
         Assert.That(((Material)data.FindProperty("waterMaterial").objectReferenceValue).shader.name, Is.EqualTo("CivilGameJam/TsunamiWater"));
         var monster = (SeaMonsterEmergence)data.FindProperty("seaMonster").objectReferenceValue;
         var monsterData = new SerializedObject(monster);
         var distance = data.FindProperty("shorelineDistance").floatValue - data.FindProperty("startDistance").floatValue;
-        Assert.That(monsterData.FindProperty("waveApproachOffset").vector3Value.magnitude, Is.EqualTo(distance).Within(.0001f));
+        Assert.That(monsterData.FindProperty("waveApproachOffset").vector3Value.magnitude, Is.EqualTo(distance + 1.25f).Within(.0001f),
+            "The wave starts 1.25 units farther ahead while the boss keeps its original approach.");
         Assert.That(monsterData.FindProperty("waveApproachDuration").floatValue,
             Is.GreaterThan(0f), "Keep the saved approach for the route without a tsunami independent of the live wave speed.");
         Assert.That(monster.WaveReleaseDelay + monsterData.FindProperty("waveApproachDuration").floatValue, Is.LessThanOrEqualTo(monster.RiseDuration));

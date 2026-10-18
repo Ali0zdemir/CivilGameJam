@@ -75,7 +75,7 @@ public sealed partial class CardGamePlayModeTests
     }
 
     [UnityTest]
-    public IEnumerator BurntBuildingInspectorTintPersistsAfterFireAndAcrossElevationWithoutChangingSharedMaterials()
+    public IEnumerator ImportedBurntApartmentsPersistAcrossElevationAndRestoreTheirOriginalArtOnReset()
     {
         var links = CityHouseLinks();
         links[0].FireProtection.SetInstalled(true);
@@ -84,6 +84,11 @@ public sealed partial class CardGamePlayModeTests
         target.GetComponent<BuildingModelGeometry>().AppendRenderers(renderers, true);
         var materials = renderers.SelectMany(renderer => renderer.sharedMaterials).Distinct().ToArray();
         var originalColors = materials.Select(material => material.GetColor("_BaseColor")).ToArray();
+        var bodies = renderers.Select(surface => surface.GetComponent<MeshFilter>()).ToArray();
+        var originalMeshes = bodies.Select(body => body.sharedMesh).ToArray();
+        var originalRotations = bodies.Select(body => body.transform.localRotation).ToArray();
+        var appearances = target.GetComponentsInChildren<ApartmentBurntAppearance>();
+        Assert.That(appearances.Length, Is.EqualTo(6));
         var renderer = renderers[0];
         var original = new Color(.64f, .42f, .57f, 1f);
         var properties = new MaterialPropertyBlock();
@@ -91,8 +96,8 @@ public sealed partial class CardGamePlayModeTests
         renderer.SetPropertyBlock(properties);
         var ground = target.Find("Apartment_Ground").GetComponent<MeshRenderer>();
         var fire = Object.FindFirstObjectByType<FireTestController>();
-        var burnt = new Color(.25f, .34f, .43f, 1f);
-        PresentationField(fire, "burntBuildingColor", burnt);
+        var burnt = appearances[0].TargetColor(renderer, 0, Color.magenta);
+        Assert.That(burnt.r, Is.InRange(.15f, .3f));
         PresentationField(fire, "burnColorDuration", .6f);
         fire.StartFire();
         var firstSite = ControlField<IList>(fire, "sites").Cast<object>().Single(site =>
@@ -104,36 +109,43 @@ public sealed partial class CardGamePlayModeTests
         Assert.That(ColorDistance(intermediate, burnt), Is.LessThan(ColorDistance(original, burnt)));
         Assert.That(ColorDistance(intermediate, burnt), Is.GreaterThan(.001f), "The burnt tint grows gradually with the fire.");
         AdvanceMonsterFireTo(fire, fire.TestDuration - .1f);
-        Assert.That(renderers.All(surface => ColorDistance(ReadBurntSurfaceColor(surface), burnt) < .0001f), Is.True);
+        Assert.That(appearances.All(appearance => appearance.IsBurnt), Is.True);
+        Assert.That(renderers.All(surface => surface.sharedMaterials.All(material => material.name.StartsWith("burnt"))), Is.True);
+        for (var i = 0; i < bodies.Length; i++)
+            if (bodies[i].name.EndsWith("(Elevated)"))
+                Assert.That(bodies[i].sharedMesh, Is.SameAs(originalMeshes[i]), "The raised ground floor keeps its authored geometry.");
+            else Assert.That(bodies[i].sharedMesh.name, Does.EndWith("(Burnt)"));
         AdvanceMonsterFireTo(fire, fire.TestDuration + .1f);
         Assert.That(fire.IsRunning, Is.False);
-        Assert.That(ColorDistance(ReadBurntSurfaceColor(renderer), burnt), Is.LessThan(.0001f));
+        Assert.That(appearances.All(appearance => appearance.IsBurnt), Is.True);
         var protectedBodies = new List<MeshRenderer>();
         links[0].Building.GetComponent<BuildingModelGeometry>().AppendRenderers(protectedBodies);
         Assert.That(protectedBodies.All(surface => !surface.HasPropertyBlock()), Is.True, "Extinguished buildings do not receive the burnt tint.");
+        Assert.That(links[0].Building.GetComponentsInChildren<ApartmentBurntAppearance>().Any(appearance => appearance.IsBurnt), Is.False);
         Assert.That(ground.HasPropertyBlock(), Is.False, "Trees and the tile ground keep their original appearance.");
         Assert.That(materials.Select(material => material.GetColor("_BaseColor")), Is.EqualTo(originalColors));
         Assert.That(links[1].House.TryInstall(ProduceCityProducts(UpgradeKind.Breakwater)[0]), Is.True);
         yield return new WaitForSecondsRealtime(1.5f);
         Assert.That(target.GetComponent<ApartmentUpgradeModel>().IsElevated, Is.True);
         Assert.That(renderers.Where(surface => surface.gameObject.activeInHierarchy)
-            .All(surface => ColorDistance(ReadBurntSurfaceColor(surface), burnt) < .0001f), Is.True);
+            .All(surface => surface.sharedMaterials.All(material => material.name.StartsWith("burnt"))), Is.True);
         var directory = Path.GetFullPath(Path.Combine(Application.dataPath, "../Library/BurntBuildingsWork/Previews"));
         Directory.CreateDirectory(directory);
         CaptureCityWorldFrame(Path.Combine(directory, "01-burnt-city.png"));
         fire.StopFire();
+        Assert.That(appearances.Any(appearance => appearance.IsBurnt), Is.False);
+        Assert.That(bodies.Select(body => body.sharedMesh), Is.EqualTo(originalMeshes));
+        Assert.That(bodies.Select(body => body.transform.localRotation), Is.EqualTo(originalRotations));
         Assert.That(ColorDistance(ReadBurntSurfaceColor(renderer), original), Is.LessThan(.0001f));
         renderer.GetPropertyBlock(properties);
         Assert.That(properties.GetFloat("_PreservedTestValue"), Is.EqualTo(.73f));
         renderer.GetPropertyBlock(properties, 0);
         Assert.That(properties.isEmpty, Is.True, "Reset restores the pre-fire material overrides exactly.");
         Assert.That(materials.Select(material => material.GetColor("_BaseColor")), Is.EqualTo(originalColors));
-        var nextColor = new Color(.4f, .32f, .28f, 1f);
-        PresentationField(fire, "burntBuildingColor", nextColor);
         fire.StartFire();
         AdvanceMonsterFireTo(fire, fire.TestDuration + .1f);
-        Assert.That(renderers.All(surface => ColorDistance(ReadBurntSurfaceColor(surface), nextColor) < .0001f), Is.True,
-            "Repeating the test uses the newly configured Inspector color on both building variants.");
+        Assert.That(renderers.All(surface => surface.sharedMaterials.All(material => material.name.StartsWith("burnt"))), Is.True,
+            "Both apartment variants reuse the imported burnt materials on the next fire.");
         fire.StopFire();
     }
 

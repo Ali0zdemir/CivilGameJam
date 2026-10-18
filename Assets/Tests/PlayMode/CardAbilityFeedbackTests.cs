@@ -108,27 +108,82 @@ public sealed partial class CardAbilityPointsPlayModeTests
     }
 
     [UnityTest]
+    public IEnumerator IdleFactoryRejectsUnaffordablePeopleWithARedCardFontWarning()
+    {
+        var graduate = Educate();
+        var normal = Person();
+        yield return new WaitForSecondsRealtime(1.5f);
+        var labels = Field<TMP_Text[]>(APHud, "spendLabels");
+        var normalBadge = Field<AbilityPointCostFeedback>(factoryStation, "normalCostFeedback");
+        var educatedBadge = Field<AbilityPointCostFeedback>(factoryStation, "educatedCostFeedback");
+        var cardFont = Field<TMP_Text>(factoryStation, "normalCostLabel").font;
+        var ids = APWidgetIds();
+        foreach (var worker in new[] { normal, graduate })
+        {
+            int cost = factoryStation.AbilityPointCost(worker.Kind);
+            foreach (int balance in new[] { 0, cost - 1 })
+            {
+                bank.TrySpend(bank.CurrentPoints);
+                bank.AddPoints(balance);
+                yield return new WaitForSecondsRealtime(1.5f);
+                for (int i = 0; i < 20; i++) Assert.That(factoryStation.CanAccept(worker), Is.False);
+                Assert.That(APHud.IsWarning || normalBadge.IsPlaying || educatedBadge.IsPlaying, Is.False,
+                    "Affordability previews must stay silent.");
+                var pointer = DragPointer(worker);
+                worker.OnBeginDrag(pointer);
+                Assert.That(worker.IsDragging, Is.True);
+                pointer.position = RectTransformUtility.WorldToScreenPoint(null, factoryStation.Card.Rect.position);
+                worker.OnDrag(pointer);
+                worker.OnEndDrag(pointer);
+                Assert.That(worker.AssignedTo, Is.Null);
+                Assert.That(worker.gameObject.activeSelf && !worker.UsedThisTurn, Is.True);
+                Assert.That(factoryStation.WorkerCount, Is.Zero);
+                Assert.That(factory.PendingBlueprint, Is.Null);
+                Assert.That(bank.CurrentPoints, Is.EqualTo(balance));
+                Assert.That(APHud.IsWarning, Is.True);
+                Assert.That(normalBadge.IsPlaying, Is.EqualTo(worker == normal));
+                Assert.That(educatedBadge.IsPlaying, Is.EqualTo(worker == graduate));
+                Assert.That(factoryStation.RejectionMessage(worker), Is.EqualTo("Not enough AP: " + cost + " AP required."));
+                var warning = labels.Single(label => label.gameObject.activeSelf);
+                Assert.That(warning.text, Is.EqualTo("Not enough AP"));
+                Assert.That(warning.font, Is.SameAs(cardFont));
+                yield return new WaitForSecondsRealtime(.13f);
+                Assert.That(warning.color.r, Is.GreaterThan(warning.color.g * 2f));
+                Assert.That(warning.color.a, Is.GreaterThan(.9f));
+            }
+            bank.AddPoints(1);
+            Assert.That(bank.CurrentPoints, Is.EqualTo(cost));
+            Assert.That(factoryStation.TryAssign(worker), Is.True, "The exact worker price must be sufficient.");
+            Assert.That(bank.CurrentPoints, Is.EqualTo(cost), "Idle factory workers are charged when production starts.");
+            Assert.That(factoryStation.ReleaseWorker(0, false), Is.SameAs(worker));
+            Assert.That(bank.CurrentPoints, Is.EqualTo(cost), "An idle worker cannot refund an uncharged cost.");
+        }
+        Assert.That(APWidgetIds(), Is.EqualTo(ids));
+    }
+
+    [UnityTest]
     public IEnumerator UnaffordableFactoryOrdersWarnForBothWorkerKindsWithoutChargingOrConsumingTheBlueprint()
     {
         var graduate = Educate();
         var plan = Research(Person());
+        bank.AddPoints(1);
         Assert.That(factoryStation.TryAssign(Person()), Is.True);
         Assert.That(factoryStation.TryAssign(graduate), Is.True);
         yield return new WaitForSecondsRealtime(1.5f);
-        Assert.That(bank.CurrentPoints, Is.EqualTo(4));
+        Assert.That(bank.CurrentPoints, Is.EqualTo(5));
         var normal = Field<AbilityPointCostFeedback>(factoryStation, "normalCostFeedback");
         var educated = Field<AbilityPointCostFeedback>(factoryStation, "educatedCostFeedback");
         for (int i = 0; i < 20; i++) Assert.That(factory.CanAccept(plan), Is.False);
         Assert.That(APHud.IsWarning, Is.False);
         Assert.That(factory.TryInsertBlueprint(plan), Is.False);
         Assert.That(APHud.IsWarning && normal.IsPlaying && educated.IsPlaying, Is.True);
-        Assert.That(bank.CurrentPoints, Is.EqualTo(4));
+        Assert.That(bank.CurrentPoints, Is.EqualTo(5));
         Assert.That(factory.PendingBlueprint, Is.Null);
         Assert.That(plan.StoredInVault, Is.SameAs(game.Vault));
         Assert.That(factoryStation.WorkerCount, Is.EqualTo(2));
-        Assert.That(Field<TMP_Text[]>(APHud, "spendLabels").All(label => !label.gameObject.activeSelf), Is.True);
-        yield return new WaitForSecondsRealtime(.7f);
-        bank.AddPoints(4);
+        Assert.That(Field<TMP_Text[]>(APHud, "spendLabels").Single(label => label.gameObject.activeSelf).text, Is.EqualTo("Not enough AP"));
+        yield return new WaitForSecondsRealtime(1.5f);
+        bank.AddPoints(3);
         Assert.That(factory.TryInsertBlueprint(plan), Is.True);
         Assert.That(bank.CurrentPoints, Is.Zero);
         Assert.That(Field<TMP_Text[]>(APHud, "spendLabels").Single(label => label.gameObject.activeSelf).text, Is.EqualTo("-8 AP"));

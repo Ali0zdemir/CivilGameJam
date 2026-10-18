@@ -27,7 +27,7 @@ public sealed partial class CardGamePlayModeTests
         var stance = monster.Model.localPosition;
         var leftFoot = monster.Model.Find("Left_Foot").position;
         var rightFoot = monster.Model.Find("Right_Foot").position;
-        var body = monster.Model.Find("Body").GetComponent<MeshRenderer>();
+        var body = monster.Model.GetComponentInChildren<SkinnedMeshRenderer>(true);
         var originalColor = body.sharedMaterial.GetColor("_BaseColor");
         ControlField<Button>(fire, "testButton").onClick.Invoke();
         Assert.That(fire.IsRunning, Is.True);
@@ -56,7 +56,8 @@ public sealed partial class CardGamePlayModeTests
         var visuals = ControlField<GameObject>(fire, "visuals");
         var stream = visuals.transform.Find("Mouth_Fire_Stream");
         Assert.That(stream.gameObject.activeSelf, Is.True);
-        Assert.That(stream.GetComponentsInChildren<MeshFilter>().Length, Is.Zero, "The breath has no closed, solid cone surface.");
+        var coreMesh = stream.GetComponentsInChildren<MeshFilter>().Single();
+        Assert.That(coreMesh.sharedMesh.name, Is.EqualTo("Animated_flame1"), "The source animation's flame is surrounded by traveling wisps.");
         var gas = stream.Find("Rolling_Gas_Wisps").GetComponent<ParticleSystem>();
         var gasParticles = new ParticleSystem.Particle[640];
         var gasCount = gas.GetParticles(gasParticles);
@@ -179,7 +180,7 @@ public sealed partial class CardGamePlayModeTests
     }
 
     [UnityTest]
-    public IEnumerator MonsterFireGasRollsInwardWhileTravelingAndFadesWithoutSolidFlameMeshes()
+    public IEnumerator ImportedMonsterFlamesRollDownwardWithoutMouthSmokeAndFadeAtTheGround()
     {
         var fire = Object.FindFirstObjectByType<FireTestController>();
         var breath = Object.FindFirstObjectByType<SeaMonsterFireBreath>();
@@ -190,11 +191,20 @@ public sealed partial class CardGamePlayModeTests
         foreach (var system in new[] { gas, ControlField<ParticleSystem>(fire, "flames"), ControlField<ParticleSystem>(fire, "softFlames") })
         {
             var renderer = system.GetComponent<ParticleSystemRenderer>();
-            Assert.That(renderer.renderMode, Is.EqualTo(ParticleSystemRenderMode.Billboard));
-            Assert.That(renderer.sharedMaterial.shader.name, Is.EqualTo("CivilGameJam/GasFlame"));
+            Assert.That(renderer.renderMode, Is.EqualTo(ParticleSystemRenderMode.Mesh));
+            Assert.That(renderer.meshCount, Is.EqualTo(4), "The composition combines every imported flame.");
+            Assert.That(renderer.sharedMaterial.name, Is.EqualTo("ImportedFlames"));
+            Assert.That(system.useAutoRandomSeed, Is.False);
         }
+        Assert.That(stream.Find("Breath_Black_Smoke"), Is.Null, "The mouth emits flames without black smoke.");
+        Assert.That(stream.GetComponentsInChildren<ParticleSystem>(true), Is.EqualTo(new[] { gas }));
+        Assert.That(ControlField<ParticleSystem>(fire, "smoke").GetComponent<ParticleSystemRenderer>().meshCount, Is.EqualTo(3),
+            "Burning buildings keep their imported smoke.");
         var forward = (ControlField<Vector3>(fire, "ignitionPoint") - breath.Mouth.position).normalized;
+        var innerRollRadius = Vector3.Distance(ControlField<Vector3>(fire, "ignitionPoint"), breath.Mouth.position) * .1f;
         var buffer = new ParticleSystem.Particle[640];
+        var flameCount = gas.GetParticles(buffer);
+        Assert.That(buffer.Take(flameCount).Select(particle => particle.GetMeshIndex(gas)).Distinct().Count(), Is.EqualTo(4));
         var inward = 0; var turns = 0;
         var previous = new System.Collections.Generic.Dictionary<uint, Vector3>();
         var directory = Path.GetFullPath(Path.Combine(Application.dataPath, "../Library/MonsterGasFireWork/Frames"));
@@ -208,7 +218,8 @@ public sealed partial class CardGamePlayModeTests
             {
                 var particle = buffer[i]; var offset = particle.position - breath.Mouth.position;
                 var radial = offset - forward * Vector3.Dot(offset, forward);
-                if (radial.magnitude > 0.4f && Vector3.Dot(particle.velocity, radial.normalized) < -0.1f) inward++;
+                Assert.That(particle.velocity.y, Is.LessThan(0f), "Rolling must keep the fire traveling down.");
+                if (radial.magnitude > innerRollRadius && Vector3.Dot(particle.velocity, radial.normalized) < -0.1f) inward++;
                 if (previous.TryGetValue(particle.randomSeed, out var velocity) && Vector3.Angle(velocity, particle.velocity) > 4f) turns++;
                 previous[particle.randomSeed] = particle.velocity;
             }
@@ -223,6 +234,49 @@ public sealed partial class CardGamePlayModeTests
         yield return null;
     }
 
+    [UnityTest]
+    public IEnumerator ImportedFireReplaysTheSameFlameComposition()
+    {
+        var fire = Object.FindFirstObjectByType<FireTestController>();
+        var breath = Object.FindFirstObjectByType<SeaMonsterFireBreath>();
+        ParticleSystem.Particle[][] first = null;
+        int[][] firstMeshes = null;
+        for (var repeat = 0; repeat < 2; repeat++)
+        {
+            fire.StartFire();
+            AdvanceMonsterFireTo(fire, fire.CityIgnitionTime + .9f);
+            var stream = ControlField<GameObject>(fire, "visuals").transform.Find("Mouth_Fire_Stream");
+            var systems = new[]
+            {
+                stream.Find("Rolling_Gas_Wisps").GetComponent<ParticleSystem>(),
+                ControlField<ParticleSystem>(fire, "softFlames")
+            };
+            var samples = systems.Select(system =>
+            {
+                var buffer = new ParticleSystem.Particle[system.main.maxParticles];
+                return buffer.Take(system.GetParticles(buffer)).ToArray();
+            }).ToArray();
+            var meshes = systems.Select((system, index) => samples[index].Select(particle => particle.GetMeshIndex(system)).ToArray()).ToArray();
+            if (repeat == 0) { first = samples; firstMeshes = meshes; }
+            else for (var layer = 0; layer < systems.Length; layer++)
+            {
+                Assert.That(samples[layer].Length, Is.GreaterThan(0));
+                Assert.That(meshes[layer], Is.EqualTo(firstMeshes[layer]), "Restarting must replay the saved mix of models.");
+                Assert.That(samples[layer].Select(particle => particle.randomSeed), Is.EqualTo(first[layer].Select(particle => particle.randomSeed)));
+                for (var i = 0; i < samples[layer].Length; i++)
+                {
+                    Assert.That(Vector3.Distance(samples[layer][i].position, first[layer][i].position), Is.LessThan(.0001f));
+                    Assert.That(samples[layer][i].startSize3D, Is.EqualTo(first[layer][i].startSize3D));
+                    Assert.That(samples[layer][i].rotation3D, Is.EqualTo(first[layer][i].rotation3D));
+                    Assert.That(samples[layer][i].startColor, Is.EqualTo(first[layer][i].startColor));
+                }
+            }
+            fire.StopFire();
+            Assert.That(systems.All(system => system.particleCount == 0), Is.True);
+        }
+        yield return null;
+    }
+
     private static void CaptureCityWorldFrame(string path)
     {
         var camera = Object.FindFirstObjectByType<CityViewport>().WorldCamera;
@@ -233,6 +287,29 @@ public sealed partial class CardGamePlayModeTests
         pixels.ReadPixels(new Rect(0, 0, 1280, 640), 0, 0); pixels.Apply(); File.WriteAllBytes(path, pixels.EncodeToPNG());
         camera.targetTexture = previousTarget; camera.aspect = previousAspect; RenderTexture.active = previousActive;
         target.Release(); Object.Destroy(target); Object.Destroy(pixels);
+    }
+
+    [UnityTest]
+    public IEnumerator StreetFireUsesFewerFlamesWhileKeepingTheSameSpreadTiming()
+    {
+        var fire = Object.FindFirstObjectByType<FireTestController>();
+        var savedDensity = ControlField<float>(fire, "streetFlameDensity");
+        var visible = new int[2];
+        var activeCells = new int[2];
+        for (var run = 0; run < 2; run++)
+        {
+            PresentationField(fire, "streetFlameDensity", run == 0 ? savedDensity : 1f);
+            fire.StartFire();
+            AdvanceMonsterFireTo(fire, fire.CityIgnitionTime + 2f);
+            visible[run] = ControlField<ParticleSystem>(fire, "softFlames").particleCount;
+            activeCells[run] = fire.ActiveStreetFireCells;
+            fire.StopFire();
+        }
+        PresentationField(fire, "streetFlameDensity", savedDensity);
+        Assert.That(activeCells[0], Is.EqualTo(activeCells[1]));
+        Assert.That(visible[0], Is.GreaterThan(0));
+        Assert.That(visible[0], Is.LessThan(visible[1] * .3f), "Ground fire should stay in sparse patches instead of covering the streets.");
+        yield return null;
     }
 
     private static T SiteField<T>(object site, string name) => (T)site.GetType().GetField(name).GetValue(site);

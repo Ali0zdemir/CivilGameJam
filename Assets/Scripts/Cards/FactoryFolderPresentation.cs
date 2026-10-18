@@ -16,7 +16,7 @@ namespace CivilGameJam.Cards
         [SerializeField] private Canvas entryCanvas;
         [SerializeField] private RectTransform entryMouth;
         [Min(.1f)] [SerializeField] private float entrySeconds = .5f;
-        [Header("One worker needed: no text")]
+        [Header("Workers needed: no text")]
         [SerializeField] private CanvasGroup workerHint;
         [SerializeField] private RectTransform personHint;
         [SerializeField] private RectTransform arrowHint;
@@ -250,7 +250,7 @@ namespace CivilGameJam.Cards
             }
             bool concealed = game.IsChoosingBlueprint;
             if (storedBlueprint != null) storedBlueprint.color = concealed ? Color.clear : Color.white;
-            bool needsWorker = factory.PendingBlueprint != null && station != null && station.WorkerCount == 0 &&
+            bool needsWorker = factory.PendingBlueprint != null && station != null && !factory.HasEnoughWorkers &&
                 !IsEntering && !concealed && !game.ActionsLocked;
             if (workerHint == null) return;
             if (needsWorker && !HasAffordableWorker()) { HideHint(); return; }

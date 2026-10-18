@@ -22,6 +22,7 @@ namespace CivilGameJam.Disasters
         [Header("Spreading breath and street fire")]
         [SerializeField, Range(10f, 45f)] private float breathHalfAngle = 28f;
         [SerializeField, Range(0.8f, 6f)] private float softFireLeadTime = 4.2f;
+        [SerializeField, Range(0f, 1f)] private float streetFlameDensity = .16f;
 
         [Header("Low poly flames")]
         [SerializeField, Range(0.3f, 2.5f)] private float flameHeight = 1.1f;
@@ -38,7 +39,7 @@ namespace CivilGameJam.Disasters
         [SerializeField, Range(0f, 1f)] private float extinguishHissVolume = 0.16f;
 
         [Header("Burnt buildings")]
-        [Tooltip("Final grey-blue tint on houses that catch fire. Other buildings keep their original colors.")]
+        [Tooltip("Fallback tint for houses without an imported burnt appearance.")]
         [SerializeField] private Color burntBuildingColor = new Color(.32f, .38f, .43f, 1f);
         [SerializeField, Min(.1f)] private float burnColorDuration = 1.5f;
 
@@ -52,6 +53,7 @@ namespace CivilGameJam.Disasters
         [SerializeField] private Material smokeMaterial;
         [SerializeField] private Material softFireMaterial;
         [SerializeField] private Material gasFireMaterial;
+        [SerializeField] private FireVisualPreset visualPreset;
 
         [Header("Test panel")]
         [SerializeField] private Button testButton;
@@ -60,7 +62,8 @@ namespace CivilGameJam.Disasters
         [SerializeField] private ProgressBarFeedback progressFeedback;
 
         private readonly List<BurnSite> sites = new List<BurnSite>();
-        private readonly System.Random random = new System.Random();
+        private System.Random random = new System.Random(7351);
+        private uint visualSample;
         private GameObject visuals;
         private ParticleSystem flames;
         private ParticleSystem smoke;
@@ -103,6 +106,7 @@ namespace CivilGameJam.Disasters
             public bool Extinguished;
             public uint ParticleSeed;
             public float BurnExposure;
+            public ApartmentBurntAppearance BurntAppearance;
             public readonly List<BurnSurface> Surfaces = new List<BurnSurface>();
         }
 
@@ -154,6 +158,8 @@ namespace CivilGameJam.Disasters
             CityLayoutEvents.PrepareForDisaster();
             if (tsunami != null && tsunami.IsRunning) tsunami.StopTsunami();
             if (earthquake != null) earthquake.FinishForFire();
+            random = new System.Random((int)(visualPreset != null ? visualPreset.SequenceSeed : 7351u));
+            visualSample = 0;
             CacheBurnSites();
             if (sites.Count == 0) return;
             if (seaMonsterFire != null) seaMonsterFire.BeginFire();
@@ -249,7 +255,7 @@ namespace CivilGameJam.Disasters
                 EmitEmbers(site, burnStep, strength);
             }
             for (var i = 0; i < sites.Count; i++) streetSuppression[i] = sites[i].SuppressionScale;
-            streetFire.Update(elapsed, release, streetSuppression);
+            streetFire.Update(elapsed, release, streetSuppression, streetFlameDensity);
             EmitStreetFlames(step);
             AdvectGas(flames, step, 0.65f);
             AdvectGas(softFlames, step, 0.35f);
@@ -340,7 +346,8 @@ namespace CivilGameJam.Disasters
                 Center = bounds.center,
                 Bounds = bounds,
                 Foundation = model != null ? model.WorldFoundationBounds : bounds,
-                Size = Mathf.Clamp(Mathf.Sqrt(bounds.size.x * bounds.size.z), 0.5f, 1.3f)
+                Size = Mathf.Clamp(Mathf.Sqrt(bounds.size.x * bounds.size.z), 0.5f, 1.3f),
+                BurntAppearance = building.GetComponent<ApartmentBurntAppearance>()
             };
             if (model != null ? model.IsResidential : building.Find("Second_Floor") != null)
             {
@@ -402,11 +409,18 @@ namespace CivilGameJam.Disasters
         private void ApplyBurnColor(BurnSite site)
         {
             var amount = Mathf.SmoothStep(0f, 1f, site.BurnExposure / Mathf.Max(.1f, burnColorDuration));
-            if (amount <= 0f) return;
+            if (amount <= 0f || site.Surfaces.Count == 0 || site.BurntAppearance != null && site.BurntAppearance.IsBurnt) return;
+            if (amount >= .9999f && site.BurntAppearance != null)
+            {
+                site.BurntAppearance.SetBurnt(true);
+                return;
+            }
             foreach (var surface in site.Surfaces)
             {
                 if (surface.Renderer == null) continue;
-                var target = burntBuildingColor; target.a = surface.OriginalColor.a;
+                var target = site.BurntAppearance != null
+                    ? site.BurntAppearance.TargetColor(surface.Renderer, surface.MaterialIndex, burntBuildingColor) : burntBuildingColor;
+                target.a = surface.OriginalColor.a;
                 surface.Properties.SetColor(surface.ColorProperty, Color.Lerp(surface.OriginalColor, target, amount));
                 surface.Renderer.SetPropertyBlock(surface.Properties, surface.MaterialIndex);
             }
@@ -416,6 +430,7 @@ namespace CivilGameJam.Disasters
         {
             foreach (var site in sites)
             {
+                if (site.BurntAppearance != null) site.BurntAppearance.SetBurnt(false);
                 site.BurnExposure = 0f;
                 foreach (var surface in site.Surfaces)
                     if (surface.Renderer != null)
@@ -458,12 +473,12 @@ namespace CivilGameJam.Disasters
             visuals.transform.SetParent(transform, false);
             visuals.SetActive(false);
             gasProperties = new MaterialPropertyBlock();
-            smokeMesh = CreateSmokeMesh();
+            if (visualPreset == null) smokeMesh = CreateSmokeMesh();
             emberMesh = CreateEmberMesh();
             // Older standalone scenes can still run their saved fire test without monster-only material slots.
             var gasMaterial = gasFireMaterial != null ? gasFireMaterial : flameMaterial;
             var streetMaterial = softFireMaterial != null ? softFireMaterial : flameMaterial;
-            breathStream = new LowPolyFireStream(visuals.transform, gasMaterial);
+            breathStream = new LowPolyFireStream(visuals.transform, gasMaterial, visualPreset);
             streetFire = new StreetFireSpread(visuals.transform, streetMaterial);
             softFlames = CreateParticles("Soft_Street_Flames", null, gasMaterial, 1600, 0f,
                 new AnimationCurve(new Keyframe(0f, 0.4f), new Keyframe(0.25f, 1f), new Keyframe(0.7f, 0.8f), new Keyframe(1f, 0f)));
@@ -475,6 +490,13 @@ namespace CivilGameJam.Disasters
                 new AnimationCurve(new Keyframe(0f, 1f), new Keyframe(0.55f, 0.8f), new Keyframe(1f, 0f)));
             extinguishSmoke = CreateParticles("Extinguish_Smoke", smokeMesh, smokeMaterial, 96, 0f,
                 new AnimationCurve(new Keyframe(0f, 0.12f), new Keyframe(0.1f, 0.85f), new Keyframe(0.25f, 1f), new Keyframe(0.55f, 0.8f), new Keyframe(1f, 0f)));
+            if (visualPreset != null)
+            {
+                visualPreset.Configure(flames, false, 3);
+                visualPreset.Configure(softFlames, false, 4);
+                visualPreset.Configure(smoke, true, 5);
+                visualPreset.Configure(extinguishSmoke, true, 6);
+            }
             extinguishHiss = CreateExtinguishHiss();
             extinguishAudio = visuals.AddComponent<AudioSource>();
             extinguishAudio.playOnAwake = false;
@@ -497,6 +519,8 @@ namespace CivilGameJam.Disasters
             main.startRotation3D = true;
             main.gravityModifier = gravity;
             main.cullingMode = ParticleSystemCullingMode.AlwaysSimulate;
+            system.useAutoRandomSeed = false;
+            system.randomSeed = 7351u + (uint)maximum;
             var emission = system.emission;
             emission.enabled = false;
             var shape = system.shape;
@@ -532,7 +556,14 @@ namespace CivilGameJam.Disasters
                 var curl = FireFlow.Curl(particle.position, elapsed);
                 var velocity = new Vector3(wind.x * 0.12f, 0.5f, wind.y * 0.12f) + curl * strength;
                 particle.velocity = Vector3.Lerp(particle.velocity, velocity, blend);
-                particle.rotation += curl.z * step * 48f;
+                if (visualPreset != null)
+                {
+                    var rotation = particle.rotation3D;
+                    rotation.y += curl.x * step * 32f;
+                    rotation.z += curl.z * step * 48f;
+                    particle.rotation3D = rotation;
+                }
+                else particle.rotation += curl.z * step * 48f;
                 extinguishBuffer[i] = particle;
             }
             system.SetParticles(extinguishBuffer, count);
@@ -543,20 +574,25 @@ namespace CivilGameJam.Disasters
         private void EmitFlames(BurnSite site, float step, float strength)
         {
             var protection = SprinklersActive && site.Sprinkler != null ? site.Sprinkler.FireMultiplier : 1f;
-            site.FlameRemainder += step * Mathf.Max(0f, flameRate) * strength;
+            site.FlameRemainder += step * Mathf.Max(0f, flameRate) * strength * (visualPreset != null ? .65f : 1f);
             var count = Mathf.Min(80, Mathf.FloorToInt(site.FlameRemainder));
             site.FlameRemainder -= count;
             for (var i = 0; i < count; i++)
             {
+                var anchor = RandomAnchor(site);
+                // Facade anchors at pavement level also belong to the sparse ground fire.
+                if (anchor.y <= site.Bounds.min.y + .08f && random.NextDouble() >= streetFlameDensity) continue;
                 var width = flameWidth * site.Size * RandomRange(0.65f, 1.2f) * site.SuppressionScale;
                 flames.Emit(new ParticleSystem.EmitParams
                 {
-                    position = RandomAnchor(site) + new Vector3(RandomRange(-0.09f, 0.09f), -0.03f, RandomRange(-0.09f, 0.09f)),
+                    position = anchor + new Vector3(RandomRange(-0.09f, 0.09f), -0.03f, RandomRange(-0.09f, 0.09f)),
                     velocity = new Vector3(wind.x * 0.16f, RandomRange(0.16f, 0.4f), wind.y * 0.16f),
                     startLifetime = RandomRange(0.75f, 1.15f),
                     randomSeed = site.ParticleSeed,
-                    startSize3D = new Vector3(width * 1.8f, flameHeight * site.Size * RandomRange(0.8f, 1.5f) * Mathf.Lerp(0.35f, 1f, protection) * site.SuppressionScale, width),
-                    rotation = RandomRange(-18f, 18f),
+                    meshIndex = visualPreset != null ? visualPreset.FlameIndex(++visualSample) : 0,
+                    startSize3D = new Vector3(width * 1.8f, flameHeight * site.Size * RandomRange(0.8f, 1.5f) *
+                        Mathf.Lerp(0.35f, 1f, protection) * site.SuppressionScale * (visualPreset != null ? .55f : 1f), width),
+                    rotation3D = new Vector3(0f, visualPreset != null ? RandomRange(0f, 360f) : 0f, RandomRange(-18f, 18f)),
                     startColor = Color.Lerp(Color.white, new Color(1f, 0.82f, 0.65f, 0.88f), RandomRange(0f, 1f))
                 }, 1);
             }
@@ -564,23 +600,28 @@ namespace CivilGameJam.Disasters
 
         private void EmitStreetFlames(float step)
         {
-            foreach (var cell in streetFire.Cells)
+            for (var cellIndex = 0; cellIndex < streetFire.Cells.Count; cellIndex++)
             {
+                var cell = streetFire.Cells[cellIndex];
                 if (cell.Strength <= 0.001f) continue;
+                // Keep the same sparse patches on every replay, while retaining the spread timing.
+                if (Mathf.Repeat(cellIndex * .618034f, 1f) >= streetFlameDensity) continue;
                 cell.Remainder += step * 1.8f * cell.Strength;
                 var count = Mathf.Min(4, Mathf.FloorToInt(cell.Remainder)); cell.Remainder -= count;
                 for (var i = 0; i < count; i++)
                 {
-                    var width = cell.Radius * RandomRange(2.8f, 3.8f);
+                    var width = cell.Radius * RandomRange(2.8f, 3.8f) * .9f;
                     softFlames.Emit(new ParticleSystem.EmitParams
                     {
                         position = cell.Position + Vector3.up * 0.045f,
                         velocity = new Vector3(wind.x * 0.04f, RandomRange(0.06f, 0.18f), wind.y * 0.04f),
                         startLifetime = RandomRange(0.6f, 0.95f),
-                        startSize3D = new Vector3(width, RandomRange(0.35f, 0.65f), width),
-                        rotation = RandomRange(-22f, 22f),
+                        startSize3D = new Vector3(width, RandomRange(0.35f, 0.65f) * (visualPreset != null ? .65f : 1f), width),
+                        rotation3D = new Vector3(0f, visualPreset != null ? RandomRange(0f, 360f) : 0f, RandomRange(-22f, 22f)),
                         randomSeed = sites[cell.Owner].ParticleSeed,
-                        startColor = Color.Lerp(new Color(1f, 0.29f, 0.012f, 0.32f), new Color(1f, 0.71f, 0.09f, 0.48f), RandomRange(0f, 1f))
+                        meshIndex = visualPreset != null ? visualPreset.FlameIndex(++visualSample) : 0,
+                        startColor = visualPreset != null ? new Color(1f, 1f, .85f, .75f) :
+                            Color.Lerp(new Color(1f, 0.29f, 0.012f, 0.32f), new Color(1f, 0.71f, 0.09f, 0.48f), RandomRange(0f, 1f))
                     }, 1);
                 }
             }
@@ -594,15 +635,17 @@ namespace CivilGameJam.Disasters
             for (var i = 0; i < count; i++)
             {
                 var size = site.Size * RandomRange(0.325f, 0.475f);
-                var shade = RandomRange(0.18f, 0.3f);
+                var shade = RandomRange(0.12f, 0.22f);
                 smoke.Emit(new ParticleSystem.EmitParams
                 {
                     position = RandomAnchor(site) + Vector3.up * flameHeight * site.Size * 0.6f,
                     velocity = new Vector3(wind.x + RandomRange(-0.12f, 0.12f), smokeRiseSpeed * RandomRange(0.8f, 1.2f), wind.y + RandomRange(-0.1f, 0.1f)),
                     startLifetime = RandomRange(1.8f, 2.5f),
+                    randomSeed = site.ParticleSeed,
+                    meshIndex = visualPreset != null ? visualPreset.SmokeIndex(++visualSample) : 0,
                     startSize3D = new Vector3(size, size, size),
                     rotation3D = new Vector3(RandomRange(0f, 360f), RandomRange(0f, 360f), RandomRange(0f, 360f)),
-                    startColor = new Color(shade, shade * 0.96f, shade * 0.92f, 0.34f)
+                    startColor = new Color(shade, shade, shade, visualPreset != null ? .65f : .34f)
                 }, 1);
             }
         }
@@ -646,7 +689,8 @@ namespace CivilGameJam.Disasters
                     startSize3D = new Vector3(size, size * RandomRange(0.75f, 1.1f), size),
                     rotation3D = new Vector3(RandomRange(0f, 360f), RandomRange(0f, 360f), RandomRange(0f, 360f)),
                     startColor = new Color(shade, shade, shade),
-                    randomSeed = site.ParticleSeed
+                    randomSeed = site.ParticleSeed,
+                    meshIndex = visualPreset != null ? visualPreset.SmokeIndex(++visualSample) : 0
                 }, 1);
             }
         }

@@ -59,12 +59,19 @@ public sealed partial class CardAbilityPointsPlayModeTests
     }
     private DraggableCard Research(DraggableCard worker, UpgradeKind kind = UpgradeKind.RailSystem)
     {
-        Assert.That(research.TryAssign(worker), Is.True); research.AdvanceWork(100f);
+        // Synchronous setup skips completed researchers' return animations before reusing both pockets.
+        foreach (var person in game.Cards.Where(card => card.IsPerson && card.UsedThisTurn && card.IsFlying)) person.StopFlight();
+        Assert.That(research.TryAssign(worker), Is.True);
+        for (int i = 1; i < CardGameController.RequiredResearchers(kind); i++)
+            Assert.That(research.TryAssign(Person()), Is.True);
+        research.AdvanceWork(100f);
         Assert.That(game.IsChoosingBlueprint, Is.True); game.SelectBlueprint((int)kind - 1);
         return game.Cards.Single(card => card.Kind == CardKind.Blueprint && card.UpgradeType == kind);
     }
     private DraggableCard Produce(DraggableCard plan)
     {
+        while (factoryStation.WorkerCount < FactoryProduction.RequiredWorkersFor(plan.UpgradeType))
+            Assert.That(factoryStation.TryAssign(Person()), Is.True);
         Assert.That(factory.TryInsertBlueprint(plan), Is.True); factory.AdvanceWork(100f);
         return game.Cards.Last(card => card.Kind == CardKind.Upgrade && !card.IsStored);
     }
@@ -121,18 +128,19 @@ public sealed partial class CardAbilityPointsPlayModeTests
     {
         var educated = Educate(); var plan = Research(Person());
         Assert.That(bank.CurrentPoints, Is.EqualTo(4));
+        bank.AddPoints(1);
         Assert.That(factoryStation.TryAssign(educated), Is.True);
         var normal = Person(); Assert.That(factoryStation.TryAssign(normal), Is.True);
         Assert.That(factory.CurrentOrderCost, Is.EqualTo(8));
-        Assert.That(factory.TryInsertBlueprint(plan), Is.False); Assert.That(bank.CurrentPoints, Is.EqualTo(4));
+        Assert.That(factory.TryInsertBlueprint(plan), Is.False); Assert.That(bank.CurrentPoints, Is.EqualTo(5));
         Assert.That(educated.UsedThisTurn || normal.UsedThisTurn, Is.False);
         factoryStation.ReleaseWorker(1, false);
-        Assert.That(bank.CurrentPoints, Is.EqualTo(4), "An idle worker has no AP charge to refund.");
-        Assert.That(factory.TryInsertBlueprint(plan), Is.True); Assert.That(bank.CurrentPoints, Is.EqualTo(1));
+        Assert.That(bank.CurrentPoints, Is.EqualTo(5), "An idle worker has no AP charge to refund.");
+        Assert.That(factory.TryInsertBlueprint(plan), Is.True); Assert.That(bank.CurrentPoints, Is.EqualTo(2));
         Assert.That(factoryStation.TryAssign(normal), Is.False); Assert.That(normal.UsedThisTurn, Is.False);
         factory.AdvanceWork(100f);
         Assert.That(factoryStation.WorkerCount, Is.Zero); Assert.That(educated.UsedThisTurn, Is.True);
-        Assert.That(factoryStation.TryAssign(educated), Is.False); Assert.That(bank.CurrentPoints, Is.EqualTo(1));
+        Assert.That(factoryStation.TryAssign(educated), Is.False); Assert.That(bank.CurrentPoints, Is.EqualTo(2));
         Assert.That(game.Cards.Count(card => card.Kind == CardKind.Upgrade), Is.EqualTo(2));
         Assert.That(factory.TryInsertBlueprint(plan), Is.True);
         factory.AdvanceWork(100f);

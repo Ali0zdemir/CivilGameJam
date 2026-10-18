@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace CivilGameJam.Disasters
 {
-    /// <summary>Moves the saved cube model; the monster is never spawned during play.</summary>
+    /// <summary>Moves the saved monster model; the monster is never spawned during play.</summary>
     [DisallowMultipleComponent]
     public sealed class SeaMonsterEmergence : MonoBehaviour
     {
@@ -22,6 +22,7 @@ namespace CivilGameJam.Disasters
 
         public float RiseDuration => Mathf.Max(0.1f, riseDuration);
         public Transform Model => model;
+        public float ApproachDistance => model != null ? model.parent.TransformVector(waveApproachOffset).magnitude : 0f;
         public Vector3 EmergedWorldPosition => model == null ? transform.position : model.parent.TransformPoint(poseCached ? emergedPosition : model.localPosition);
         public float WaveReleaseDelay => RiseDuration * Mathf.Clamp01(waveReleaseFraction);
         public float EmergenceProgress { get; private set; }

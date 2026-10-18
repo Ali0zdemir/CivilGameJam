@@ -15,6 +15,8 @@ namespace CivilGameJam.Disasters
     {
         [Header("Saved sea monster")]
         [SerializeField] private SeaMonsterEmergence seaMonster;
+        [Tooltip("Boss approach speed relative to the wave; a slower approach lets the crest pull ahead.")]
+        [SerializeField, Range(.1f, .95f)] private float monsterApproachSpeedRatio = .8f;
         [SerializeField] private EarthquakeTestController earthquake;
         [SerializeField] private FireTestController fire;
 
@@ -93,6 +95,7 @@ namespace CivilGameJam.Disasters
         private int[] surfaceIndices;
         private float elapsed;
         private float sequenceElapsed;
+        private float monsterApproachTravel;
         private float shoreArrivalElapsed = -1f;
         private float routeEndElapsed = -1f;
         private float front;
@@ -248,6 +251,7 @@ namespace CivilGameJam.Disasters
             RefreshFloodObstacles();
             elapsed = 0f;
             sequenceElapsed = 0f;
+            monsterApproachTravel = 0f;
             shoreArrivalElapsed = -1f;
             routeEndElapsed = -1f;
             HasReachedCityEnd = false;
@@ -300,6 +304,9 @@ namespace CivilGameJam.Disasters
                 remaining -= step;
                 var waveStep = elapsed - previousWaveTime;
                 if (waveStep <= 0f) continue;
+                if (seaMonster != null && !monsterReleasedToWalk)
+                    monsterApproachTravel += waveStep * WaveSpeed * transform.TransformVector(Vector3.forward).magnitude *
+                        Mathf.Clamp(monsterApproachSpeedRatio, .1f, .95f);
                 if (!visuals.activeSelf)
                 {
                     visuals.SetActive(true);
@@ -337,7 +344,9 @@ namespace CivilGameJam.Disasters
                 EmitBuildingSplashes();
             }
             if (seaMonster != null && !monsterReleasedToWalk)
-                seaMonster.SetEmergenceTime(sequenceElapsed, Mathf.InverseLerp(startDistance, shorelineDistance, front));
+                seaMonster.SetEmergenceTime(sequenceElapsed, seaMonster.ApproachDistance > .0001f
+                    ? monsterApproachTravel / seaMonster.ApproachDistance
+                    : Mathf.InverseLerp(startDistance, shorelineDistance, front));
             if (authoredWave != null)
             {
                 // Start softening near the back of the city, then dissipate in place before the mountains.

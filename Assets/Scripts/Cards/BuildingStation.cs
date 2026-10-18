@@ -58,7 +58,7 @@ namespace CivilGameJam.Cards
             RefreshAbilityCostLabels();
         }
         public bool HasActiveWork => card != null && !AwaitingBlueprint && WorkerCount > 0 &&
-            (card.Kind == CardKind.School || card.Kind == CardKind.ResearchCenter && game != null && game.HasUndiscoveredBlueprints);
+            (card.Kind == CardKind.School || card.Kind == CardKind.ResearchCenter && game != null && game.HasResearchForWorkers(WorkerCount));
 
         public void Initialize(CardGameController owner, DraggableCard building)
         {
@@ -112,11 +112,19 @@ namespace CivilGameJam.Cards
             return AbilityPointCost(worker.Kind);
         }
 
-        private bool CanPayWorker(DraggableCard worker) => game.AbilityPoints == null || game.AbilityPoints.CanSpend(AdditionalCost(worker));
+        private int RequiredAssignmentCost(DraggableCard worker)
+        {
+            // Idle factory workers are charged when a blueprint arrives, but must still be affordable on entry.
+            if (card.Kind == CardKind.Factory && GetComponent<FactoryProduction>()?.PendingBlueprint == null)
+                return AbilityPointCost(worker.Kind);
+            return AdditionalCost(worker);
+        }
+
+        private bool CanPayWorker(DraggableCard worker) => game.AbilityPoints == null || game.AbilityPoints.CanSpend(RequiredAssignmentCost(worker));
 
         public string RejectionMessage(DraggableCard worker) => game != null && game.ActionsLocked ? "Wait until the disaster finishes." :
             worker != null && worker.UsedThisTurn ? "This person has already worked this turn." :
-            worker != null && game != null && !CanPayWorker(worker) ? "Not enough AP: " + AdditionalCost(worker) + " AP required." :
+            worker != null && game != null && !CanPayWorker(worker) ? "Not enough AP: " + RequiredAssignmentCost(worker) + " AP required." :
             "This building holds up to 2 workers.";
 
         public void ShowInsufficientCost(CardKind workerKind)
@@ -138,7 +146,7 @@ namespace CivilGameJam.Cards
             if (game == null || game.IsChoosingBlueprint) return false;
             if (!CanAccept(worker))
             {
-                if (CanAccept(worker, false) && game.AbilityPoints != null && game.AbilityPoints.ReportInsufficient(AdditionalCost(worker)))
+                if (CanAccept(worker, false) && game.AbilityPoints != null && game.AbilityPoints.ReportInsufficient(RequiredAssignmentCost(worker)))
                     ShowInsufficientCost(worker.Kind);
                 return false;
             }
@@ -233,7 +241,7 @@ namespace CivilGameJam.Cards
                     if (progressFeedback != null) progressFeedback.Complete();
                 }
             }
-            else if (card.Kind == CardKind.ResearchCenter && WorkerCount > 0 && game.HasUndiscoveredBlueprints)
+            else if (card.Kind == CardKind.ResearchCenter && WorkerCount > 0 && game.HasResearchForWorkers(WorkerCount))
             {
                 for (int i = 0; i < Capacity; i++)
                 {

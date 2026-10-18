@@ -90,6 +90,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
     public IEnumerator AuthoredWaterRetryKeepsSeismicAndElevatorsAndReportsOnlyTheTwoFloodedHouses()
     {
         yield return ReachTsunami();
+        bank.AddPoints(7); // Carried AP for the second factory worker.
         PrepareElevators(1);
         yield return new WaitForSecondsRealtime(1.6f);
         round.Ready(); Until(() => round.RoundNumber == 3);

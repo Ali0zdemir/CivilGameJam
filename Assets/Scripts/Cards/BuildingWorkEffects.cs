@@ -20,7 +20,7 @@ namespace CivilGameJam.Cards
         public float Strength => strength;
         public bool IsWorking => station.Card != null && station.Card.Owner != null && station.WorkerCount > 0 &&
             !station.AwaitingBlueprint && !station.Card.Owner.IsChoosingBlueprint && Time.timeScale > 0f &&
-            (factory == null || factory.PendingBlueprint != null);
+            (factory == null ? station.HasActiveWork : factory.PendingBlueprint != null && factory.HasEnoughWorkers);
 
         private void Awake()
         {

@@ -54,7 +54,7 @@ namespace CivilGameJam.Cards.Editor
                     title.font = TMP_Settings.defaultFontAsset;
                     title.fontSharedMaterial = material;
                     title.text = card.UpgradeType == UpgradeKind.RailSystem ? "Rail System" :
-                        card.UpgradeType == UpgradeKind.Breakwater ? "Elevator" : "Fire Protection";
+                        card.UpgradeType == UpgradeKind.Breakwater ? "Elevator" : "Fire Sprinkler";
                     title.color = Color.white;
                     title.fontStyle = FontStyles.Bold;
                     title.fontSize = 40f;
@@ -64,6 +64,7 @@ namespace CivilGameJam.Cards.Editor
                     title.alignment = TextAlignmentOptions.Center;
                     title.textWrappingMode = TextWrappingModes.NoWrap;
                     title.raycastTarget = false;
+                    textRect.gameObject.SetActive(false);
                     var frame = root.transform.Find("HoverOutline") as RectTransform;
                     if (frame == null)
                     {
@@ -92,7 +93,7 @@ namespace CivilGameJam.Cards.Editor
                 finally { PrefabUtility.UnloadPrefabContents(root); }
             }
             AssetDatabase.SaveAssets();
-            Debug.Log("Saved three product hover names, their outlined text material and white frames.");
+            Debug.Log("Saved product hover outlines with the duplicate hover labels hidden.");
         }
 
         [MenuItem("Tools/Card Game/Save Factory Output Area and New Item Outlines")]
@@ -139,7 +140,7 @@ namespace CivilGameJam.Cards.Editor
             var game = Object.FindFirstObjectByType<CardGameController>();
             Canvas.ForceUpdateCanvases();
             var layer = game.CardLayer;
-            var area = layer.Find("FactoryOutputArea") as RectTransform;
+            var area = game.FactoryOutputArea != null ? game.FactoryOutputArea : layer.Find("FactoryOutputArea") as RectTransform;
             if (area == null)
             {
                 area = new GameObject("FactoryOutputArea", typeof(RectTransform)).GetComponent<RectTransform>();

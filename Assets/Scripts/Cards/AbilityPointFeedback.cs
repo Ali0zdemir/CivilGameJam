@@ -4,7 +4,7 @@ using UnityEngine.UI;
 
 namespace CivilGameJam.Cards
 {
-    /// <summary>Animates the saved AP counter, pooled spend labels and READY border.</summary>
+    /// <summary>Animates the saved AP counter, pooled AP messages and READY border.</summary>
     [DisallowMultipleComponent]
     public sealed class AbilityPointFeedback : MonoBehaviour
     {
@@ -39,6 +39,7 @@ namespace CivilGameJam.Cards
             public Vector3 scale;
             public float elapsed;
             public bool active;
+            public bool warning;
         }
 
         public bool IsWarning => flashing && warning;
@@ -77,6 +78,17 @@ namespace CivilGameJam.Cards
         private void ShowSpend(int amount)
         {
             StartFlash(false);
+            ShowPopup("-" + amount + " AP", false);
+        }
+
+        private void ShowDenied(int cost)
+        {
+            StartFlash(true);
+            ShowPopup("Not enough AP", true);
+        }
+
+        private void ShowPopup(string message, bool denied)
+        {
             if (popups == null || popups.Length == 0) return;
             Popup chosen = null;
             foreach (var popup in popups)
@@ -88,14 +100,26 @@ namespace CivilGameJam.Cards
             if (chosen == null) return;
             chosen.elapsed = 0f;
             chosen.active = true;
-            chosen.label.text = "-" + amount + " AP";
-            chosen.label.color = new Color(spendColor.r, spendColor.g, spendColor.b, 0f);
+            chosen.warning = denied;
+            chosen.label.text = message;
+            var color = denied ? warningColor : spendColor;
+            chosen.label.color = new Color(color.r, color.g, color.b, 0f);
             chosen.label.rectTransform.anchoredPosition = chosen.position;
+            if (denied) CenterWarning(chosen);
             chosen.label.rectTransform.localScale = chosen.scale * .92f;
             chosen.label.gameObject.SetActive(true);
         }
 
-        private void ShowDenied(int cost) => StartFlash(true);
+        private void CenterWarning(Popup popup)
+        {
+            if (counter == null || balanceLabel == null) return;
+            var rect = popup.label.rectTransform;
+            var parent = rect.parent;
+            var balanceRect = balanceLabel.rectTransform;
+            var center = parent.InverseTransformPoint(balanceRect.TransformPoint(balanceRect.rect.center));
+            var bottom = parent.InverseTransformPoint(counter.TransformPoint(new Vector3(counter.rect.center.x, counter.rect.yMin)));
+            rect.localPosition = new Vector3(center.x, bottom.y - 8f, rect.localPosition.z);
+        }
 
         private void StartFlash(bool denied)
         {
@@ -142,17 +166,20 @@ namespace CivilGameJam.Cards
                 {
                     if (popup == null || !popup.active) continue;
                     popup.elapsed += seconds;
-                    float lifetime = Mathf.Max(popupSeconds, Mathf.Max(.1f, spendSeconds) + .2f);
+                    float flashSeconds = Mathf.Max(.1f, popup.warning ? warningSeconds : spendSeconds);
+                    float lifetime = Mathf.Max(popupSeconds, flashSeconds + .2f);
                     float t = Mathf.Clamp01(popup.elapsed / lifetime);
-                    float shakeT = Mathf.Clamp01(popup.elapsed / Mathf.Max(.1f, spendSeconds));
+                    float shakeT = Mathf.Clamp01(popup.elapsed / flashSeconds);
                     float shake = Mathf.Sin(shakeT * Mathf.PI * 12f) * shakeDistance * .7f * (1f - shakeT);
                     float ease = 1f - (1f - t) * (1f - t);
                     popup.label.rectTransform.anchoredPosition = popup.position + Vector2.up * (popupRise * ease) + Vector2.right * shake;
+                    if (popup.warning) CenterWarning(popup);
                     popup.label.rectTransform.localScale = popup.scale * Mathf.Lerp(.92f, 1f, Mathf.Clamp01(t * 5f));
-                    // Keep the red amount readable for the full shake, then fade it out.
+                    // Keep the red message readable for the full shake, then fade it out.
                     float alpha = Mathf.Clamp01(popup.elapsed / .07f) * (1f - Mathf.SmoothStep(0f, 1f,
-                        Mathf.InverseLerp(Mathf.Max(.1f, spendSeconds), lifetime, popup.elapsed)));
-                    popup.label.color = new Color(spendColor.r, spendColor.g, spendColor.b, alpha);
+                        Mathf.InverseLerp(flashSeconds, lifetime, popup.elapsed)));
+                    var color = popup.warning ? warningColor : spendColor;
+                    popup.label.color = new Color(color.r, color.g, color.b, alpha);
                     if (t < 1f) continue;
                     ResetPopup(popup);
                 }

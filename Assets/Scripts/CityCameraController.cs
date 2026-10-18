@@ -457,9 +457,9 @@ namespace CivilGameJam
             if (subject == null) return false;
             var found = false;
             var cameraTransform = controlledCamera.transform;
-            foreach (var renderer in subject.GetComponentsInChildren<MeshRenderer>(includeInactive))
+            foreach (var renderer in subject.GetComponentsInChildren<Renderer>(includeInactive))
             {
-                if (!renderer.enabled) continue;
+                if (!renderer.enabled || !(renderer is MeshRenderer || renderer is SkinnedMeshRenderer)) continue;
                 var bounds = renderer.localBounds;
                 for (var corner = 0; corner < 8; corner++)
                 {

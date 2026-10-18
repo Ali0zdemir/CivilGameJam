@@ -47,10 +47,16 @@ public sealed class CardSceneEditModeTests
         Assert.That(game.Sidebar, Is.Not.Null);
         Assert.That(game.Sidebar.Slots, Is.Empty);
         Assert.That(game.Sidebar.PeopleArea, Is.Not.Null);
-        Assert.That(game.Sidebar.PeopleArea.rect.width, Is.EqualTo(game.Sidebar.PeopleArea.rect.height).Within(0.01f));
+        Assert.That(game.Sidebar.PeopleArea.rect.width, Is.GreaterThan(game.Sidebar.PeopleArea.rect.height));
         Assert.That(game.Sidebar.PeopleArea.rect.width, Is.GreaterThanOrEqualTo(500f));
         Assert.That(game.Sidebar.GetComponentsInChildren<Transform>(true).Any(child => child.name.StartsWith("PeopleSlot")), Is.False);
         Assert.That(game.Sidebar.PeopleArea.GetComponent<LayoutGroup>(), Is.Null);
+        Assert.That(game.Sidebar.UpgradesArea, Is.SameAs(game.FactoryOutputArea));
+        Assert.That(game.Sidebar.UpgradesArea.GetComponent<LayoutGroup>(), Is.Null);
+        Assert.That(game.Sidebar.UpgradesArea.GetComponent<Image>().raycastTarget, Is.True);
+        Assert.That(game.Sidebar.UpgradesArea.GetComponent<CardDropTargetFeedback>(), Is.Not.Null);
+        Assert.That(game.Sidebar.UpgradesArea.parent.Find("Title").GetComponent<TMPro.TMP_Text>().text, Is.EqualTo("UPGRADES"));
+        Assert.That(game.Sidebar.UpgradesArea.position.y, Is.GreaterThan(game.Sidebar.PeopleArea.position.y));
         Assert.That(game.Vault.Area.Cast<Transform>().Count(child => child.name.StartsWith("BlueprintSlot")), Is.EqualTo(4));
         var viewport = canvas.transform.Find("CityView").GetComponent<CityViewport>();
         Assert.That(viewport, Is.Not.Null);
@@ -73,7 +79,7 @@ public sealed class CardSceneEditModeTests
         Assert.That(game.Grid, Is.Not.Null);
         Assert.That(game.CardLayer, Is.Not.Null);
         Assert.That(game.FactoryOutputArea, Is.Not.Null);
-        Assert.That(game.FactoryOutputArea.parent, Is.SameAs(game.CardLayer));
+        Assert.That(game.FactoryOutputArea.IsChildOf(game.Sidebar.transform), Is.True);
         Assert.That(game.FactoryOutputArea.rect.width, Is.GreaterThanOrEqualTo(100f));
         var cards = game.GetComponentsInChildren<DraggableCard>();
         Assert.That(cards.Length, Is.EqualTo(11));
@@ -212,6 +218,7 @@ public sealed class CardSceneEditModeTests
         if (card.Kind == CardKind.Upgrade)
         {
             var title = hover.Details.Find("ProductName").GetComponent<TMPro.TextMeshProUGUI>();
+            Assert.That(title.gameObject.activeSelf, Is.False, "Product names are shown above the icons instead of in duplicate hover labels.");
             Assert.That(title.color, Is.EqualTo(Color.white));
             Assert.That(title.fontSharedMaterial.GetFloat(TMPro.ShaderUtilities.ID_OutlineWidth), Is.GreaterThan(0f));
             Assert.That(hover.Details.anchorMin, Is.EqualTo(new Vector2(0.5f, 1f)));
@@ -229,7 +236,14 @@ public sealed class CardSceneEditModeTests
             Assert.That(outline.fillCenter, Is.False);
             Assert.That(outline.sprite, Is.Not.Null);
             Assert.That(new SerializedObject(card).FindProperty("newItemOutline").objectReferenceValue, Is.SameAs(outline));
-            Assert.That(card.Rect.sizeDelta, Is.EqualTo(new Vector2(200f, 200f)));
+            Assert.That(card.Rect.sizeDelta, Is.EqualTo(new Vector2(200f, 280f)));
+            var inventoryName = prefab.transform.Find("InventoryName").GetComponent<TMPro.TMP_Text>();
+            string inventoryTitle = card.UpgradeType == UpgradeKind.RailSystem ? "Rail System"
+                : card.UpgradeType == UpgradeKind.Breakwater ? "Elevator" : "Fire Sprinkler";
+            Assert.That(inventoryName.text, Is.EqualTo(inventoryTitle));
+            Assert.That(inventoryName.gameObject.activeSelf, Is.True);
+            Assert.That(inventoryName.raycastTarget, Is.False);
+            Assert.That(inventoryName.font, Is.SameAs(title.font));
             var artwork = prefab.GetComponentInChildren<UpgradeIcon>(true).Artwork;
             string spriteName = card.UpgradeType == UpgradeKind.RailSystem ? "Siesmic Isolator logo" :
                 card.UpgradeType == UpgradeKind.Breakwater ? "Elevated Floor Logo" : "Fire Extingusiher Logo";

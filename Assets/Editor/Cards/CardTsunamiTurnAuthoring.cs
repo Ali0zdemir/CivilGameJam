@@ -90,7 +90,7 @@ namespace CivilGameJam.Cards.Editor
             return image;
         }
 
-        private static CardDropTargetFeedback ConfigureFeedback(GameObject owner, Graphic artwork, bool useArtworkAlpha = true)
+        internal static CardDropTargetFeedback ConfigureFeedback(GameObject owner, Graphic artwork, bool useArtworkAlpha = true)
         {
             if (artwork == null) throw new InvalidOperationException("Missing saved artwork for " + owner.name);
             var feedback = owner.GetComponent<CardDropTargetFeedback>() ?? owner.AddComponent<CardDropTargetFeedback>();

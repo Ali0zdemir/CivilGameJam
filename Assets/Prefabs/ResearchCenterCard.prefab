@@ -1915,8 +1915,8 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: Assign up to 2 workers to discover blueprints. Educated people research
-    faster. New discoveries are stored in the Vault.
+  m_text: Assign 1 or 2 researchers to discover any blueprint. Educated people research
+    faster. Discoveries go to the Vault.
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 60e75f4c2ff43464d882249013bc23d0, type: 2}
   m_sharedMaterial: {fileID: 3628592581146971286, guid: 60e75f4c2ff43464d882249013bc23d0, type: 2}

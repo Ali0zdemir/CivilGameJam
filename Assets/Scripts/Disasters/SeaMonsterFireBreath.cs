@@ -9,6 +9,7 @@ namespace CivilGameJam.Disasters
         [SerializeField] private SeaMonsterWalk walk;
         [SerializeField] private Transform model;
         [SerializeField] private Transform mouth;
+        [SerializeField] private Transform neckPivot;
         [SerializeField] private Transform[] upperBody = new Transform[0];
         [SerializeField] private Transform[] headParts = new Transform[0];
         [SerializeField] private Renderer[] skin = new Renderer[0];
@@ -18,7 +19,8 @@ namespace CivilGameJam.Disasters
         [SerializeField, Min(0.1f)] private float travelDuration = 0.9f;
         [SerializeField, Min(0.1f)] private float recoveryDuration = 1.6f;
         [SerializeField, Range(3f, 20f)] private float leanAngle = 12f;
-        [SerializeField, Range(45f, 50f)] private float breathDownAngle = 47.5f;
+        [SerializeField, Range(0f, .4f)] private float headLowering = .22f;
+        [SerializeField, Range(5f, 85f)] private float breathDownAngle = 55.5f;
         [SerializeField] private Color heatedColor = new Color(0.8f, 0.24f, 0.105f);
         [SerializeField, Range(0f, 0.85f)] private float heatTint = 0.68f;
 
@@ -35,7 +37,7 @@ namespace CivilGameJam.Disasters
 
         public Transform Mouth => mouth;
         public SeaMonsterWalk Walk => walk;
-        public float BreathDownAngle => Mathf.Clamp(breathDownAngle, 45f, 50f);
+        public float BreathDownAngle => Mathf.Clamp(breathDownAngle, 5f, 85f);
         public Vector3 FireDirection => DirectionForHeading(fireHeading.sqrMagnitude > 0.0001f ? fireHeading : model.forward);
         public Vector3 AimedMouthPosition => PredictMouth(fireHeading);
         public float ChargeDuration => Mathf.Max(0.1f, chargeDuration);
@@ -60,7 +62,7 @@ namespace CivilGameJam.Disasters
                 restPositions[i] = upperBody[i].localPosition;
                 restRotations[i] = upperBody[i].localRotation;
             }
-            neckPosition = headParts.Length > 0 && headParts[0] != null
+            neckPosition = neckPivot != null ? model.InverseTransformPoint(neckPivot.position) : headParts.Length > 0 && headParts[0] != null
                 ? headParts[0].localPosition - Vector3.up * (headParts[0].localScale.y * 0.5f) : new Vector3(0f, 2.59f, 0.14f);
             restMouthPosition = mouth != null ? model.InverseTransformPoint(mouth.position) : new Vector3(0f, 2.87f, 0.96f);
             fireHeading = Vector3.ProjectOnPlane(model.forward, Vector3.up).normalized;
@@ -88,7 +90,7 @@ namespace CivilGameJam.Disasters
             Lean = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(ChargeDuration, FlameStartTime, seconds)) * release;
             var bend = Quaternion.Euler(Lean * leanAngle, 0f, 0f);
             var hip = new Vector3(0f, 1.15f, 0f);
-            var neck = hip + bend * (neckPosition - hip);
+            var neck = hip + bend * (neckPosition - hip) - Vector3.up * (Lean * headLowering);
             var headRotation = Quaternion.Slerp(bend, HeadRotation(fireHeading), Lean);
             for (var i = 0; i < upperBody.Length; i++)
             {
@@ -127,7 +129,7 @@ namespace CivilGameJam.Disasters
         private Vector3 PredictMouth(Vector3 heading)
         {
             var hip = new Vector3(0f, 1.15f, 0f);
-            var neck = hip + Quaternion.Euler(leanAngle, 0f, 0f) * (neckPosition - hip);
+            var neck = hip + Quaternion.Euler(leanAngle, 0f, 0f) * (neckPosition - hip) - Vector3.up * headLowering;
             return model.TransformPoint(neck + HeadRotation(heading) * (restMouthPosition - neckPosition));
         }
 

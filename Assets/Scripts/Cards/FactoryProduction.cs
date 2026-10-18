@@ -65,11 +65,14 @@ namespace CivilGameJam.Cards
         public bool IsAnimatingBlueprint => folderPresentation != null && folderPresentation.IsAnimating;
         public float ProductionSeconds => Mathf.Max(0.1f, productionSeconds);
         public float EducatedWorkerMultiplier => Mathf.Max(1f, educatedWorkerMultiplier);
+        public static int RequiredWorkersFor(UpgradeKind kind) => kind == UpgradeKind.Breakwater || kind == UpgradeKind.Fire ? 2 : 1;
+        public int RequiredWorkers => RequiredWorkersFor(PendingBlueprint != null ? PendingBlueprint.UpgradeType : UpgradeKind.None);
+        public bool HasEnoughWorkers => station != null && station.WorkerCount >= RequiredWorkers;
         public float WorkRate
         {
             get
             {
-                if (station == null) return 0f;
+                if (!HasEnoughWorkers) return 0f;
                 float rate = 0f;
                 for (int i = 0; i < BuildingStation.Capacity; i++)
                 {

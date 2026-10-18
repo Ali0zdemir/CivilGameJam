@@ -13,7 +13,8 @@ public sealed class SeaMonsterTsunamiEditModeTests
     {
         EditorSceneManager.OpenScene("Assets/2DCardScene.unity");
         var sequence = Object.FindFirstObjectByType<MonsterSequenceController>();
-        Assert.That(new SerializedObject(sequence).FindProperty("tsunamiAftermathSeconds").floatValue, Is.EqualTo(3f));
+        Assert.That(new SerializedObject(sequence).FindProperty("tsunamiAftermathSeconds").floatValue, Is.EqualTo(1f));
+        Assert.That(Object.FindFirstObjectByType<SeaMonsterFireBreath>().FlameStartTime, Is.EqualTo(3.25f).Within(.001f));
     }
 
     [Test]
@@ -46,14 +47,15 @@ public sealed class SeaMonsterTsunamiEditModeTests
         Assert.That(Vector3.Dot(tsunami.transform.forward, Vector3.forward), Is.GreaterThan(0.999f));
         Assert.That(tsunami.transform.InverseTransformPoint(monster.transform.position).z, Is.LessThan(tsunami.CityBounds.min.z));
         Assert.That(Vector3.Dot(monster.transform.forward, tsunami.transform.forward), Is.GreaterThan(0.999f));
-        var model = monster.transform.Find("Cube_Model");
+        var model = monster.Model;
+        Assert.That(model.name, Is.EqualTo("Gojira_Model"));
         Assert.That(Vector3.Distance(model.localScale, Vector3.one * 0.51f), Is.LessThan(0.00001f));
         var sequence = monster.GetComponent<MonsterSequenceController>();
         Assert.That(sequence, Is.Not.Null, "Sequence controls and their menu must be saved before Play.");
         var sequenceData = new SerializedObject(sequence);
         Assert.That(sequenceData.FindProperty("cameraZoomFactor").floatValue, Is.EqualTo(1.3f));
         Assert.That(sequenceData.FindProperty("cameraZoomSeconds").floatValue, Is.EqualTo(1.8f));
-        Assert.That(sequenceData.FindProperty("cameraReturnSeconds").floatValue, Is.EqualTo(1.8f));
+        Assert.That(sequenceData.FindProperty("cameraReturnSeconds").floatValue, Is.EqualTo(.8f));
         Assert.That(sequenceData.FindProperty("sequenceButtons").arraySize, Is.EqualTo(3));
         Assert.That(sequenceData.FindProperty("startButton").objectReferenceValue, Is.Not.Null);
         Assert.That(sequenceData.FindProperty("stopButton").objectReferenceValue, Is.Not.Null);
@@ -63,7 +65,15 @@ public sealed class SeaMonsterTsunamiEditModeTests
             "READY remains the saved playable-round entry point alongside the restored debug controls.");
         Assert.That(model.Find("Left_Leg"), Is.Not.Null);
         Assert.That(model.Find("Right_Leg"), Is.Not.Null);
-        Assert.That(model.GetComponentsInChildren<MeshRenderer>(true).Length, Is.GreaterThanOrEqualTo(5));
+        var skin = model.GetComponentInChildren<SkinnedMeshRenderer>(true);
+        Assert.That(skin, Is.Not.Null);
+        Assert.That(AssetDatabase.GetAssetPath(skin.sharedMesh), Is.EqualTo("Assets/Art/Monsters/Gojira/GojiraRigged.asset"));
+        var source = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/emreAnimation/Gojira.fbx").GetComponentInChildren<MeshFilter>();
+        Assert.That(skin.sharedMesh.vertexCount, Is.EqualTo(source.sharedMesh.vertexCount));
+        Assert.That(skin.sharedMesh.subMeshCount, Is.EqualTo(source.sharedMesh.subMeshCount));
+        Assert.That(skin.sharedMaterials, Is.EqualTo(source.GetComponent<MeshRenderer>().sharedMaterials));
+        Assert.That(skin.bones.Length, Is.EqualTo(8));
+        Assert.That(skin.bones.All(bone => bone != null && bone.IsChildOf(model)), Is.True);
         Assert.That(model.GetComponentsInChildren<Renderer>(true).Max(renderer => renderer.bounds.max.y), Is.GreaterThan(tsunami.SeaLevel));
         Assert.That(tsunami.transform.Find("Sea_Surface"), Is.Not.Null);
         Assert.That(model.gameObject.activeSelf, Is.False, "The imported monster must not change the idle city view.");
@@ -96,9 +106,9 @@ public sealed class SeaMonsterTsunamiEditModeTests
         var breath = monster.GetComponent<SeaMonsterFireBreath>();
         Assert.That(breath, Is.Not.Null, "The fire animation component is authored before Play.");
         Assert.That(breath.Mouth, Is.SameAs(model.Find("Muzzle/Flame_Origin")));
-        Assert.That(model.Find("Muzzle/Mouth_Opening"), Is.Not.Null);
-        Assert.That(breath.BreathDownAngle, Is.InRange(45f, 50f));
-        Assert.That(new SerializedObject(breath).FindProperty("headParts").arraySize, Is.EqualTo(4));
+        Assert.That(new SerializedObject(breath).FindProperty("neckPivot").objectReferenceValue, Is.SameAs(model.Find("Neck_Pivot")));
+        Assert.That(breath.BreathDownAngle, Is.EqualTo(55.5f).Within(.001f));
+        Assert.That(new SerializedObject(breath).FindProperty("headParts").arraySize, Is.EqualTo(2));
         Assert.That(new SerializedObject(fire).FindProperty("seaMonsterFire").objectReferenceValue, Is.SameAs(breath));
         Assert.That(earthquakeData.FindProperty("fire").objectReferenceValue, Is.SameAs(fire));
         Assert.That(data.FindProperty("fire").objectReferenceValue, Is.SameAs(fire));

@@ -51,6 +51,7 @@ public sealed partial class CardGamePlayModeTests
     public IEnumerator DiscoveredBlueprintGlintsAndLeavesASavedThinTrailThenCleansUp()
     {
         research.TryAssign(People()[0]);
+        research.TryAssign(People()[1]);
         research.AdvanceWork(25.01f);
         game.SelectBlueprint(1);
         var plan = game.Cards.Single(card => card.Kind == CardKind.Blueprint);
@@ -97,9 +98,9 @@ public sealed partial class CardGamePlayModeTests
         factory.enabled = false;
         for (int type = 0; type < 3; type++)
         {
-            EnsurePresentationWorkers(2);
+            EnsurePresentationWorkers(FactoryProduction.RequiredWorkersFor((UpgradeKind)(type + 1)) + 1);
             var plan = ResearchPlan(type);
-            Assert.That(station.TryAssign(People().First(person => person.CanStartWork && !person.IsStored)), Is.True);
+            AssignFactoryWorkers(plan.UpgradeType);
             factory.TryInsertBlueprint(plan);
             factory.AdvanceWork(factory.ProductionSeconds + 0.01f);
         }
@@ -178,7 +179,9 @@ public sealed partial class CardGamePlayModeTests
         Assert.That(smoke.Strength, Is.Zero, "Workers without a production order must not emit factory smoke.");
         var blueprint = ResearchPlan(0);
         factory.TryInsertBlueprint(blueprint);
-        research.TryAssign(People()[1]);
+        yield return new WaitForSecondsRealtime(.65f);
+        Assert.That(research.TryAssign(People().First(person => person.CanStartWork && !person.IsStored)), Is.True);
+        Assert.That(research.TryAssign(People().First(person => person.CanStartWork && !person.IsStored)), Is.True);
         yield return new WaitForSecondsRealtime(0.4f);
         Assert.That(smoke.Strength, Is.EqualTo(1f));
         Assert.That(scan.Strength, Is.EqualTo(1f));

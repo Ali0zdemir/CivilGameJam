@@ -16,7 +16,7 @@ public sealed partial class CardGamePlayModeTests
         game.GetComponent<CardDock>().SetExpanded(false, true);
         var tsunami = Object.FindFirstObjectByType<TsunamiTestController>();
         var monster = Object.FindFirstObjectByType<SeaMonsterEmergence>();
-        var model = monster.transform.Find("Cube_Model");
+        var model = monster.Model;
         var parts = model.GetComponentsInChildren<Transform>(true).Select(part => part.GetInstanceID()).ToArray();
         Assert.That(model.gameObject.activeSelf, Is.False);
         Assert.That(tsunami.transform.Find("Sea_Surface").gameObject.activeSelf, Is.False,
@@ -43,7 +43,7 @@ public sealed partial class CardGamePlayModeTests
         InvokeCity(tsunami, "AdvanceTsunami", 0.3f);
         Assert.That(ControlField<float>(tsunami, "front"), Is.GreaterThan(firstFront));
         var shoreArrival = (tsunami.CityBounds.min.z - ControlField<float>(tsunami, "startDistance")) /
-            ControlField<float>(tsunami, "waveSpeed");
+            tsunami.WaveSpeed;
         InvokeCity(tsunami, "AdvanceTsunami", Mathf.Max(0f, shoreArrival + 0.35f - ControlField<float>(tsunami, "elapsed")));
         Assert.That(tsunami.FloodCoverage, Is.GreaterThan(0f), "The reversed wave must still flood the streets.");
         yield return CaptureCanvas(Path.Combine(captureDirectory, "monster-city-flood.png"));

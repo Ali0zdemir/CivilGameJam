@@ -13,7 +13,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
     private IEnumerator ReachFire()
     {
         yield return ReachTsunami();
-        bank.AddPoints(2);
+        bank.AddPoints(16); // Fund one researcher and two complete factory crews.
         PrepareElevators(2);
         yield return new WaitForSecondsRealtime(1.6f);
         round.Ready();
@@ -69,14 +69,20 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(factoryStation.TryAssign(maker), Is.True);
         Assert.That(bank.CurrentPoints, Is.EqualTo(9));
         factory.AdvanceWork(100f);
+        Assert.That(factory.Progress, Is.Zero, "One educated worker still waits for a second person.");
+        bank.AddPoints(3);
+        Assert.That(factoryStation.TryAssign(Person()), Is.True);
+        factory.AdvanceWork(100f);
         Assert.That(maker.UsedThisTurn, Is.True);
         Assert.That(game.Cards.Count(card => card.Kind == CardKind.Upgrade && card.UpgradeType == UpgradeKind.Fire), Is.EqualTo(2));
         yield return new WaitForSecondsRealtime(.65f);
+        game.ResetTurnPeople();
+        bank.AddPoints(factoryStation.AbilityPointCost(CardKind.Person) - bank.CurrentPoints);
         Assert.That(factoryStation.TryAssign(Person()), Is.True);
         Assert.That(factoryStation.TryAssign(Person()), Is.True);
         Assert.That(factory.CurrentOrderCost, Is.EqualTo(24));
         Assert.That(factory.TryInsertBlueprint(plan), Is.False);
-        Assert.That(bank.CurrentPoints, Is.EqualTo(9), "An unaffordable two-worker order must not charge either person.");
+        Assert.That(bank.CurrentPoints, Is.EqualTo(12), "An unaffordable two-worker order must not charge either person.");
     }
 
     private void PrepareFireProtection(int batches)
@@ -84,6 +90,9 @@ public sealed partial class CardAbilityPointsPlayModeTests
         var plan = Research(Person(), UpgradeKind.Fire);
         for (int i = 0; i < batches; i++)
         {
+            // Multi-order fixtures span worker turns while preserving their AP accounting.
+            if (game.Cards.Count(card => card.Kind == CardKind.Person && card.CanStartWork && !card.IsStored) < 2)
+                game.ResetTurnPeople();
             Assert.That(factoryStation.TryAssign(Person()), Is.True);
             Produce(plan);
         }
@@ -95,8 +104,9 @@ public sealed partial class CardAbilityPointsPlayModeTests
     public IEnumerator TwoFireProtectedHousesPayTwentyAPAndKeepTheirEarlierSystems()
     {
         yield return ReachFire();
+        bank.AddPoints(4); // Cover the second factory worker while preserving the carried balance.
         PrepareFireProtection(1);
-        Assert.That(bank.CurrentPoints, Is.EqualTo(10));
+        Assert.That(bank.CurrentPoints, Is.EqualTo(2));
         yield return new WaitForSecondsRealtime(1.6f);
         round.Ready();
         Until(() => round.RoundNumber == 4);
@@ -105,7 +115,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(round.LastProtectedHouseCount, Is.EqualTo(2));
         Assert.That(round.LastSurvivalReward, Is.EqualTo(20));
         Assert.That(round.LastRoundGrant, Is.EqualTo(6));
-        Assert.That(bank.CurrentPoints, Is.EqualTo(36), "10 carried + 20 survival + 6 turn bonus.");
+        Assert.That(bank.CurrentPoints, Is.EqualTo(28), "2 carried + 20 survival + 6 turn bonus.");
         Assert.That(houses.All(house => house.House.GetInstalled(UpgradeKind.RailSystem) != null &&
             house.House.GetInstalled(UpgradeKind.Breakwater) != null), Is.True);
         AssertFreshPeople(Array.Empty<DraggableCard>());
@@ -115,7 +125,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
     public IEnumerator FourFireProtectedHousesPayFortyAPExactlyOnce()
     {
         yield return ReachFire();
-        bank.AddPoints(2);
+        bank.AddPoints(26); // Fund one researcher and two complete factory crews.
         PrepareFireProtection(2);
         Assert.That(bank.CurrentPoints, Is.Zero);
         yield return new WaitForSecondsRealtime(1.6f);

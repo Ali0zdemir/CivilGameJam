@@ -36,10 +36,10 @@ public sealed partial class CardGamePlayModeTests
         InvokeCity(tsunami, "AdvanceTsunami", .1f);
         Assert.That(collapses.Any(collapse => collapse.HasCollapsed), Is.False, "Wait for actual flood contact.");
         var shoreArrival = (ControlField<float>(tsunami, "shorelineDistance") - ControlField<float>(tsunami, "startDistance")) /
-            ControlField<float>(tsunami, "waveSpeed");
+            tsunami.WaveSpeed;
         var beforeArrival = Object.FindFirstObjectByType<SeaMonsterEmergence>().WaveReleaseDelay + shoreArrival - .1f;
         InvokeCity(tsunami, "AdvanceTsunami", beforeArrival - ControlField<float>(tsunami, "sequenceElapsed"));
-        Assert.That(collapses.Any(collapse => collapse.HasCollapsed), Is.False, "Slowing the wave must also delay its first building contact.");
+        Assert.That(collapses.Any(collapse => collapse.HasCollapsed), Is.False, "Buildings wait for contact with the incoming wave at its active speed.");
         InvokeCity(tsunami, "AdvanceTsunami", 1.4f);
         Assert.That(collapses[1].HasCollapsed, Is.False, "Elevator protection survives the tsunami.");
         foreach (int i in new[] { 0, 2, 3 }) Assert.That(collapses[i].HasCollapsed, Is.True, "Reached apartment " + i);

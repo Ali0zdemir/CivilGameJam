@@ -24,12 +24,12 @@ namespace CivilGameJam.Disasters
         [Tooltip("Play the roar this many seconds after the offscreen earthquake starts.")]
         [SerializeField, Min(0f)] private float earthquakeRoarDelay = 2f;
         [Tooltip("Show the boss tsunami result this many seconds after the last affected house finishes collapsing.")]
-        [SerializeField, Min(0f)] private float tsunamiAftermathSeconds = 3f;
+        [SerializeField, Min(0f)] private float tsunamiAftermathSeconds = 1f;
 
         [Header("Sequence camera")]
         [SerializeField, Range(1f, 1.6f)] private float cameraZoomFactor = 1.3f;
         [SerializeField, Min(0.1f)] private float cameraZoomSeconds = 1.8f;
-        [SerializeField, Min(0.1f)] private float cameraReturnSeconds = 1.8f;
+        [SerializeField, Min(0.1f)] private float cameraReturnSeconds = 0.8f;
 
         [Header("Saved test menu")]
         [SerializeField, Range(1, 3)] private int selectedSequence = 1;
@@ -59,7 +59,7 @@ namespace CivilGameJam.Disasters
         public bool HouseEffectsFinished => results == null || results.HouseEffectsFinished;
         public bool IsEarthquakeRoarPlaying => offscreenEarthquake && roarPlayed && earthquakeRoar != null && earthquakeRoar.isPlaying;
         public float TsunamiAftermathSeconds => Mathf.Max(0f, tsunamiAftermathSeconds);
-        private bool HasFinishedTsunamiAftermath => ActiveSequence < 2 || tsunamiAftermathElapsed + .0001f >= TsunamiAftermathSeconds;
+        private bool HasFinishedTsunamiAftermath => ActiveSequence != 2 || tsunamiAftermathElapsed + .0001f >= TsunamiAftermathSeconds;
         private bool TsunamiCollapsesFinished => tsunami.HasFinishedHouseCollapses && (results == null || results.HouseCollapseAnimationsFinished);
         public bool PresentationFinished => (ActiveSequence == 2 && TsunamiCollapsesFinished || HouseEffectsFinished) &&
             !IsEarthquakeRoarPlaying && HasFinishedTsunamiAftermath && (ActiveSequence <= 2 || !tsunami.IsRunning);
@@ -163,21 +163,21 @@ namespace CivilGameJam.Disasters
         private void AdvanceSequence(float deltaTime)
         {
             if (!IsRunning) return;
-            if (ActiveSequence >= 2)
+            if (ActiveSequence == 2)
             {
-                if (ActiveSequence == 2 && TsunamiCollapsesFinished ||
+                if (TsunamiCollapsesFinished ||
                     tsunami.HasReachedCityEnd && !earthquake.IsRunning && HouseEffectsFinished)
                 {
                     if (tsunamiAftermathStarted) tsunamiAftermathElapsed += Mathf.Max(0f, deltaTime);
                     else
                     {
                         tsunamiAftermathStarted = true;
-                        if (ActiveSequence == 2) tsunami.BeginSequenceRecession(TsunamiAftermathSeconds);
+                        tsunami.BeginSequenceRecession(TsunamiAftermathSeconds);
                     }
                 }
                 else { tsunamiAftermathStarted = false; tsunamiAftermathElapsed = 0f; }
                 // A tsunami report follows the final collapse, independently of the boss's remaining route.
-                if (ActiveSequence == 2 && HasFinishedTsunamiAftermath)
+                if (HasFinishedTsunamiAftermath)
                 {
                     FinishRoundPresentation();
                     return;
@@ -216,7 +216,7 @@ namespace CivilGameJam.Disasters
                     }
                     if (ActiveSequence == 3)
                     {
-                        if (earthquake.IsRunning || tsunami.IsRunning || !HasFinishedTsunamiAftermath) return;
+                        if (earthquake.IsRunning || tsunami.IsRunning) return;
                         fire.StartFire();
                         FocusCity(monster.Model);
                         Stage = MonsterSequenceStage.Fire;

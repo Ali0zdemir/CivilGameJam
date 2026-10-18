@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace CivilGameJam.Disasters
 {
-    /// <summary>Animates alternating, planted steps using the saved cube limbs.</summary>
+    /// <summary>Animates alternating, planted steps using the saved monster's limb controls.</summary>
     [DisallowMultipleComponent]
     public sealed class SeaMonsterWalk : MonoBehaviour
     {
