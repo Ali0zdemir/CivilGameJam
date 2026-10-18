@@ -145,7 +145,7 @@ public sealed class CardSceneEditModeTests
         Assert.That(hover, Is.Not.Null);
         Assert.That(hover.Details, Is.Not.Null);
         bool product = card.Kind == CardKind.Upgrade;
-        Assert.That(hover.Details.localScale, Is.EqualTo(Vector3.one * (product ? 1f : card.IsPerson ? 0.7176f : 0.8f)));
+        Assert.That(hover.Details.localScale, Is.EqualTo(Vector3.one * (product ? 1f : card.IsPerson ? 0.7176f : card.Kind == CardKind.Blueprint ? .96968f : .8f)));
         Assert.That(hover.Details.GetComponentsInChildren<Image>(true).Length, Is.EqualTo(product ? 0 : card.Kind == CardKind.House ? 4 : card.IsBuilding ? 1 : 2));
         int labels = hover.Details.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true).Length;
         if (card.Kind == CardKind.House) Assert.That(labels, Is.GreaterThanOrEqualTo(8), "Authored house details may have extra decorative labels.");
@@ -251,7 +251,7 @@ public sealed class CardSceneEditModeTests
             Assert.That(card.Rect.sizeDelta, Is.EqualTo(new Vector2(200f, 280f)));
             var inventoryName = prefab.transform.Find("InventoryName").GetComponent<TMPro.TMP_Text>();
             string inventoryTitle = card.UpgradeType == UpgradeKind.RailSystem ? "Rail System"
-                : card.UpgradeType == UpgradeKind.Breakwater ? "Elevator" : "Fire Sprinkler";
+                : card.UpgradeType == UpgradeKind.Breakwater ? "Elevated Floor" : "Fire Sprinkler";
             Assert.That(inventoryName.text, Is.EqualTo(inventoryTitle));
             Assert.That(inventoryName.gameObject.activeSelf, Is.True);
             Assert.That(inventoryName.raycastTarget, Is.False);

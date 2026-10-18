@@ -58,15 +58,16 @@ namespace CivilGameJam.Cards.Editor
             gameData.ApplyModifiedPropertiesWithoutUndo();
             var round = Object.FindFirstObjectByType<EarthquakeRoundController>();
             var roundData = new SerializedObject(round);
-            roundData.FindProperty("tsunamiPointsPerProtectedHouse").intValue = 6;
+            roundData.FindProperty("tsunamiPointsPerProtectedHouse").intValue = 9;
             roundData.FindProperty("firePointsPerProtectedHouse").intValue = 10;
-            roundData.FindProperty("afterEarthquakeRoundPoints").intValue = 6;
+            roundData.FindProperty("tsunamiRoundPoints").intValue = 12;
+            roundData.FindProperty("fireRoundPoints").intValue = 16;
             roundData.FindProperty("bossDepartureSeconds").floatValue = 10f;
             roundData.ApplyModifiedPropertiesWithoutUndo();
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene);
             AssetDatabase.SaveAssets();
-            Debug.Log("Saved native artwork drop outlines, School 6.25s, tsunami research 9/3 AP and factory 8/4 AP (normal/educated), fire school 4 AP, research and factory 12/4 AP, fire survival 10 AP, post-earthquake turn bonus 6 AP and boss departure 10s.");
+            Debug.Log("Saved native artwork drop outlines, School 6.25s, tsunami research 9/3 AP and factory 8/4 AP (normal/educated), fire school 4 AP, research and factory 12/4 AP, tsunami survival 9 AP per house, fire survival 10 AP, tsunami turn bonus 12 AP and fire turn bonus 16 AP and boss departure 10s.");
         }
 
         private static Image VaultReturnFrame(RectTransform area)

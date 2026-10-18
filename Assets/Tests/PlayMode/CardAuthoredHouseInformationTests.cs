@@ -69,7 +69,7 @@ public sealed partial class CardGamePlayModeTests
         var buildings = game.Cards.Where(card => card.IsBuilding).ToArray();
         var appearances = buildings.Select(card => CaptureInformationAppearance(card.GetComponent<CardHover>().Details)).ToArray();
         var houses = buildings.Where(card => card.Kind == CardKind.House).Select(card => card.GetComponent<HouseUpgrades>()).ToArray();
-        string[] names = { "Rail System", "Elevator", "Fire Protection" };
+        string[] names = { "Rail System", "Elevated Floor", "Fire Protection" };
         string[] descriptions = { "Earthquake resistant.", "Flood resistant.", "Fire resistant." };
         for (int i = 0; i < 3; i++)
         {

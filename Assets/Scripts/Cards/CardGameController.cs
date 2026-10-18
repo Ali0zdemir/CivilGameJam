@@ -93,7 +93,7 @@ namespace CivilGameJam.Cards
         public BlueprintVault Vault => vault;
         public CardSidebar Sidebar => sidebar;
         public AbilityPoints AbilityPoints => abilityPoints;
-        public bool ActionsLocked => abilityPoints != null && abilityPoints.ActionsLocked;
+        public bool ActionsLocked => Time.timeScale <= 0f || abilityPoints != null && abilityPoints.ActionsLocked;
         public bool BuildingPlacementLocked => ActionsLocked || grid != null && grid.IsPlacementLocked;
         public bool IsChoosingBlueprint => choosingStation != null;
         public bool HasUndiscoveredBlueprints

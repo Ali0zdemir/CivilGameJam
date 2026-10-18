@@ -146,6 +146,7 @@ namespace CivilGameJam.Upgrades
 
         private void Update()
         {
+            if (Time.timeScale <= 0f) return;
             if (!managedExternally && IsTransitioning) AdvanceTransition(Time.unscaledDeltaTime);
         }
 

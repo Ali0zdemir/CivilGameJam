@@ -44,7 +44,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(sequence.Results.IsVisible, Is.True);
         Assert.That(clock - lastFall, Is.EqualTo(4f).Within(.06f), "Add three seconds to the saved one-second delay after the final authored collapse.");
         AssertVisibleTsunamiRuins();
-        Assert.That(bank.CurrentPoints, Is.EqualTo(24));
+        Assert.That(bank.CurrentPoints, Is.EqualTo(30));
     }
 
     [UnityTest]
@@ -115,12 +115,12 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(round.RoundNumber, Is.EqualTo(3));
         Assert.That(sequence.Results.IsVisible, Is.True);
         Assert.That(sequence.Results.DestroyedHouseCount, Is.EqualTo(4));
-        Assert.That(bank.CurrentPoints, Is.EqualTo(24));
+        Assert.That(bank.CurrentPoints, Is.EqualTo(30));
         Assert.That(houses.All(house => house.House.IsDestroyed), Is.True, "The watch must keep damage behind the eventual report.");
         AssertVisibleTsunamiRuins();
         sequence.Results.Retry();
         Assert.That(houses.Any(house => house.House.IsDestroyed), Is.False);
-        Assert.That(bank.CurrentPoints, Is.EqualTo(24));
+        Assert.That(bank.CurrentPoints, Is.EqualTo(30));
     }
 
     private void AssertVisibleTsunamiRuins()
@@ -153,6 +153,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
         // These fixtures isolate planning prices with a fixed 18 AP budget; the uninterrupted
         // handoff and STOP/retry tests verify the actual deferred award separately.
         Set(round, "pendingTransitionPoints", 0);
+        Set(round, "pendingClearedStage", 0);
         bank.AddPoints(18);
         Assert.That(bank.CurrentPoints, Is.EqualTo(18));
         AssertFreshPeople(System.Array.Empty<DraggableCard>());
@@ -222,7 +223,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
     }
 
     [UnityTest]
-    public IEnumerator FourWaterProtectedHousesPayTwentyFourAPAndUnlockFireKeepingBothSystems()
+    public IEnumerator FourElevatedHousesContinueIntoFireAndDelayRewardsUntilTheEntirePresentationEnds()
     {
         yield return ReachTsunami();
         // Carried AP cover one researcher and two complete factory crews.
@@ -241,10 +242,13 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(round.SequenceNumber, Is.EqualTo(3));
         Assert.That(round.LastRoundSurvived, Is.True);
         Assert.That(round.LastProtectedHouseCount, Is.EqualTo(4));
-        Assert.That(round.LastSurvivalReward, Is.EqualTo(24));
+        Assert.That(round.LastSurvivalReward, Is.EqualTo(36));
         Assert.That(Field<float>(sequence, "tsunamiAftermathElapsed"), Is.GreaterThanOrEqualTo(sequence.TsunamiAftermathSeconds - .0001f));
-        Assert.That(round.LastRoundGrant, Is.EqualTo(6));
-        Assert.That(bank.CurrentPoints, Is.EqualTo(30), "0 unspent + 24 water survival + 6 turn bonus.");
+        Assert.That(round.LastRoundGrant, Is.EqualTo(16));
+        Assert.That(bank.CurrentPoints, Is.Zero, "Water survival is recorded before fire, and paid after the complete presentation.");
+        Assert.That(Field<int>(round, "pendingTransitionPoints"), Is.EqualTo(52));
+        Assert.That(sequence.Results.IsVisible, Is.False);
+        Assert.That(bank.ActionsLocked && navigation.InputBlocked, Is.True);
         AssertFreshPeople(previousPeople);
         for (int i = 0; i < houses.Length; i++)
         {
@@ -257,16 +261,113 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(game.CanUseBlueprint(UpgradeKind.Fire), Is.True);
         Assert.That(sequence.SelectedSequence, Is.EqualTo(3));
         Assert.That(round.CanReady, Is.False);
+        var flames = Field<FireTestController>(round, "fire");
+        var walk = Object.FindFirstObjectByType<SeaMonsterWalk>();
+        var monster = Object.FindFirstObjectByType<SeaMonsterEmergence>().Model;
+        var stance = monster.position;
+        Until(() => flames.IsRunning);
+        Assert.That(sequence.Stage, Is.EqualTo(MonsterSequenceStage.Fire));
+        Assert.That(Vector3.Distance(monster.position, stance), Is.LessThan(.001f), "The same boss must continue from its planted stance.");
+        Assert.That(walk.HasStartedAfterEventWalk, Is.False);
+        Assert.That(Field<TsunamiTestController>(round, "tsunami").IsRunning || earthquake.IsRunning, Is.False);
+        var breath = Object.FindFirstObjectByType<SeaMonsterFireBreath>();
+        Step(breath.FlameStartTime + .2f);
+        Assert.That(breath.Lean, Is.GreaterThan(.99f), "The player must see the aimed fire breath.");
+        Assert.That(sequence.Results.IsVisible, Is.False);
+        Assert.That(bank.CurrentPoints, Is.Zero);
+        Until(() => !flames.IsRunning);
+        Assert.That(Field<float>(flames, "elapsed"), Is.GreaterThanOrEqualTo(flames.TestDuration - .001f), "Do not finish the fire early.");
+        Until(() => sequence.Results.IsVisible);
+        Assert.That(round.RoundNumber, Is.EqualTo(4));
+        Assert.That(round.SequenceNumber, Is.EqualTo(3));
+        Assert.That(round.LastRoundSurvived, Is.False);
+        Assert.That(sequence.Results.DestroyedHouseCount, Is.EqualTo(4));
+        Assert.That(bank.CurrentPoints, Is.EqualTo(68), "52 deferred water AP plus the first fire turn's sixteen-AP bonus.");
+        Assert.That(sequence.Results.ClearedStage, Is.EqualTo(2), "The fire reveal must not hide the completed tsunami milestone.");
+        Assert.That(Field<TMP_Text>(sequence.Results, "titleLabel").text, Is.EqualTo("TSUNAMI STAGE CLEARED"));
+        Assert.That(Field<TMP_Text>(sequence.Results, "earnedPointsCount").text, Is.EqualTo("+68"));
+        Assert.That(houses.All(house => sequence.WasHouseBurnt(house.Building)), Is.True);
+        for (int i = 0; i < 4; i++) round.AdvanceRound(100f);
+        Assert.That(bank.CurrentPoints, Is.EqualTo(68), "The transition may only award its AP once.");
         sequence.Results.Retry();
+        Assert.That(houses.Any(house => sequence.WasHouseBurnt(house.Building)), Is.False);
+        for (int i = 0; i < houses.Length; i++)
+        {
+            Assert.That(houses[i].House.GetInstalled(UpgradeKind.RailSystem), Is.SameAs(rails[i]));
+            Assert.That(houses[i].House.GetInstalled(UpgradeKind.Breakwater), Is.SameAs(elevators[i]));
+        }
         round.Ready();
         Assert.That(sequence.IsRunning && bank.ActionsLocked, Is.True);
         Assert.That(sequence.ActiveSequence, Is.EqualTo(3));
+        Assert.That(sequence.Stage, Is.EqualTo(MonsterSequenceStage.Emerging), "Later fire turns replay the complete cumulative route.");
         sequence.StopSequence(); round.AdvanceRound(0f);
-        Assert.That(bank.CurrentPoints, Is.EqualTo(30));
+        Assert.That(bank.CurrentPoints, Is.EqualTo(68));
     }
 
     [UnityTest]
-    public IEnumerator TwoElevatedHousesPayTwelveAPAndRetryWaterWithAllSeismicProtectionIntact()
+    public IEnumerator StoppingTheFirstFirePreservesTheTsunamiVictoryAndPaysItsDeferredAPOnlyAfterACompletedReplay()
+    {
+        yield return ReachTsunami();
+        bank.AddPoints(23);
+        PrepareElevators(2);
+        yield return new WaitForSecondsRealtime(1.6f);
+        round.Ready();
+        Until(() => round.SequenceNumber == 3);
+        var flames = Field<FireTestController>(round, "fire");
+        Until(() => flames.IsRunning);
+        Step(Object.FindFirstObjectByType<SeaMonsterFireBreath>().FlameStartTime + .2f);
+        Assert.That(sequence.Results.IsVisible, Is.False);
+        sequence.StopSequence(); round.AdvanceRound(0f); Invoke(navigation, "AdvanceNavigation", 2f);
+        Assert.That(round.SequenceNumber, Is.EqualTo(3));
+        Assert.That(round.RoundNumber, Is.EqualTo(3));
+        Assert.That(bank.CurrentPoints, Is.Zero);
+        Assert.That(Field<int>(round, "pendingTransitionPoints"), Is.EqualTo(52));
+        Assert.That(houses.All(house => house.House.GetInstalled(UpgradeKind.Breakwater) != null &&
+            house.Building.GetComponent<ApartmentUpgradeModel>().IsElevatorProtected), Is.True);
+        Assert.That(game.CanUseBlueprint(UpgradeKind.Breakwater), Is.False);
+        Assert.That(round.CanReady, Is.True);
+        round.Ready();
+        Assert.That(sequence.ActiveSequence, Is.EqualTo(3));
+        Until(() => sequence.Results.IsVisible);
+        Assert.That(bank.CurrentPoints, Is.EqualTo(68));
+        Assert.That(Field<int>(round, "pendingTransitionPoints"), Is.Zero);
+        for (int i = 0; i < 4; i++) round.AdvanceRound(100f);
+        Assert.That(bank.CurrentPoints, Is.EqualTo(68));
+    }
+
+    [UnityTest]
+    public IEnumerator FourElevatedHousesShowTheLiveFireBreathBeforeTheirResultsOpen()
+    {
+        yield return ReachTsunami();
+        bank.AddPoints(23);
+        PrepareElevators(2);
+        yield return new WaitForSecondsRealtime(1.6f);
+        var flames = Field<FireTestController>(round, "fire");
+        var breath = Object.FindFirstObjectByType<SeaMonsterFireBreath>();
+        bool sawWater = false, sawBreath = false;
+        float started = Time.realtimeSinceStartup;
+        round.Ready();
+        while (!sequence.Results.IsVisible && Time.realtimeSinceStartup - started < 90f)
+        {
+            sawWater |= Field<TsunamiTestController>(round, "tsunami").IsRunning;
+            if (flames.IsRunning)
+            {
+                sawBreath |= Field<float>(flames, "elapsed") >= breath.FlameStartTime + .1f;
+                Assert.That(bank.CurrentPoints, Is.Zero, "Keep AP locked until the fire and its animations finish.");
+                Assert.That(bank.ActionsLocked && navigation.InputBlocked, Is.True);
+            }
+            yield return null;
+        }
+        Assert.That(sawWater && sawBreath, Is.True, "A live, unmodified scene must show both disasters.");
+        Assert.That(sequence.Results.IsVisible, Is.True);
+        Assert.That(flames.IsRunning, Is.False);
+        Assert.That(Field<float>(flames, "elapsed"), Is.GreaterThanOrEqualTo(flames.TestDuration - .001f));
+        Assert.That(round.SequenceNumber, Is.EqualTo(3));
+        Assert.That(bank.CurrentPoints, Is.EqualTo(68));
+    }
+
+    [UnityTest]
+    public IEnumerator TwoElevatedHousesPayEighteenAPAndRetryWaterWithAllSeismicProtectionIntact()
     {
         yield return ReachTsunami();
         bank.AddPoints(12); // Nine AP research, two eight-AP workers and five AP carried.
@@ -278,9 +379,11 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(round.SequenceNumber, Is.EqualTo(2));
         Assert.That(round.LastRoundSurvived, Is.False);
         Assert.That(round.LastProtectedHouseCount, Is.EqualTo(2));
-        Assert.That(round.LastSurvivalReward, Is.EqualTo(12));
-        Assert.That(round.LastRoundGrant, Is.EqualTo(6));
-        Assert.That(bank.CurrentPoints, Is.EqualTo(23));
+        Assert.That(round.LastSurvivalReward, Is.EqualTo(18));
+        Assert.That(sequence.Results.ClearedStage, Is.Zero, "Two elevated houses cannot clear the tsunami stage.");
+        Assert.That(Field<TMP_Text>(sequence.Results, "titleLabel").text, Is.EqualTo("TSUNAMI STAGE NOT CLEARED"));
+        Assert.That(round.LastRoundGrant, Is.EqualTo(12));
+        Assert.That(bank.CurrentPoints, Is.EqualTo(35));
         Assert.That(houses.All(house => house.House.GetInstalled(UpgradeKind.RailSystem) != null &&
             house.Building.GetComponent<ApartmentUpgradeModel>().HasSeismic), Is.True);
         Assert.That(houses.Count(house => house.House.GetInstalled(UpgradeKind.Breakwater) != null), Is.EqualTo(2));

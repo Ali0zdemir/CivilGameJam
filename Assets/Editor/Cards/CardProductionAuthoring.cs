@@ -14,7 +14,7 @@ namespace CivilGameJam.Cards.Editor
     {
         private static readonly string[] Plans = { "RaylıSistemBlueprint", "DalgaKıranBlueprint", "YangınBlueprint" };
         private static readonly string[] Products = { "RaylıSistemCard", "DalgaKıranCard", "YangınCard" };
-        private static readonly string[] Titles = { "Rail System", "Elevator", "Fire Protection" };
+        private static readonly string[] Titles = { "Rail System", "Elevated Floor", "Fire Protection" };
         private static readonly Color Ink = new Color(0.22f, 0.19f, 0.14f);
         private static readonly Color Gold = new Color(0.85f, 0.64f, 0.26f);
         private const string FactoryWorkerInfo = "Workers combine effort.\nEducated workers are faster.\nWorkers are kept.";

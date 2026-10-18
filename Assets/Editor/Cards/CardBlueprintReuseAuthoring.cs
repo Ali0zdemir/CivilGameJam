@@ -59,7 +59,6 @@ namespace CivilGameJam.Cards.Editor
                 SetText(slot.CardRect.Find("HoverDetails/Properties/Description"),
                     "Reusable from the Vault.\nEach order makes 2 items.");
             var choice = game.transform.Find("BlueprintChoice");
-            SetText(choice.Find("SelectionWindow/Footer"), "Blueprints return to the Vault after production.");
             SetText(choice.Find("SelectionWindow/Description"), "Discover once · Reuse from the Vault · Produces 2 items per order");
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene);

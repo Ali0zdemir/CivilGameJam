@@ -54,7 +54,7 @@ namespace CivilGameJam.Cards.Editor
                     title.font = TMP_Settings.defaultFontAsset;
                     title.fontSharedMaterial = material;
                     title.text = card.UpgradeType == UpgradeKind.RailSystem ? "Rail System" :
-                        card.UpgradeType == UpgradeKind.Breakwater ? "Elevator" : "Fire Sprinkler";
+                        card.UpgradeType == UpgradeKind.Breakwater ? "Elevated Floor" : "Fire Sprinkler";
                     title.color = Color.white;
                     title.fontStyle = FontStyles.Bold;
                     title.fontSize = 40f;

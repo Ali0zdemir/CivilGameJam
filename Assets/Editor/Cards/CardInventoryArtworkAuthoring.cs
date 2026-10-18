@@ -13,7 +13,7 @@ namespace CivilGameJam.Cards.Editor
     {
         private static readonly string[] Plans = { "RaylıSistemBlueprint", "DalgaKıranBlueprint", "YangınBlueprint" };
         private static readonly string[] Art = { "Seismic Big Card (1)", "Elevated Floor Big Card", "Detector Big Card" };
-        private static readonly string[] Titles = { "Rail System", "Elevator", "Fire Protection" };
+        private static readonly string[] Titles = { "Rail System", "Elevated Floor", "Fire Protection" };
 
         [MenuItem("Tools/Card Game/Save New Blueprint Artwork and Free People Area")]
         public static void SaveForBatch()

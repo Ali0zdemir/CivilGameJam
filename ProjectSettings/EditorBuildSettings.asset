@@ -6,6 +6,9 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
+    path: Assets/Scenes/MainMenuBackup.unity
+    guid: e009f47672361dd4a9173ccd93cf1ed5
+  - enabled: 1
     path: Assets/2DCardScene.unity
     guid: 3b5563ee666d22f46a87b399d630596f
   - enabled: 1

@@ -225,7 +225,8 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(sequence.ActiveSequence, Is.EqualTo(1)); Assert.That(bank.ActionsLocked, Is.True);
         Assert.That(school.TryAssign(Person()), Is.False); Assert.That(houses[0].House.Release(UpgradeKind.RailSystem), Is.Null);
         Assert.That(bank.TrySpend(0), Is.False); Invoke(round, "LateUpdate");
-        foreach (var button in Field<Button[]>(round, "debugStartButtons")) Assert.That(button.interactable, Is.False);
+        foreach (var button in Field<Button[]>(round, "debugStartButtons").Where(button => button != null))
+            Assert.That(button.interactable, Is.False);
         Until(() => houses[2].House.IsDestroyed);
         float elapsedSinceFirstCollapse = Field<float>(round, "collapseElapsed");
         round.AdvanceRound(Mathf.Max(0f, round.NextTurnAfterCollapseSeconds - elapsedSinceFirstCollapse - .01f));
@@ -235,8 +236,8 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Until(() => round.RoundNumber == 2);
         Assert.That(round.Phase, Is.EqualTo(EarthquakeRoundPhase.NextRoundPreparation));
         Assert.That(round.RoundNumber, Is.EqualTo(2)); Assert.That(round.SequenceNumber, Is.EqualTo(1));
-        Assert.That(round.LastRoundSurvived, Is.False); Assert.That(bank.CurrentPoints, Is.EqualTo(16));
-        Assert.That(round.LastProtectedHouseCount, Is.EqualTo(2)); Assert.That(round.LastSurvivalReward, Is.EqualTo(6));
+        Assert.That(round.LastRoundSurvived, Is.False); Assert.That(bank.CurrentPoints, Is.EqualTo(18));
+        Assert.That(round.LastProtectedHouseCount, Is.EqualTo(2)); Assert.That(round.LastSurvivalReward, Is.EqualTo(8));
         AssertFreshPeople(oldPeople);
         Assert.That(houses.Count(house => house.House.IsDestroyed), Is.EqualTo(2));
         Assert.That(houses.Count(house => house.House.GetInstalled(UpgradeKind.RailSystem) != null), Is.EqualTo(2), "Keep the completed city's appearance behind its report.");
@@ -256,7 +257,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
             "A failed earthquake keeps research restricted on the next preparation turn.");
         for (int i = 0; i < 4; i++) Assert.That(houses[i].Building.Find("Apartment_Ground").position, Is.EqualTo(grounds[i]));
         for (int i = 0; i < 6; i++) round.AdvanceRound(100f);
-        Assert.That(bank.CurrentPoints, Is.EqualTo(16), "A transition must not pay twice.");
+        Assert.That(bank.CurrentPoints, Is.EqualTo(18), "A transition must not pay twice.");
         Until(() => !navigation.IsEventCameraActive);
         yield return new WaitForSecondsRealtime(.5f);
         Assert.That(round.CanReady, Is.True);
@@ -272,12 +273,12 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Until(() => round.SequenceNumber == 2);
         Assert.That(round.LastRoundSurvived, Is.True); Assert.That(round.SequenceNumber, Is.EqualTo(2));
         Assert.That(sequence.SelectedSequence, Is.EqualTo(2));
-        Assert.That(round.LastProtectedHouseCount, Is.EqualTo(4)); Assert.That(round.LastSurvivalReward, Is.EqualTo(12));
+        Assert.That(round.LastProtectedHouseCount, Is.EqualTo(4)); Assert.That(round.LastSurvivalReward, Is.EqualTo(16));
         Assert.That(game.PeoplePerTurn, Is.EqualTo(5)); Assert.That(game.NormalPeopleCount, Is.EqualTo(5));
         Assert.That(sequence.IsRunning && bank.ActionsLocked, Is.True, "Water follows the protected earthquake without another READY.");
         sequence.StopSequence(); round.AdvanceRound(0f); Invoke(navigation, "AdvanceNavigation", 2f);
         Assert.That(bank.CurrentPoints, Is.Zero); Assert.That(round.CanReady, Is.True);
-        Assert.That(round.LastRoundGrant, Is.EqualTo(6), "The first Tsunami preparation already uses the smaller bonus.");
+        Assert.That(round.LastRoundGrant, Is.EqualTo(12), "The first Tsunami preparation uses its own increased bonus.");
         bank.AddPoints(18); // Isolate obsolete-plan interactions from the deferred disaster payout.
         for (int i = 0; i < houses.Length; i++)
         {
@@ -296,7 +297,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(factoryStation.GetWorker(0).UsedThisTurn, Is.False);
         factoryStation.ReleaseWorker(0, false);
         var caption = Field<TextMeshProUGUI>(game.Vault.SlotFor(UpgradeKind.RailSystem), "discovery");
-        Assert.That(caption.text, Is.EqualTo("COMPLETED"));
+        Assert.That(caption.text, Is.EqualTo("Earthquake Blueprint"));
         Assert.That(game.CanUseBlueprint(UpgradeKind.Breakwater) && game.CanUseBlueprint(UpgradeKind.Fire), Is.True);
         Assert.That(game.CanResearchBlueprint(UpgradeKind.Breakwater) && game.CanResearchBlueprint(UpgradeKind.Fire), Is.True,
             "Clearing the earthquake opens the other undiscovered protection blueprints.");
@@ -394,15 +395,15 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(products.Length, Is.EqualTo(4));
         for (int i = 0; i < 4; i++) Assert.That(houses[i].House.TryInstall(products[i]), Is.True);
         yield return new WaitForSecondsRealtime(1.6f);
-        Assert.That(bank.CurrentPoints, Is.EqualTo(3)); round.Ready();
+        Assert.That(bank.CurrentPoints, Is.EqualTo(5)); round.Ready();
         Until(() => round.RoundNumber == 3);
         Assert.That(Field<TMP_Text>(round, "roundLabel").text, Is.EqualTo("3"));
         Assert.That(round.SequenceNumber, Is.EqualTo(2)); Assert.That(round.LastRoundSurvived, Is.True);
-        Assert.That(bank.CurrentPoints, Is.EqualTo(3), "Keep carried AP unchanged until the following tsunami has completed.");
+        Assert.That(bank.CurrentPoints, Is.EqualTo(5), "Keep carried AP unchanged until the following tsunami has completed.");
         Assert.That(houses.All(house => house.House.GetInstalled(UpgradeKind.RailSystem) != null), Is.True);
         AssertFreshPeople(Array.Empty<DraggableCard>(), 5);
         Until(() => sequence.Results.IsVisible);
-        Assert.That(bank.CurrentPoints, Is.EqualTo(27), "Carry three AP, then pay the deferred eighteen and the tsunami's six AP together.");
+        Assert.That(bank.CurrentPoints, Is.EqualTo(45), "Carry five AP, then pay 28 deferred earthquake AP and 12 tsunami retry AP together.");
     }
 
     [Test]
@@ -488,7 +489,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(round.LastRoundSurvived, Is.False);
         Assert.That(round.LastProtectedHouseCount, Is.Zero);
         Assert.That(round.LastSurvivalReward, Is.Zero, "Seismic cards alone do not earn a water survival reward.");
-        Assert.That(bank.CurrentPoints, Is.EqualTo(24));
+        Assert.That(bank.CurrentPoints, Is.EqualTo(40));
         Assert.That(houses.All(house => house.House.GetInstalled(UpgradeKind.RailSystem) != null), Is.True);
         Assert.That(houses.All(house => house.Building.GetComponent<ApartmentTsunamiCollapse>().HasCollapsed), Is.True);
         sequence.Results.Retry();
@@ -604,9 +605,13 @@ public sealed partial class CardAbilityPointsPlayModeTests
         var winningProducts = game.Cards.Where(card => card.Kind == CardKind.Upgrade && card.UpgradeType == UpgradeKind.Breakwater).ToArray();
         for (int i = 0; i < 4; i++) Assert.That(houses[i].House.TryInstall(winningProducts[i]), Is.True);
         yield return new WaitForSecondsRealtime(1.6f);
-        round.Ready(); Until(() => sequence.Results.IsVisible);
+        round.Ready(); Until(() => round.SequenceNumber == 3);
         Assert.That(round.LastRoundSurvived, Is.True); Assert.That(round.SequenceNumber, Is.EqualTo(3));
-        Assert.That(sequence.Results.ProtectedHouseCount, Is.EqualTo(4));
+        Assert.That(round.LastProtectedHouseCount, Is.EqualTo(4));
+        Assert.That(sequence.Results.IsVisible, Is.False, "Complete the first fire reveal before opening the report.");
+        Until(() => sequence.Results.IsVisible);
+        Assert.That(round.LastRoundSurvived, Is.False);
+        Assert.That(sequence.Results.ProtectedHouseCount, Is.Zero);
         Assert.That(reward.gameObject.activeSelf, Is.False);
         sequence.Results.Retry();
         for (int i = 0; i < 4; i++) Assert.That(houses[i].House.GetInstalled(UpgradeKind.Breakwater), Is.SameAs(winningProducts[i]));

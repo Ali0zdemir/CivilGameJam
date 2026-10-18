@@ -19,9 +19,14 @@ public sealed partial class CardAbilityPointsPlayModeTests
         round.Ready();
         Until(() => round.RoundNumber == 3);
         Assert.That(round.SequenceNumber, Is.EqualTo(3));
-        Assert.That(bank.CurrentPoints, Is.EqualTo(30));
+        Assert.That(bank.CurrentPoints, Is.Zero, "Water rewards wait for the automatic fire presentation.");
+        Assert.That(Field<int>(round, "pendingTransitionPoints"), Is.EqualTo(52));
+        sequence.StopSequence(); round.AdvanceRound(0f); Invoke(navigation, "AdvanceNavigation", 2f);
         AssertFreshPeople(Array.Empty<DraggableCard>());
-        sequence.Results.Retry();
+        // These fixtures isolate prices at 30 AP; the continuous transition tests verify deferred rewards.
+        Set(round, "pendingTransitionPoints", 0);
+        Set(round, "pendingClearedStage", 0);
+        bank.AddPoints(30);
     }
 
     private static string Badge(BuildingStation station, string name) =>
@@ -113,9 +118,10 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(round.SequenceNumber, Is.EqualTo(3));
         Assert.That(round.LastRoundSurvived, Is.False);
         Assert.That(round.LastProtectedHouseCount, Is.EqualTo(2));
+        Assert.That(sequence.Results.ClearedStage, Is.Zero, "Two protected houses cannot win the game.");
         Assert.That(round.LastSurvivalReward, Is.EqualTo(20));
-        Assert.That(round.LastRoundGrant, Is.EqualTo(6));
-        Assert.That(bank.CurrentPoints, Is.EqualTo(28), "2 carried + 20 survival + 6 turn bonus.");
+        Assert.That(round.LastRoundGrant, Is.EqualTo(16));
+        Assert.That(bank.CurrentPoints, Is.EqualTo(38), "2 carried + 20 survival + 16 turn bonus.");
         Assert.That(houses.All(house => house.House.GetInstalled(UpgradeKind.RailSystem) != null &&
             house.House.GetInstalled(UpgradeKind.Breakwater) != null), Is.True);
         AssertFreshPeople(Array.Empty<DraggableCard>());
@@ -134,9 +140,13 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(round.LastRoundSurvived, Is.True);
         Assert.That(round.LastProtectedHouseCount, Is.EqualTo(4));
         Assert.That(round.LastSurvivalReward, Is.EqualTo(40));
-        Assert.That(bank.CurrentPoints, Is.EqualTo(46));
+        Assert.That(sequence.Results.ClearedStage, Is.EqualTo(3));
+        Assert.That(Field<TMP_Text>(sequence.Results, "titleLabel").text, Is.EqualTo("YOU WON!"));
+        Assert.That(Field<UnityEngine.UI.Button>(sequence.Results, "mainMenuButton").gameObject.activeInHierarchy, Is.True);
+        Assert.That(Field<UnityEngine.UI.Button>(sequence.Results, "retryButton").gameObject.activeSelf, Is.False);
+        Assert.That(bank.CurrentPoints, Is.EqualTo(56));
         for (int i = 0; i < 6; i++) round.AdvanceRound(100f);
-        Assert.That(bank.CurrentPoints, Is.EqualTo(46), "A completed event cannot pay survival or turn rewards again.");
+        Assert.That(bank.CurrentPoints, Is.EqualTo(56), "A completed event cannot pay survival or turn rewards again.");
         AssertFreshPeople(Array.Empty<DraggableCard>());
     }
 }

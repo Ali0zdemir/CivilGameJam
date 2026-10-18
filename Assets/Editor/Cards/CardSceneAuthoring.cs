@@ -19,7 +19,7 @@ namespace CivilGameJam.Cards.Editor
         private static readonly Color NormalColor = new Color(0.94f, 0.63f, 0.18f);
         private static readonly Color EducatedColor = new Color(0.18f, 0.63f, 0.94f);
         private static readonly Color EmptyColor = new Color(0.23f, 0.27f, 0.31f);
-        private static readonly string[] BlueprintNames = { "Rail System", "Elevator", "Fire Protection" };
+        private static readonly string[] BlueprintNames = { "Rail System", "Elevated Floor", "Fire Protection" };
         private static readonly string[] BlueprintPaths = { "RaylıSistemBlueprint", "DalgaKıranBlueprint", "YangınBlueprint" };
         private static readonly string[] ProductPaths = { "RaylıSistemCard", "DalgaKıranCard", "YangınCard" };
 

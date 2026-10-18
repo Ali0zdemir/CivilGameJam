@@ -75,7 +75,11 @@ namespace CivilGameJam.Disasters
             return true;
         }
 
-        private void Update() => AdvanceCollapse(Time.unscaledDeltaTime);
+        private void Update()
+        {
+            if (Time.timeScale <= 0f) return;
+            AdvanceCollapse(Time.unscaledDeltaTime);
+        }
 
         private void AdvanceCollapse(float seconds)
         {

@@ -11,7 +11,7 @@ namespace CivilGameJam.Cards.Editor
 {
     public static class CardVaultAuthoring
     {
-        private static readonly string[] Titles = { "Rail System", "Elevator", "Fire Protection" };
+        private static readonly string[] Titles = { "Rail System", "Elevated Floor", "Fire Protection" };
         private static readonly Color Ink = new Color(0.055f, 0.10f, 0.12f);
         private static readonly Color Paper = new Color(0.89f, 0.95f, 0.93f);
         private static readonly Color Muted = new Color(0.57f, 0.72f, 0.73f);
@@ -167,9 +167,9 @@ namespace CivilGameJam.Cards.Editor
             if (!details.TryGetComponent<CanvasGroup>(out var group)) group = details.gameObject.AddComponent<CanvasGroup>();
             group.blocksRaycasts = false; group.interactable = false;
             BuildInfoPanel(details, "Information", 0f, Titles[index],
-                "Drag to the factory.\nProduction needs\nat least one worker.", new Color(0.68f, 0.90f, 0.46f));
+                index == 0 ? "Protect houses\nfrom earthquakes." : index == 1 ? "Protect houses\nfrom tsunamis." : "Protect houses\nfrom fires.", new Color(0.68f, 0.90f, 0.46f));
             BuildInfoPanel(details, "Properties", -122f, "PRODUCES 2 ITEMS",
-                "Ürünleri evdeki " + Titles[index] + " yuvasına tak.\nKeşif Vault'ta kalır.", Gold);
+                (index == 0 ? "1 person" : "2 people") + " in Factory.\nReusable blueprint.", Gold);
             details.gameObject.SetActive(false);
             var hover = slot.GetComponent<CardHover>() ?? slot.gameObject.AddComponent<CardHover>();
             Refs(hover, ("card", null), ("vaultSlot", slot), ("feedback", feedback), ("details", details));
@@ -205,8 +205,8 @@ namespace CivilGameJam.Cards.Editor
             Place(title.rectTransform, new Vector2(0.5f, 0.54f), new Vector2(0f, 310f), new Vector2(1160f, 72f), new Vector2(0.5f, 0.5f));
             var description = Text("Description", window, "Your plan goes to the Vault · Produces 2 items at the factory", 23f, Muted);
             AtTop(description, 24f, -144f, -24f, 38f);
-            var footer = Text("Footer", window, "Your discovery stays in the Vault after you use the plan.", 20f, Muted);
-            Place(footer.rectTransform, new Vector2(0.5f, 0f), new Vector2(0f, 55f), new Vector2(1160f, 40f), new Vector2(0.5f, 0.5f));
+            var oldFooter = window.Find("Footer");
+            if (oldFooter != null) Object.DestroyImmediate(oldFooter.gameObject);
             var settings = new SerializedObject(game);
             var options = settings.FindProperty("blueprints");
             for (int i = 0; i < options.arraySize; i++)
@@ -224,10 +224,15 @@ namespace CivilGameJam.Cards.Editor
                 Place(preview, new Vector2(0.5f, 0.62f), Vector2.zero, new Vector2(200f, 300f), new Vector2(0.5f, 0.5f));
                 preview.localScale = Vector3.one * 1.05f;
                 PrefabUtility.RecordPrefabInstancePropertyModifications(preview);
-                var label = button.transform.Find("Name").GetComponent<TextMeshProUGUI>();
-                label.text = Titles[i] + "\n2 KART"; label.fontStyle = FontStyles.Bold;
-                label.fontSize = label.fontSizeMax = 30f; label.fontSizeMin = 24f; label.color = Paper;
-                Stretch(label.rectTransform, new Vector2(0.04f, 0.04f), new Vector2(0.96f, 0.22f));
+                var labelBackground = Box("DisasterLabelBackground", button.transform, new Color(.035f, .045f, .07f, .94f));
+                Place(labelBackground, new Vector2(.5f, 0f), new Vector2(0f, 37f), new Vector2(310f, 70f), new Vector2(.5f, .5f));
+                labelBackground.SetAsLastSibling();
+                string disaster = i == 0 ? "EARTHQUAKE" : i == 1 ? "TSUNAMI" : "FIRE";
+                string color = i == 0 ? "FFAA55" : i == 1 ? "53B9FF" : "FF6767";
+                var label = Text("Name", button.transform, "<color=#" + color + ">" + disaster + "</color>\n" + Titles[i], 26f, Paper, FontStyles.Bold);
+                label.richText = true;
+                Place(label.rectTransform, new Vector2(.5f, 0f), new Vector2(0f, 37f), new Vector2(286f, 56f), new Vector2(.5f, .5f));
+                label.transform.SetAsLastSibling();
                 button.transform.SetAsLastSibling();
             }
             settings.ApplyModifiedPropertiesWithoutUndo();

@@ -66,11 +66,33 @@ public sealed class CardSequenceResultsEditModeTests
         Assert.That(((TMP_Text)data.FindProperty("earnedPointsLabel").objectReferenceValue).text, Is.EqualTo("AP EARNED"));
         Assert.That(data.FindProperty("earnedPointsCount").objectReferenceValue, Is.Not.Null);
         Assert.That(overlay.transform.Find("Card/Content/House_Statistic/Caption").GetComponent<TMP_Text>().text,
-            Is.EqualTo("PROTECTED HOUSES / TOTAL"));
+            Is.EqualTo("EARTHQUAKE - PROTECTED HOUSES"));
+        var content = overlay.transform.Find("Card/Content");
+        Assert.That(overlay.transform.Find("Card").GetComponent<Image>().sprite,
+            Is.SameAs(AssetDatabase.LoadAssetAtPath<Sprite>("Assets/EfeArts/Casualty Report.png")));
+        Assert.That(content.Find("House_Statistic/Small_House_Icon").GetComponent<Image>().sprite,
+            Is.SameAs(AssetDatabase.LoadAssetAtPath<Sprite>("Assets/EfeArts/Small_House_Icon.png")));
+        Assert.That(content.Find("CasualtyReportButtonArtwork").GetComponent<Image>().sprite,
+            Is.SameAs(AssetDatabase.LoadAssetAtPath<Sprite>("Assets/EfeArts/Casualty Report Button.png")));
+        Assert.That(content.Find("CasualtyReportButtonArtwork").GetComponent<Image>().raycastTarget, Is.False,
+            "The transparent part of the button artwork must not dismiss the report.");
+        foreach (string binding in new[] { "titleLabel", "outcomeLabel", "houseStatisticCaption" })
+            Assert.That(data.FindProperty(binding).objectReferenceValue, Is.Not.Null, binding);
         var retry = (Button)data.FindProperty("retryButton").objectReferenceValue;
         Assert.That(retry.onClick.GetPersistentEventCount(), Is.EqualTo(1));
         Assert.That(retry.onClick.GetPersistentTarget(0), Is.SameAs(results));
         Assert.That(retry.onClick.GetPersistentMethodName(0), Is.EqualTo("Retry"));
+        Assert.That(retry.GetComponentInChildren<TMP_Text>().text, Is.EqualTo("CONTINUE"));
+        var menu = (Button)data.FindProperty("mainMenuButton").objectReferenceValue;
+        Assert.That(menu, Is.Not.Null);
+        Assert.That(menu.gameObject.activeSelf, Is.False, "The menu button is only shown after winning.");
+        Assert.That(menu.GetComponentInChildren<TMP_Text>(true).text, Is.EqualTo("MAIN MENU"));
+        Assert.That(menu.onClick.GetPersistentEventCount(), Is.EqualTo(1));
+        Assert.That(menu.onClick.GetPersistentTarget(0), Is.SameAs(results));
+        Assert.That(menu.onClick.GetPersistentMethodName(0), Is.EqualTo("ReturnToMainMenu"));
+        Assert.That(menu.targetGraphic, Is.SameAs(retry.targetGraphic));
+        Assert.That(((RectTransform)menu.transform).anchoredPosition, Is.EqualTo(((RectTransform)retry.transform).anchoredPosition));
+        Assert.That(((RectTransform)menu.transform).sizeDelta, Is.EqualTo(((RectTransform)retry.transform).sizeDelta));
         var houses = data.FindProperty("houses"); Assert.That(houses.arraySize, Is.EqualTo(4));
         var saved = Enumerable.Range(0, houses.arraySize).Select(i => houses.GetArrayElementAtIndex(i).objectReferenceValue).ToArray();
         Assert.That(saved.Distinct().Count(), Is.EqualTo(4));

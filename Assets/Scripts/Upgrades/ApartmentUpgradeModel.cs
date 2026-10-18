@@ -142,6 +142,7 @@ namespace CivilGameJam.Upgrades
 
         private void Update()
         {
+            if (Time.timeScale <= 0f) return;
             if (!IsTransitioning) return;
             age += Time.unscaledDeltaTime;
             float t = Mathf.Clamp01(age / transitionDuration);

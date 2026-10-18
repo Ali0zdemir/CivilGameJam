@@ -258,7 +258,11 @@ namespace CivilGameJam.Upgrades
             return system;
         }
 
-        private void Update() { if (!managedExternally) AdvanceSprinkler(Time.unscaledDeltaTime); }
+        private void Update()
+        {
+            if (Time.timeScale <= 0f) return;
+            if (!managedExternally) AdvanceSprinkler(Time.unscaledDeltaTime);
+        }
 
         private void LateUpdate()
         {

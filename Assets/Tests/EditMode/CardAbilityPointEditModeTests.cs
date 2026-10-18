@@ -33,12 +33,13 @@ public sealed class CardAbilityPointEditModeTests
         Assert.That(bankData.FindProperty("startingPoints").intValue, Is.EqualTo(10));
         Assert.That(((TMP_Text)bankData.FindProperty("balanceLabel").objectReferenceValue).text, Is.EqualTo("10 AP"));
         var data = new SerializedObject(round);
-        Assert.That(data.FindProperty("pointsPerProtectedHouse").intValue, Is.EqualTo(3));
-        Assert.That(data.FindProperty("tsunamiPointsPerProtectedHouse").intValue, Is.EqualTo(6));
+        Assert.That(data.FindProperty("pointsPerProtectedHouse").intValue, Is.EqualTo(4));
+        Assert.That(data.FindProperty("tsunamiPointsPerProtectedHouse").intValue, Is.EqualTo(9));
         Assert.That(data.FindProperty("firePointsPerProtectedHouse").intValue, Is.EqualTo(10));
         Assert.That(data.FindProperty("bossDepartureSeconds").floatValue, Is.EqualTo(10));
         Assert.That(data.FindProperty("nextRoundPoints").intValue, Is.EqualTo(10));
-        Assert.That(data.FindProperty("afterEarthquakeRoundPoints").intValue, Is.EqualTo(6));
+        Assert.That(data.FindProperty("tsunamiRoundPoints").intValue, Is.EqualTo(12));
+        Assert.That(data.FindProperty("fireRoundPoints").intValue, Is.EqualTo(16));
         Assert.That(data.FindProperty("earthquakePeopleReward").intValue, Is.EqualTo(1));
         var resultsData = new SerializedObject(components.OfType<MonsterSequenceResults>().Single());
         var peopleReward = (TMP_Text)resultsData.FindProperty("peopleRewardLabel").objectReferenceValue;

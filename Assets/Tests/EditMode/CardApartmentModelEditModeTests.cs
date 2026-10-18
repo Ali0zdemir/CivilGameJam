@@ -120,6 +120,6 @@ public sealed class CardApartmentModelEditModeTests
         Assert.That(Object.FindObjectsByType<TMP_Text>(FindObjectsInactive.Include, FindObjectsSortMode.None)
             .Any(text => text.text.Contains("Breakwater")), Is.False);
         var house = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/HouseCard.prefab");
-        Assert.That(house.GetComponentsInChildren<TMP_Text>(true).Any(text => text.text == "Elevator"), Is.True);
+        Assert.That(house.GetComponentsInChildren<TMP_Text>(true).Any(text => text.text == "Elevated Floor"), Is.True);
     }
 }

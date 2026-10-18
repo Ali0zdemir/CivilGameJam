@@ -73,8 +73,8 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(round.Phase, Is.EqualTo(EarthquakeRoundPhase.Earthquake));
         Assert.That(round.LastRoundSurvived, Is.True);
         Assert.That(round.LastProtectedHouseCount, Is.EqualTo(4));
-        Assert.That(round.LastSurvivalReward, Is.EqualTo(12));
-        Assert.That(round.LastRoundGrant, Is.EqualTo(6));
+        Assert.That(round.LastSurvivalReward, Is.EqualTo(16));
+        Assert.That(round.LastRoundGrant, Is.EqualTo(12));
         Assert.That(bank.CurrentPoints, Is.Zero, "Earthquake rewards must wait until the uninterrupted tsunami is over.");
         Assert.That(bank.ActionsLocked && sequence.IsRunning && water.IsRunning, Is.True);
         Assert.That(round.CanReady || sequence.GetComponent<MonsterSequenceResults>().IsVisible, Is.False);
@@ -83,7 +83,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(houses.Select(house => house.House.GetInstalled(CivilGameJam.Cards.UpgradeKind.RailSystem)), Is.EqualTo(rails));
         Assert.That(houses.Any(house => house.House.IsDestroyed), Is.False);
         Assert.That(research.AbilityPointCost(CivilGameJam.Cards.CardKind.Person), Is.EqualTo(9));
-        Assert.That(factoryStation.AbilityPointCost(CivilGameJam.Cards.CardKind.Person), Is.EqualTo(10));
+        Assert.That(factoryStation.AbilityPointCost(CivilGameJam.Cards.CardKind.Person), Is.EqualTo(8));
         CaptureWorld("roar-earthquake-survived-before-water.png");
         Step(monster.WaveReleaseDelay + .1f);
         Assert.That(monster.Model.gameObject.activeSelf && wave.IsVisible, Is.True);
@@ -102,7 +102,9 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(round.LastRoundSurvived, Is.False);
         Assert.That(round.LastProtectedHouseCount, Is.Zero);
         Assert.That(round.LastSurvivalReward, Is.Zero);
-        Assert.That(bank.CurrentPoints, Is.EqualTo(24), "The deferred 18 earthquake AP and 6 tsunami retry AP arrive together at the final report.");
+        Assert.That(bank.CurrentPoints, Is.EqualTo(40), "The deferred 28 earthquake AP and 12 tsunami retry AP arrive together at the final report.");
+        Assert.That(sequence.Results.ClearedStage, Is.EqualTo(1));
+        Assert.That(Field<TMPro.TMP_Text>(sequence.Results, "titleLabel").text, Is.EqualTo("EARTHQUAKE STAGE CLEARED"));
         Assert.That(bank.ActionsLocked, Is.False);
         Assert.That(houses.Select(house => house.House.GetInstalled(CivilGameJam.Cards.UpgradeKind.RailSystem)), Is.EqualTo(rails));
         Assert.That(game.CanUseBlueprint(CivilGameJam.Cards.UpgradeKind.RailSystem), Is.False);
@@ -116,7 +118,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(water.IsRunning, Is.True);
         Assert.That(earthquake.IsEarthquakeAudioPlaying, Is.False, "A water-stage retry starts without an early earthquake sound.");
         sequence.StopSequence(); round.AdvanceRound(0f);
-        Assert.That(bank.CurrentPoints, Is.EqualTo(24));
+        Assert.That(bank.CurrentPoints, Is.EqualTo(40));
     }
 
     [UnityTest]
@@ -140,17 +142,17 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(bank.CurrentPoints, Is.Zero);
         Assert.That(sequence.Results.IsVisible, Is.False);
         Until(() => sequence.Results.IsVisible);
-        Assert.That(bank.CurrentPoints, Is.EqualTo(24));
+        Assert.That(bank.CurrentPoints, Is.EqualTo(40));
         var earned = Field<TMPro.TMP_Text>(sequence.Results, "earnedPointsCount");
-        Assert.That(earned.text, Does.Contain("24"), "The report must include the delayed earthquake award.");
+        Assert.That(earned.text, Does.Contain("40"), "The report must include the delayed earthquake award.");
         for (var i = 0; i < 5; i++) round.AdvanceRound(10f);
-        Assert.That(bank.CurrentPoints, Is.EqualTo(24));
+        Assert.That(bank.CurrentPoints, Is.EqualTo(40));
 
         sequence.Results.Retry();
         Invoke(navigation, "AdvanceNavigation", 2f);
         round.Ready();
         Until(() => sequence.Results.IsVisible);
-        Assert.That(bank.CurrentPoints, Is.EqualTo(30), "Later tsunami retries pay their own six AP without repeating the earthquake award.");
+        Assert.That(bank.CurrentPoints, Is.EqualTo(52), "Later tsunami retries pay their own twelve AP without repeating the earthquake award.");
     }
 
     [UnityTest]

@@ -31,7 +31,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(round.LastRoundSurvived, Is.False);
         Assert.That(round.LastProtectedHouseCount, Is.EqualTo(1));
         Assert.That(round.LastSurvivalReward, Is.EqualTo(10));
-        Assert.That(bank.CurrentPoints, Is.EqualTo(18), "2 carried + 10 survival + 6 turn bonus.");
+        Assert.That(bank.CurrentPoints, Is.EqualTo(28), "2 carried + 10 survival + 16 turn bonus.");
         var fire = Field<CivilGameJam.Disasters.FireTestController>(round, "fire");
         Assert.That(sequence.Results.IsVisible, Is.True);
         Assert.That(houses.Count(house => fire.WasHouseBurnt(house.Building)), Is.EqualTo(3));
@@ -90,7 +90,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
         round.Ready();
         Until(() => round.RoundNumber == 4);
         Assert.That(round.LastRoundSurvived, Is.True);
-        Assert.That(bank.CurrentPoints, Is.EqualTo(46));
+        Assert.That(bank.CurrentPoints, Is.EqualTo(56));
         for (int i = 0; i < houses.Length; i++)
         {
             Assert.That(houses[i].House.GetInstalled(UpgradeKind.Fire), Is.SameAs(systems[i]));

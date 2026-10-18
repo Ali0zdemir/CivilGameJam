@@ -71,7 +71,7 @@ namespace CivilGameJam.Upgrades
         {
             if (panelBody != null) panelBody.SetActive(expanded);
             if (panelRect != null) panelRect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, expanded ? 254f : 60f);
-            if (headerLabel != null) headerLabel.text = expanded ? "ELEVATOR  [-]" : "ELEVATOR  [+]";
+            if (headerLabel != null) headerLabel.text = expanded ? "ELEVATED FLOOR  [-]" : "ELEVATED FLOOR  [+]";
         }
 
         private void OnUpgradeChanged(HouseColumnUpgrade _) => Refresh();

@@ -33,6 +33,8 @@ public sealed class CardWorkersTutorialTests
         preference = PlayerPrefs.GetInt(WorkersTutorial.CompletionPreferenceKey, 0);
         PlayerPrefs.DeleteKey(WorkersTutorial.CompletionPreferenceKey);
         yield return SceneManager.LoadSceneAsync("2DCardScene");
+        // Exercise the tutorial even when the designer leaves its saved root hidden in Edit Mode.
+        Object.FindFirstObjectByType<WorkersTutorial>(FindObjectsInactive.Include).gameObject.SetActive(true);
         yield return new WaitForSecondsRealtime(.4f);
         tutorial = Object.FindFirstObjectByType<WorkersTutorial>();
         game = Object.FindFirstObjectByType<CardGameController>();
@@ -518,10 +520,10 @@ public sealed class CardWorkersTutorialTests
         yield return new WaitForSecondsRealtime(.4f);
         Assert.That(tutorial.IsOpen && game.IsTutorialActive, Is.True);
         Assert.That(tutorial.CurrentStep, Is.EqualTo(10));
-        Assert.That(tutorial.DisplayedDescription, Does.Contain("2 protected houses x 3 AP = 6 AP").And.Contain("Round bonus: 10 AP").And.Contain("+16 AP"));
+        Assert.That(tutorial.DisplayedDescription, Does.Contain("Protected houses earn 4 AP each.").And.Contain("2 houses: +8 AP").And.Contain("Round bonus: +10 AP").And.Contain("+18 AP"));
         Assert.That(tutorial.DisplayedDescription, Does.Not.Contain("{"));
         Assert.That(tutorial.Spotlight.IsHighlighted(Center(results.EarnedPointsArea)), Is.True);
-        Assert.That(game.AbilityPoints.CurrentPoints, Is.EqualTo(17), "Only the real round pays AP; the explanation must never pay twice.");
+        Assert.That(game.AbilityPoints.CurrentPoints, Is.EqualTo(19), "Only the real round pays AP; the explanation must never pay twice.");
         var outcome = (TMP_Text)typeof(MonsterSequenceResults).GetField("tutorialOutcomeLabel", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(results);
         if (outcome != null)
         {
@@ -548,15 +550,15 @@ public sealed class CardWorkersTutorialTests
         Assert.That(tutorial.GetComponentsInChildren<Component>(true).Select(item => item.GetInstanceID()).OrderBy(id => id), Is.EqualTo(uiIds));
         results.Retry();
         if (outcome != null) Assert.That(outcome.gameObject.activeSelf, Is.False);
-        results.ShowRound(2, 4, 16, 2);
+        results.ShowRound(2, 4, 18, 2);
         if (outcome != null) Assert.That(outcome.gameObject.activeSelf, Is.False, "The tutorial explanation must not repeat on later reports.");
         results.Retry();
         Assert.That(round.SequenceNumber, Is.EqualTo(1));
-        Assert.That(game.AbilityPoints.CurrentPoints, Is.EqualTo(17));
+        Assert.That(game.AbilityPoints.CurrentPoints, Is.EqualTo(19));
         var retryResearch = Station(CardKind.ResearchCenter); retryResearch.enabled = false;
         var retryWorker = game.Cards.First(card => card.Kind == CardKind.Person && card.CanStartWork);
         Assert.That(retryResearch.TryAssign(retryWorker), Is.True);
-        Assert.That(game.AbilityPoints.CurrentPoints, Is.EqualTo(13));
+        Assert.That(game.AbilityPoints.CurrentPoints, Is.EqualTo(15));
         retryResearch.AdvanceWork(100f);
         Assert.That(game.IsChoosingBlueprint, Is.True);
         Assert.That(game.RecipeFor(UpgradeKind.RailSystem).button.interactable, Is.True);
@@ -568,7 +570,7 @@ public sealed class CardWorkersTutorialTests
         Assert.That(game.Vault.IsDiscovered(UpgradeKind.RailSystem), Is.True);
         Assert.That(game.HasUndiscoveredBlueprints, Is.False);
         Assert.That(retryResearch.TryAssign(game.Cards.First(card => card.Kind == CardKind.Person && card.CanStartWork)), Is.False);
-        Assert.That(game.AbilityPoints.CurrentPoints, Is.EqualTo(13), "There is no AP charge when only locked or already-discovered plans remain.");
+        Assert.That(game.AbilityPoints.CurrentPoints, Is.EqualTo(15), "There is no AP charge when only locked or already-discovered plans remain.");
     }
 
     private IEnumerator WaitForTutorialCityReturn(EarthquakeRoundController round, CardDock drawer)
@@ -970,7 +972,10 @@ public sealed class CardWorkersTutorialTests
         if (tutorial.CurrentStep >= 10)
         {
             var result = Object.FindFirstObjectByType<MonsterSequenceResults>();
-            samples.Add(("Earned AP", Center(result.EarnedPointsArea, camera), true));
+            var apArea = result.EarnedPointsArea;
+            // Sample the light statistic plate; its dark centered digits are deliberately below the brightness threshold.
+            var apBackground = apArea.rect.center + Vector2.left * apArea.rect.width * .38f;
+            samples.Add(("Earned AP", RectTransformUtility.WorldToScreenPoint(camera, apArea.TransformPoint(apBackground)), true));
             var heading = result.EarnedPointsArea.parent.Find("Title").GetComponent<TMP_Text>();
             heading.ForceMeshUpdate();
             var glyph = heading.textInfo.characterInfo.First(character => character.isVisible);

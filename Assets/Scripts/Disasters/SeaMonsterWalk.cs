@@ -142,6 +142,7 @@ namespace CivilGameJam.Disasters
 
         private void Update()
         {
+            if (Time.timeScale <= 0f) return;
             if (IsWalkingAfterEvent) AdvanceAfterEventWalk(Time.unscaledDeltaTime);
         }
 

@@ -213,6 +213,7 @@ namespace CivilGameJam.Disasters
 
         private void LateUpdate()
         {
+            if (Time.timeScale <= 0f) return;
             if (!IsRunning) return;
             AdvanceShake(Time.unscaledDeltaTime);
         }

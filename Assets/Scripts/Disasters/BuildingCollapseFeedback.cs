@@ -111,7 +111,11 @@ namespace CivilGameJam.Disasters
             }
         }
 
-        private void Update() => AdvanceFeedback(Time.unscaledDeltaTime);
+        private void Update()
+        {
+            if (Time.timeScale <= 0f) return;
+            AdvanceFeedback(Time.unscaledDeltaTime);
+        }
 
         private void AdvanceFeedback(float deltaTime)
         {

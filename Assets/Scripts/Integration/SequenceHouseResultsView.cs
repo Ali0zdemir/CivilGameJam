@@ -48,7 +48,7 @@ namespace CivilGameJam
                 if (view.title != null) view.title.text = "HOUSE " + (i + 1);
                 if (view.report == null) continue;
                 string hazard = stage == 3 ? "FIRE" : stage == 2 ? "TSUNAMI" : "EARTHQUAKE";
-                string protection = stage == 3 ? "Sprinklers" : stage == 2 ? "Elevator" : "Seismic isolator";
+                string protection = stage == 3 ? "Sprinklers" : stage == 2 ? "Elevated Floor" : "Seismic isolator";
                 bool active = stage == 3 ? fire : stage == 2 ? elevator : seismic;
                 string outcome = active ? "House protected." : "Survived; protection missing.";
                 if (destroyed)
@@ -57,9 +57,9 @@ namespace CivilGameJam
                     bool flood = building != null && building.TryGetComponent<ApartmentTsunamiCollapse>(out var tsunami) && tsunami.HasCollapsed;
                     bool burnt = building != null && sequence.WasHouseBurnt(building);
                     outcome = quake ? seismic ? "Destroyed by the earthquake." : "Collapsed: no seismic isolator." :
-                        flood ? elevator ? "Destroyed by the tsunami." : "Flooded: no elevator." :
+                        flood ? elevator ? "Destroyed by the tsunami." : "Flooded: no elevated floor." :
                         burnt ? fire ? "Destroyed by fire." : "Burned: no sprinklers." :
-                        !active ? stage == 3 ? "Burned: no sprinklers." : stage == 2 ? "Flooded: no elevator." : "Collapsed: no seismic isolator." :
+                        !active ? stage == 3 ? "Burned: no sprinklers." : stage == 2 ? "Flooded: no elevated floor." : "Collapsed: no seismic isolator." :
                         "Destroyed during the sequence.";
                 }
                 view.report.text = hazard + "\n" + protection + ": " + (active ? "ACTIVE" : "MISSING") + "\n" + outcome;

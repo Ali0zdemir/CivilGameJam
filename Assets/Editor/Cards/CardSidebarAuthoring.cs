@@ -257,7 +257,7 @@ namespace CivilGameJam.Cards.Editor
                     var icon = (RectTransform)root.transform.Find("CardSymbol");
                     Place(icon, new Vector2(.5f, .5f), Vector2.zero, Vector2.one * 200f, new Vector2(.5f, .5f));
                     string title = card.UpgradeType == UpgradeKind.RailSystem ? "Rail System"
-                        : card.UpgradeType == UpgradeKind.Breakwater ? "Elevator" : "Fire Sprinkler";
+                        : card.UpgradeType == UpgradeKind.Breakwater ? "Elevated Floor" : "Fire Sprinkler";
                     var label = Label("InventoryName", root.transform, title, 52f, new Color(.85f, .92f, .93f));
                     label.textWrappingMode = TextWrappingModes.NoWrap;
                     Place(label.rectTransform, new Vector2(.5f, .5f), new Vector2(0f, 104f),

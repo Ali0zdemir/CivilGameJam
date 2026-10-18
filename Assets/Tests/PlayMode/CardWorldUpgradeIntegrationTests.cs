@@ -74,7 +74,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
         var result = sequence.GetComponent<MonsterSequenceResults>();
         Assert.That(result.IsVisible, Is.False, "The earthquake success cannot interrupt the continuous monster entrance.");
         Assert.That(round.LastProtectedHouseCount, Is.EqualTo(4));
-        Assert.That(round.LastSurvivalReward + round.LastRoundGrant, Is.EqualTo(18));
+        Assert.That(round.LastSurvivalReward + round.LastRoundGrant, Is.EqualTo(28));
         Assert.That(round.SequenceNumber, Is.EqualTo(2));
         Assert.That(bank.CurrentPoints, Is.Zero, "No AP is paid at the earthquake-to-tsunami handoff.");
         Assert.That(houses.Select(house => house.House.GetInstalled(UpgradeKind.RailSystem)), Is.EqualTo(installed));
@@ -99,8 +99,8 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(result.DestroyedHouseCount, Is.EqualTo(2));
         Assert.That(result.ProtectedHouseCount, Is.EqualTo(2));
         Assert.That(Field<TMP_Text>(result, "destroyedCountLabel").text, Is.EqualTo("2 / 4"));
-        Assert.That(Field<TMP_Text>(result, "earnedPointsCount").text, Is.EqualTo("+18"));
-        Assert.That(bank.CurrentPoints, Is.EqualTo(23));
+        Assert.That(Field<TMP_Text>(result, "earnedPointsCount").text, Is.EqualTo("+30"));
+        Assert.That(bank.CurrentPoints, Is.EqualTo(35));
         Assert.That(round.SequenceNumber, Is.EqualTo(2));
         Assert.That(houses.All(house => house.Building.GetComponent<ApartmentUpgradeModel>().HasSeismic), Is.True);
         Assert.That(houses.Count(house => house.Building.GetComponent<ApartmentUpgradeModel>().IsElevated), Is.EqualTo(2));
@@ -124,6 +124,6 @@ public sealed partial class CardAbilityPointsPlayModeTests
             house.Building.GetComponent<ApartmentEarthquakeAnimation>().HasCollapsed), Is.False);
         Assert.That(flooded.Any(house => house.Building.GetComponentsInChildren<MeshRenderer>(true).Any(renderer => renderer.forceRenderingOff)), Is.False);
         CaptureWorld("held-tsunami-rebuilt-after-close.png");
-        Assert.That(bank.CurrentPoints, Is.EqualTo(23));
+        Assert.That(bank.CurrentPoints, Is.EqualTo(35));
     }
 }

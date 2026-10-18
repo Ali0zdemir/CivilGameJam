@@ -114,6 +114,7 @@ namespace CivilGameJam
 
         private void Update()
         {
+            if (Time.timeScale <= 0f) return;
             if (!Initialize()) return;
             var mouse = Mouse.current;
             if (mouse == null || !Application.isFocused) { dragging = false; return; }
@@ -142,6 +143,7 @@ namespace CivilGameJam
 
         private void ReadPointer(Vector2 position, float scrollSteps, bool pressed, bool held)
         {
+            if (Time.timeScale <= 0f) return;
             if (!held) dragging = false;
             Rect inputRect = GetInputRect();
             if (presenting || InputBlocked || !inputRect.Contains(position) || IsOverUI(position)) { dragging = false; return; }
@@ -205,6 +207,7 @@ namespace CivilGameJam
 
         private void LateUpdate()
         {
+            if (Time.timeScale <= 0f) return;
             if (Initialize()) AdvanceNavigation(Time.unscaledDeltaTime);
         }
 

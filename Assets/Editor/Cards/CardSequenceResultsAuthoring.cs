@@ -116,77 +116,176 @@ namespace CivilGameJam.Cards.Editor
         {
             if (EditorApplication.isPlayingOrWillChangePlaymode) throw new InvalidOperationException("Author sequence results in Edit Mode.");
             var scene = EditorSceneManager.OpenScene("Assets/2DCardScene.unity");
-            var sequence = Object.FindFirstObjectByType<MonsterSequenceController>();
-            var game = Object.FindFirstObjectByType<CardGameController>();
-            var canvas = game.GetComponentInParent<Canvas>().rootCanvas;
-            var font = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>("Assets/EfeArts/Fonts/Pixellari SDF.asset");
-            if (font == null) throw new InvalidOperationException("The card font must exist before authoring results.");
-            var old = canvas.transform.Find("Sequence_Results");
-            if (old != null) Object.DestroyImmediate(old.gameObject);
-            var overlay = Rect("Sequence_Results", canvas.transform);
-            Stretch(overlay, 0f);
-            Fill(overlay, new Color(.025f, .055f, .065f, .78f), true);
-            var layer = overlay.gameObject.AddComponent<Canvas>();
-            layer.overrideSorting = true; layer.sortingOrder = 2000;
-            overlay.gameObject.AddComponent<GraphicRaycaster>();
-
-            var shadow = Rect("Shadow", overlay);
-            Center(shadow, new Vector2(640f, 456f), new Vector2(8f, -8f));
-            Fill(shadow, new Color(0f, 0f, 0f, .32f));
-            var card = Rect("Card", overlay);
-            Center(card, new Vector2(640f, 456f), Vector2.zero);
-            var designScale = canvas.GetComponent<CanvasScaler>().referenceResolution.y / 900f;
-            shadow.localScale = card.localScale = Vector3.one * designScale;
-            Fill(card, new Color(.23f, .38f, .40f, 1f));
-            var content = Rect("Content", card); Stretch(content, 3f);
-            Fill(content, new Color(.09f, .15f, .17f, 1f));
-            var accent = Rect("Accent", content);
-            Top(accent, 0f, 0f, 0f, 5f); Fill(accent, new Color(.33f, .81f, .78f, 1f));
-            var heading = Label("Title", content, "SEQUENCE COMPLETE", font, 34f, new Color(.95f, .94f, .88f));
-            Top(heading.rectTransform, 26f, 28f, 26f, 48f);
-            var ap = Label("AP_Label", content, "AP EARNED", font, 24f, new Color(.65f, .78f, .77f));
-            Top(ap.rectTransform, 28f, 108f, 28f, 38f);
-
-            var statistic = Rect("House_Statistic", content);
-            Top(statistic, 32f, 170f, 32f, 126f);
-            Fill(statistic, new Color(.055f, .105f, .12f, 1f));
-            var caption = Label("Caption", statistic, "PROTECTED HOUSES / TOTAL", font, 21f, new Color(.72f, .82f, .80f));
-            Top(caption.rectTransform, 14f, 14f, 14f, 32f);
-            var count = Label("Count", statistic, "0 / 4", font, 54f, new Color(1f, .61f, .31f));
-            Top(count.rectTransform, 14f, 50f, 14f, 66f);
-
-            var retryRect = Rect("Retry", content);
-            retryRect.anchorMin = new Vector2(0f, 0f); retryRect.anchorMax = new Vector2(1f, 0f);
-            retryRect.pivot = new Vector2(.5f, 0f); retryRect.sizeDelta = new Vector2(-64f, 70f);
-            retryRect.anchoredPosition = new Vector2(0f, 32f);
-            var image = Fill(retryRect, new Color(1f, .61f, .31f), true);
-            var retry = retryRect.gameObject.AddComponent<Button>(); retry.targetGraphic = image;
-            retry.navigation = new Navigation { mode = Navigation.Mode.None };
-            var colors = retry.colors; colors.highlightedColor = new Color(1f, .90f, .75f); colors.pressedColor = new Color(.78f, .72f, .65f);
-            retry.colors = colors;
-            var retryLabel = Label("Label", retryRect, "CONTINUE", font, 30f, new Color(.08f, .13f, .15f));
-            Stretch(retryLabel.rectTransform, 10f);
-
-            var results = sequence.GetComponent<MonsterSequenceResults>() ?? sequence.gameObject.AddComponent<MonsterSequenceResults>();
+            var results = Object.FindFirstObjectByType<MonsterSequenceResults>();
+            if (results == null) throw new InvalidOperationException("The saved sequence result bindings are required.");
             var data = new SerializedObject(results);
-            data.FindProperty("sequence").objectReferenceValue = sequence;
-            data.FindProperty("overlay").objectReferenceValue = overlay.gameObject;
-            data.FindProperty("destroyedCountLabel").objectReferenceValue = count;
-            data.FindProperty("earnedPointsLabel").objectReferenceValue = ap;
-            data.FindProperty("retryButton").objectReferenceValue = retry;
-            var links = Object.FindObjectsByType<HouseCityUpgradeLink>(FindObjectsSortMode.None).OrderBy(link => link.Building.name).ToArray();
-            if (links.Length != 4) throw new InvalidOperationException("Expected the four card house targets.");
-            var houses = data.FindProperty("houses"); houses.arraySize = links.Length;
-            for (var i = 0; i < links.Length; i++) houses.GetArrayElementAtIndex(i).objectReferenceValue = links[i].Building.GetComponent<BuildingModelGeometry>();
+            var overlay = ((GameObject)data.FindProperty("overlay").objectReferenceValue).transform;
+            var card = (RectTransform)overlay.Find("Card");
+            var content = (RectTransform)card.Find("Content");
+            var font = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>("Assets/EfeArts/Fonts/Pixellari SDF.asset");
+            var panelSprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/EfeArts/Casualty Report.png");
+            var buttonSprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/EfeArts/Casualty Report Button.png");
+            var houseSprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/EfeArts/Small_House_Icon.png");
+            if (font == null || panelSprite == null || buttonSprite == null || houseSprite == null)
+                throw new InvalidOperationException("Assign the supplied Casualty Report sprites and Pixellari font before authoring.");
+
+            Center(card, new Vector2(3230f, 2200f), Vector2.zero);
+            card.localScale = Vector3.one * .74f;
+            var background = card.GetComponent<Image>();
+            background.sprite = panelSprite; background.type = Image.Type.Simple;
+            background.color = Color.white; background.preserveAspect = true; background.raycastTarget = false;
+            Stretch(content, 0f); content.localScale = Vector3.one;
+            content.GetComponent<Image>().enabled = false;
+            overlay.GetComponent<Image>().color = new Color(.035f, .025f, .04f, .72f);
+            var shadow = (RectTransform)overlay.Find("Shadow");
+            Center(shadow, card.sizeDelta, new Vector2(12f, -12f)); shadow.localScale = card.localScale;
+            shadow.GetComponent<Image>().sprite = panelSprite;
+            shadow.GetComponent<Image>().color = new Color(0f, 0f, 0f, .28f);
+            shadow.GetComponent<Image>().raycastTarget = false;
+            content.Find("Accent").gameObject.SetActive(false);
+
+            var cream = new Color(1f, .94f, .84f);
+            var ink = new Color(.22f, .13f, .12f);
+            var heading = content.Find("Title").GetComponent<TextMeshProUGUI>();
+            Place(heading.rectTransform, 210f, 100f, 2810f, 140f);
+            Style(heading, font, 108f, 64f, cream); heading.text = "CASUALTY REPORT";
+            var outcome = content.Find("Outcome")?.GetComponent<TextMeshProUGUI>() ?? Label("Outcome", content, "", font, 48f, cream);
+            Place(outcome.rectTransform, 250f, 282f, 2730f, 66f);
+            Style(outcome, font, 48f, 34f, cream);
+            outcome.text = "Protect all four houses to clear this stage.";
+
+            var statistic = (RectTransform)content.Find("House_Statistic");
+            Place(statistic, 510f, 380f, 710f, 288f); statistic.GetComponent<Image>().enabled = false;
+            var caption = statistic.Find("Caption").GetComponent<TextMeshProUGUI>();
+            Center(caption.rectTransform, new Vector2(670f, 54f), new Vector2(0f, 90f));
+            Style(caption, font, 42f, 28f, ink); caption.text = "EARTHQUAKE - PROTECTED HOUSES";
+            var houseIcon = statistic.Find("Small_House_Icon") as RectTransform;
+            if (houseIcon == null) { houseIcon = Rect("Small_House_Icon", statistic); houseIcon.gameObject.AddComponent<Image>(); }
+            Center(houseIcon, new Vector2(150f, 150f), new Vector2(-185f, -32f));
+            houseIcon.GetComponent<Image>().sprite = houseSprite; houseIcon.GetComponent<Image>().color = Color.white;
+            houseIcon.GetComponent<Image>().preserveAspect = true; houseIcon.GetComponent<Image>().raycastTarget = false;
+            var count = (TMP_Text)data.FindProperty("destroyedCountLabel").objectReferenceValue;
+            Center(count.rectTransform, new Vector2(405f, 150f), new Vector2(95f, -32f));
+            Style(count, font, 128f, 88f, ink); count.text = "0 / 4";
+
+            var apArea = (RectTransform)content.Find("ApEarned");
+            Place(apArea, 2010f, 380f, 710f, 288f); apArea.GetComponent<Image>().enabled = false;
+            var apLabel = (TMP_Text)data.FindProperty("earnedPointsLabel").objectReferenceValue;
+            Center(apLabel.rectTransform, new Vector2(670f, 54f), new Vector2(0f, 90f));
+            Style(apLabel, font, 46f, 30f, ink); apLabel.text = "AP EARNED";
+            var apCount = (TMP_Text)data.FindProperty("earnedPointsCount").objectReferenceValue;
+            Center(apCount.rectTransform, new Vector2(640f, 150f), new Vector2(0f, -32f));
+            Style(apCount, font, 128f, 88f, ink); apCount.text = "+0";
+
+            var view = results.GetComponent<SequenceHouseResultsView>();
+            var viewData = new SerializedObject(view);
+            var entries = viewData.FindProperty("cards");
+            if (entries.arraySize != 4) throw new InvalidOperationException("Keep the four authored real-house report bindings.");
+            for (int i = 0; i < 4; i++)
+            {
+                var entry = entries.GetArrayElementAtIndex(i);
+                var report = (TMP_Text)entry.FindPropertyRelative("report").objectReferenceValue;
+                var root = (RectTransform)report.transform.parent;
+                root.SetParent(content, false);
+                Center(root, new Vector2(300f, 400f), new Vector2(-1120f + i * 750f, 0f));
+                root.localScale = Vector3.one * 1.5f;
+                report.rectTransform.anchorMin = report.rectTransform.anchorMax = new Vector2(.5f, 0f);
+                report.rectTransform.pivot = new Vector2(.5f, 1f);
+                report.rectTransform.anchoredPosition = new Vector2(0f, -16f);
+                report.rectTransform.sizeDelta = new Vector2(400f, 150f);
+                Style(report, font, 28f, 20f, cream);
+                report.textWrappingMode = TextWrappingModes.Normal;
+                report.alignment = TextAlignmentOptions.Top;
+                if (PrefabUtility.IsPartOfPrefabInstance(root)) PrefabUtility.RecordPrefabInstancePropertyModifications(root);
+                if (PrefabUtility.IsPartOfPrefabInstance(report)) PrefabUtility.RecordPrefabInstancePropertyModifications(report);
+            }
+
+            var personReward = (TMP_Text)data.FindProperty("peopleRewardLabel").objectReferenceValue;
+            Place(personReward.rectTransform, 250f, 1730f, 2730f, 105f);
+            Style(personReward, font, 46f, 30f, cream); personReward.gameObject.SetActive(false);
+            var tutorialHint = content.Find("TutorialOutcomeMessage")?.GetComponent<TextMeshProUGUI>()
+                ?? Label("TutorialOutcomeMessage", content, "", font, 46f, cream);
+            Place(tutorialHint.rectTransform, 250f, 1730f, 2730f, 105f);
+            Style(tutorialHint, font, 46f, 30f, cream);
+            tutorialHint.text = data.FindProperty("tutorialOutcomeMessage").stringValue;
+            tutorialHint.gameObject.SetActive(false);
+
+            // The supplied button PNG is a full-size transparent overlay. Its visible strip is at y=1930..2090.
+            var buttonArt = content.Find("CasualtyReportButtonArtwork") as RectTransform;
+            if (buttonArt == null) { buttonArt = Rect("CasualtyReportButtonArtwork", content); buttonArt.gameObject.AddComponent<Image>(); }
+            Stretch(buttonArt, 0f); buttonArt.localScale = Vector3.one; buttonArt.SetAsFirstSibling();
+            var buttonImage = buttonArt.GetComponent<Image>();
+            buttonImage.sprite = buttonSprite; buttonImage.type = Image.Type.Simple;
+            buttonImage.color = Color.white; buttonImage.preserveAspect = true; buttonImage.raycastTarget = false;
+            var retry = (Button)data.FindProperty("retryButton").objectReferenceValue;
+            Place((RectTransform)retry.transform, 110f, 1930f, 3010f, 160f);
+            var hit = retry.GetComponent<Image>(); hit.sprite = null; hit.type = Image.Type.Simple;
+            hit.color = new Color(1f, 1f, 1f, .001f); hit.raycastTarget = true;
+            retry.targetGraphic = buttonImage;
+            retry.navigation = new Navigation { mode = Navigation.Mode.None };
+            var colors = retry.colors;
+            colors.normalColor = Color.white; colors.highlightedColor = new Color(1f, .95f, .87f);
+            colors.pressedColor = new Color(.78f, .68f, .60f); colors.selectedColor = Color.white;
+            colors.fadeDuration = .12f; retry.colors = colors;
+            var retryLabel = retry.GetComponentInChildren<TextMeshProUGUI>(true);
+            Stretch(retryLabel.rectTransform, 10f); retryLabel.rectTransform.localScale = Vector3.one;
+            Style(retryLabel, font, 76f, 52f, ink); retryLabel.text = "CONTINUE";
+            BindVictoryButton(data, retry);
+
+            data.FindProperty("titleLabel").objectReferenceValue = heading;
+            data.FindProperty("outcomeLabel").objectReferenceValue = outcome;
+            data.FindProperty("houseStatisticCaption").objectReferenceValue = caption;
+            data.FindProperty("tutorialOutcomeLabel").objectReferenceValue = tutorialHint;
             data.ApplyModifiedPropertiesWithoutUndo();
-            data = new SerializedObject(sequence); data.FindProperty("results").objectReferenceValue = results; data.ApplyModifiedPropertiesWithoutUndo();
-            UnityEventTools.AddPersistentListener(retry.onClick, results.Retry);
             overlay.gameObject.SetActive(false);
             EditorSceneManager.MarkSceneDirty(scene);
-            if (!EditorSceneManager.SaveScene(scene)) throw new InvalidOperationException("Could not save sequence results.");
-            AssetDatabase.SaveAssets();
-            Debug.Log("Saved the sequence result panel, four unique house targets and retry button in 2DCardScene.");
+            if (!EditorSceneManager.SaveScene(scene)) throw new InvalidOperationException("Could not save the Casualty Report.");
+            Debug.Log("Saved Casualty Report artwork, house/AP statistics, four bound house reports and the supplied Continue button.");
         }
+
+        [MenuItem("Tools/Card Game/Save Victory Main Menu Button")]
+        public static void SaveVictoryButtonForBatch()
+        {
+            if (EditorApplication.isPlayingOrWillChangePlaymode) throw new InvalidOperationException("Save the victory button in Edit Mode.");
+            var scene = EditorSceneManager.OpenScene("Assets/2DCardScene.unity");
+            var results = Object.FindFirstObjectByType<MonsterSequenceResults>();
+            var data = new SerializedObject(results);
+            BindVictoryButton(data, (Button)data.FindProperty("retryButton").objectReferenceValue);
+            data.ApplyModifiedPropertiesWithoutUndo();
+            EditorSceneManager.MarkSceneDirty(scene);
+            if (!EditorSceneManager.SaveScene(scene)) throw new InvalidOperationException("Could not save the victory button.");
+        }
+
+        private static void BindVictoryButton(SerializedObject data, Button retry)
+        {
+            var menu = retry.transform.parent.Find("MainMenuButton")?.GetComponent<Button>();
+            if (menu == null)
+            {
+                menu = Object.Instantiate(retry.gameObject, retry.transform.parent, false).GetComponent<Button>();
+                menu.name = "MainMenuButton";
+            }
+            menu.GetComponentInChildren<TMP_Text>(true).text = "MAIN MENU";
+            menu.onClick = new Button.ButtonClickedEvent();
+            UnityEventTools.AddPersistentListener(menu.onClick, ((MonsterSequenceResults)data.targetObject).ReturnToMainMenu);
+            menu.gameObject.SetActive(false);
+            data.FindProperty("mainMenuButton").objectReferenceValue = menu;
+        }
+
+        private static void Place(RectTransform rect, float left, float top, float width, float height)
+        {
+            Center(rect, new Vector2(width, height), new Vector2(left + width * .5f - 1615f, 1100f - top - height * .5f));
+            rect.localScale = Vector3.one;
+        }
+
+        private static void Style(TMP_Text label, TMP_FontAsset font, float maximum, float minimum, Color color)
+        {
+            label.font = font; label.fontSize = maximum; label.enableAutoSizing = true;
+            label.fontSizeMin = minimum; label.fontSizeMax = maximum;
+            label.color = color; label.alignment = TextAlignmentOptions.Center;
+            label.textWrappingMode = TextWrappingModes.NoWrap;
+            label.raycastTarget = false; label.rectTransform.localScale = Vector3.one;
+        }
+
 
         private static RectTransform Rect(string name, Transform parent)
         {

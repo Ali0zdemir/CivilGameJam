@@ -16,10 +16,10 @@ namespace CivilGameJam.Cards.Editor
         private static readonly Dictionary<string, string> Text = new Dictionary<string, string>
         {
             { "Raylı Sistem", "Rail System" },
-            { "Dalgakıran", "Elevator" },
+            { "Dalgakıran", "Elevated Floor" },
             { "Yangın", "Fire Protection" },
             { "Raylı Sistem\n2 KART", "Rail System\n2 ITEMS" },
-            { "Dalgakıran\n2 KART", "Elevator\n2 ITEMS" },
+            { "Dalgakıran\n2 KART", "Elevated Floor\n2 ITEMS" },
             { "Yangın\n2 KART", "Fire Protection\n2 ITEMS" },
             { "Normal insan", "Person" },
             { "Eğitimli insan", "Educated Person" },
@@ -131,7 +131,7 @@ namespace CivilGameJam.Cards.Editor
             if (value.StartsWith("Ürünleri evdeki", StringComparison.Ordinal))
                 return "Install the items in the matching house slot.\\nYour discovery stays in the Vault.".Replace("\\n", "\n");
             if (value.StartsWith("Her tür için bir yuva:", StringComparison.Ordinal))
-                return "One slot per type:\\nRail System, Elevator\\nand Fire Protection.".Replace("\\n", "\n");
+                return "One slot per type:\\nRail System, Elevated Floor\\nand Fire Protection.".Replace("\\n", "\n");
             return Regex.Replace(value, @"^(\d+\s*/\s*\d+)\s+kişi$", "$1 workers");
         }
     }

@@ -41,7 +41,7 @@ public sealed partial class CardGamePlayModeTests
             Assert.That(game.Sidebar.Owns(product), Is.True);
             var label = product.transform.Find("InventoryName").GetComponent<TMPro.TMP_Text>();
             string expected = product.UpgradeType == UpgradeKind.RailSystem ? "Rail System"
-                : product.UpgradeType == UpgradeKind.Breakwater ? "Elevator" : "Fire Sprinkler";
+                : product.UpgradeType == UpgradeKind.Breakwater ? "Elevated Floor" : "Fire Sprinkler";
             Assert.That(label.text, Is.EqualTo(expected));
             Assert.That(label.gameObject.activeInHierarchy, Is.True);
             Assert.That(product.IsNewProduct, Is.True);

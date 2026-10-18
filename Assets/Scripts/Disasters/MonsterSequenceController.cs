@@ -4,7 +4,7 @@ using UnityEngine.UI;
 
 namespace CivilGameJam.Disasters
 {
-    public enum MonsterSequenceStage { Ready, Emerging, WalkingToFirstPoint, Fire, WalkingToSecondPoint, Complete, Roaring, Earthquake, AwaitingTsunami, Settling }
+    public enum MonsterSequenceStage { Ready, Emerging, WalkingToFirstPoint, Fire, WalkingToSecondPoint, Complete, Roaring, Earthquake, AwaitingTsunami, Settling, AwaitingFire }
 
     /// <summary>Runs the selected test sequence using the monster and controls saved in the scene.</summary>
     [DisallowMultipleComponent, DefaultExecutionOrder(200)]
@@ -45,6 +45,7 @@ namespace CivilGameJam.Disasters
         private bool waveCameraActive;
         private bool offscreenEarthquake;
         private bool continueWithTsunami;
+        private bool continueWithFire;
         private bool tsunamiAftermathStarted;
         private float tsunamiAftermathElapsed;
 
@@ -63,9 +64,9 @@ namespace CivilGameJam.Disasters
 
         public bool WasHouseBurnt(Transform house) => fire != null && fire.WasHouseBurnt(house);
 
-        public void ShowRoundResults(int destroyed, int total, int earnedPoints, int protectedHouses = -1)
+        public void ShowRoundResults(int destroyed, int total, int earnedPoints, int protectedHouses = -1, int clearedStage = 0)
         {
-            if (results != null) results.ShowRound(destroyed, total, earnedPoints, protectedHouses);
+            if (results != null) results.ShowRound(destroyed, total, earnedPoints, protectedHouses, clearedStage);
         }
 
         private void Awake()
@@ -92,10 +93,10 @@ namespace CivilGameJam.Disasters
         public void StartSelectedSequence() => StartSequence(0f);
 
         // READY uses a bounded departure; the saved standalone debug routes retain their full paths.
-        public void StartRoundSequence(float maximumDepartureSeconds, bool tsunamiAfterEarthquake = false) =>
-            StartSequence(Mathf.Max(.1f, maximumDepartureSeconds), tsunamiAfterEarthquake);
+        public void StartRoundSequence(float maximumDepartureSeconds, bool tsunamiAfterEarthquake = false, bool fireAfterTsunami = false) =>
+            StartSequence(Mathf.Max(.1f, maximumDepartureSeconds), tsunamiAfterEarthquake, fireAfterTsunami);
 
-        private void StartSequence(float maximumDepartureSeconds, bool tsunamiAfterEarthquake = false)
+        private void StartSequence(float maximumDepartureSeconds, bool tsunamiAfterEarthquake = false, bool fireAfterTsunami = false)
         {
             if (!Application.isPlaying || !isActiveAndEnabled || IsRunning) return;
             if (monster == null || walk == null || walk.WalkPoint == null || walk.AfterEventPoint == null ||
@@ -110,6 +111,7 @@ namespace CivilGameJam.Disasters
             ActiveSequence = SelectedSequence;
             offscreenEarthquake = ActiveSequence == 1;
             continueWithTsunami = offscreenEarthquake && tsunamiAfterEarthquake;
+            continueWithFire = ActiveSequence == 2 && fireAfterTsunami;
             tsunamiAftermathStarted = false;
             tsunamiAftermathElapsed = 0f;
             departureElapsed = 0f;
@@ -135,6 +137,7 @@ namespace CivilGameJam.Disasters
 
         private void Update()
         {
+            if (Time.timeScale <= 0f) return;
             if (IsRunning) AdvanceSequence(Time.unscaledDeltaTime);
         }
 
@@ -170,6 +173,15 @@ namespace CivilGameJam.Disasters
                 // A tsunami report follows the final collapse, independently of the boss's remaining route.
                 if (HasFinishedTsunamiAftermath)
                 {
+                    if (continueWithFire)
+                    {
+                        // Keep the same boss at its fire stance while the playable round records the water victory.
+                        if (!walk.HasReachedWalkPoint || earthquake.IsRunning || !PresentationFinished) return;
+                        tsunami.FinishPresentation();
+                        Stage = MonsterSequenceStage.AwaitingFire;
+                        RefreshMenu();
+                        return;
+                    }
                     FinishRoundPresentation();
                     return;
                 }
@@ -203,7 +215,7 @@ namespace CivilGameJam.Disasters
                         FocusCity(monster.Model);
                         Stage = MonsterSequenceStage.Fire;
                     }
-                    else
+                    else if (!continueWithFire)
                     {
                         walk.BeginAfterEventWalk();
                         Stage = MonsterSequenceStage.WalkingToSecondPoint;
@@ -241,6 +253,7 @@ namespace CivilGameJam.Disasters
 
         public void StopSequence()
         {
+            continueWithFire = false;
             tsunamiAftermathStarted = false;
             tsunamiAftermathElapsed = 0f;
             if (results != null) results.Hide();
@@ -283,10 +296,11 @@ namespace CivilGameJam.Disasters
             RefreshMenu();
         }
 
-        public bool ContinueWithTsunami()
+        public bool ContinueWithTsunami(bool fireAfterTsunami = false)
         {
             if (!IsRunning || Stage != MonsterSequenceStage.AwaitingTsunami) return false;
             continueWithTsunami = false;
+            continueWithFire = fireAfterTsunami;
             offscreenEarthquake = false;
             selectedSequence = ActiveSequence = 2;
             tsunamiAftermathStarted = false;
@@ -294,6 +308,19 @@ namespace CivilGameJam.Disasters
             Stage = MonsterSequenceStage.Emerging;
             tsunami.StartSequenceTsunami(this);
             if (!tsunami.IsRunning) { StopSequence(); return false; }
+            RefreshMenu();
+            return true;
+        }
+
+        public bool ContinueWithFire()
+        {
+            if (!IsRunning || Stage != MonsterSequenceStage.AwaitingFire || !walk.HasReachedWalkPoint) return false;
+            continueWithFire = false;
+            selectedSequence = ActiveSequence = 3;
+            departureElapsed = 0f;
+            monsterDeparted = false;
+            // Reuse the reached point and planted pose; do not restart the wave, emergence or camera.
+            Stage = MonsterSequenceStage.WalkingToFirstPoint;
             RefreshMenu();
             return true;
         }
@@ -351,7 +378,7 @@ namespace CivilGameJam.Disasters
                     : SelectedSequence == 2 ? "TSUNAMI + EARTHQUAKE" : "TSUNAMI + EARTHQUAKE + FIRE") + (expanded ? "  [-]" : "  [+]");
             if (statusLabel != null)
                 statusLabel.text = Stage == MonsterSequenceStage.Earthquake ? "Earthquake"
-                    : Stage == MonsterSequenceStage.AwaitingTsunami ? "City protected"
+                    : Stage == MonsterSequenceStage.AwaitingTsunami || Stage == MonsterSequenceStage.AwaitingFire ? "City protected"
                     : Stage == MonsterSequenceStage.Settling ? "City settling"
                     : Stage == MonsterSequenceStage.Emerging ? "Emerging from the sea"
                     : Stage == MonsterSequenceStage.WalkingToFirstPoint ? "Walking to point 1 - earthquake"

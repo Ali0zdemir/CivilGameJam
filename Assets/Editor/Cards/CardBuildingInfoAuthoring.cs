@@ -209,7 +209,7 @@ namespace CivilGameJam.Cards.Editor
             string[] messages =
             {
                 "<color=#FFAA55>Rail System</color>\nEarthquake resistant.",
-                "<color=#53B9FF>Elevator</color>\nFlood resistant.",
+                "<color=#53B9FF>Elevated Floor</color>\nFlood resistant.",
                 "<color=#FF6767>Fire Protection</color>\nFire resistant."
             };
             for (int i = 0; i < entries.arraySize; i++)
@@ -252,13 +252,13 @@ namespace CivilGameJam.Cards.Editor
             {
                 case CardKind.ResearchCenter:
                     title = "Research Center"; accent = Research;
-                    description = "Assign 1 or 2 researchers to discover any blueprint. Educated people research faster. Discoveries go to the Vault."; break;
+                    description = "Discover blueprints for disaster protection."; break;
                 case CardKind.Factory:
                     title = "Factory"; accent = Factory;
-                    description = "Rail System needs 1 worker. Elevator and Fire Sprinkler need 2. Produce 2 items per order. Educated people work faster. Blueprints are kept."; break;
+                    description = "Turn blueprints into two protection upgrades."; break;
                 case CardKind.School:
                     title = "School"; accent = School;
-                    description = "Assign up to 2 people to train them as educated workers. Each student trains independently, then returns to the People area."; break;
+                    description = "Train people to work faster and spend less AP."; break;
                 case CardKind.House:
                     title = "House"; accent = House;
                     description = "Can be upgraded with prevention systems."; break;

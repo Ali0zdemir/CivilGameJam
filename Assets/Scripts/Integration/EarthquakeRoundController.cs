@@ -3,6 +3,7 @@ using CivilGameJam.Cards;
 using CivilGameJam.Disasters;
 using TMPro;
 using UnityEngine;
+using UnityEngine.Serialization;
 using UnityEngine.UI;
 
 namespace CivilGameJam
@@ -34,14 +35,17 @@ namespace CivilGameJam
         [SerializeField] private CardDock dock;
         [SerializeField] private House[] houses = Array.Empty<House>();
         [Header("Turn rewards and transition")]
-        [SerializeField, Min(0)] private int pointsPerProtectedHouse = 3;
-        [SerializeField, Min(0)] private int tsunamiPointsPerProtectedHouse = 6;
+        [SerializeField, Min(0)] private int pointsPerProtectedHouse = 4;
+        [SerializeField, Min(0)] private int tsunamiPointsPerProtectedHouse = 9;
         [SerializeField, Min(0)] private int firePointsPerProtectedHouse = 10;
         [Tooltip("Maximum boss walking time after the earthquake. Debug routes are unaffected.")]
         [SerializeField, Min(.1f)] private float bossDepartureSeconds = 10f;
         [SerializeField, Min(0)] private int nextRoundPoints = 10;
-        [Tooltip("Bonus on entering Tsunami and every preparation turn after clearing the earthquake.")]
-        [SerializeField, Min(0)] private int afterEarthquakeRoundPoints = 6;
+        [Tooltip("Fixed AP bonus on entering Tsunami and on each tsunami retry.")]
+        [FormerlySerializedAs("afterEarthquakeRoundPoints")]
+        [SerializeField, Min(0)] private int tsunamiRoundPoints = 12;
+        [Tooltip("Fixed AP bonus on entering Fire and on each fire retry.")]
+        [SerializeField, Min(0)] private int fireRoundPoints = 16;
         [Tooltip("Permanent additional normal people per turn after clearing the earthquake.")]
         [SerializeField, Min(0)] private int earthquakePeopleReward = 1;
         [SerializeField, Range(.1f, .85f)] private float damageAtEarthquakeProgress = .45f;
@@ -61,6 +65,7 @@ namespace CivilGameJam
         private UpgradeKind upgradesToDiscard;
         private int pendingTransitionPoints;
         private int pendingPeopleReward;
+        private int pendingClearedStage;
         public int RoundNumber { get; private set; } = 1;
         public int SequenceNumber { get; private set; } = 1;
         public EarthquakeRoundPhase Phase { get; private set; }
@@ -151,7 +156,8 @@ namespace CivilGameJam
             damageApplied = false;
             collapseElapsed = -1f;
             sequence.SelectSequence(SequenceNumber);
-            sequence.StartRoundSequence(bossDepartureSeconds, SequenceNumber == 1 && AllHousesProtected());
+            sequence.StartRoundSequence(bossDepartureSeconds, SequenceNumber == 1 && AllHousesProtected(),
+                SequenceNumber == 2 && AllHousesProtected());
             if (!sequence.IsRunning) { abilityPoints.SetActionsLocked(false); RestoreDebugButtons(); return; }
             previousPreparation = Phase;
             Phase = EarthquakeRoundPhase.Earthquake;
@@ -160,7 +166,11 @@ namespace CivilGameJam
             Refresh();
         }
 
-        private void Update() => AdvanceRound(Time.unscaledDeltaTime);
+        private void Update()
+        {
+            if (Time.timeScale <= 0f) return;
+            AdvanceRound(Time.unscaledDeltaTime);
+        }
 
         public void AdvanceRound(float seconds)
         {
@@ -172,6 +182,11 @@ namespace CivilGameJam
                 {
                     if (AllHousesProtected() && DamageFinished()) CompleteRound(true, true);
                     else { sequence.FinishRoundPresentation(); CompleteRound(false); }
+                }
+                else if (sequence.Stage == MonsterSequenceStage.AwaitingFire && SequenceNumber == 2)
+                {
+                    if (AllHousesProtected() && DamageFinished()) CompleteRound(true, true);
+                    else if (!AllHousesProtected()) { sequence.FinishRoundPresentation(); CompleteRound(false); }
                 }
                 else
                 {
@@ -264,8 +279,9 @@ namespace CivilGameJam
             }
         }
 
-        private void CompleteRound(bool survived, bool continueToTsunami = false)
+        private void CompleteRound(bool survived, bool continueToNextSequence = false)
         {
+            int clearedStage = survived ? SequenceNumber : pendingClearedStage;
             LastRoundSurvived = survived;
             int destroyedHouses = 0, totalHouses = 0;
             foreach (var house in houses)
@@ -293,33 +309,37 @@ namespace CivilGameJam
                 game.CompleteBlueprint(CurrentProtection);
                 SequenceNumber++;
             }
-            LastRoundGrant = Mathf.Max(0, SequenceNumber >= 2 ? afterEarthquakeRoundPoints : nextRoundPoints);
+            LastRoundGrant = Mathf.Max(0, SequenceNumber == 3 ? fireRoundPoints : SequenceNumber == 2 ? tsunamiRoundPoints : nextRoundPoints);
             sequence.SelectSequence(SequenceNumber);
             ApplySequencePrices();
             RoundNumber++;
-            if (!continueToTsunami) Phase = EarthquakeRoundPhase.NextRoundPreparation;
+            if (!continueToNextSequence) Phase = EarthquakeRoundPhase.NextRoundPreparation;
             var awardedPoints = LastSurvivalReward + LastRoundGrant;
             game.ResetTurnPeople();
-            if (continueToTsunami)
+            if (continueToNextSequence)
             {
-                // Seismic survival is recorded now, but its AP waits for the uninterrupted tsunami's report.
+                // Keep stage rewards pending until every disaster in the uninterrupted presentation has finished.
                 pendingTransitionPoints += awardedPoints;
+                pendingClearedStage = Mathf.Max(pendingClearedStage, clearedStage);
                 awardedPoints = 0;
                 ResetHouseDamage();
                 if (fire != null) fire.StopFire();
-                // This is a new water-stage turn in the same cinematic. STOP preserves the earthquake win.
+                // The next hazard is a new turn in the same cinematic. STOP preserves earlier stage wins.
                 previousPreparation = EarthquakeRoundPhase.NextRoundPreparation;
                 damageApplied = false;
                 collapseElapsed = -1f;
                 SnapshotHouses();
-                if (sequence.ContinueWithTsunami()) return;
+                bool continued = SequenceNumber == 2 ? sequence.ContinueWithTsunami(AllHousesProtected())
+                    : sequence.ContinueWithFire();
+                if (continued) return;
                 Phase = EarthquakeRoundPhase.NextRoundPreparation;
             }
             awardedPoints += pendingTransitionPoints;
             pendingTransitionPoints = 0;
             abilityPoints.AddPoints(awardedPoints);
             rebuildAfterResults = true;
-            sequence.ShowRoundResults(destroyedHouses, totalHouses, awardedPoints, LastProtectedHouseCount);
+            sequence.ShowRoundResults(destroyedHouses, totalHouses, awardedPoints, LastProtectedHouseCount, clearedStage);
+            pendingClearedStage = 0;
             sequence.Results?.ShowPeopleReward(pendingPeopleReward, game.PeoplePerTurn);
             pendingPeopleReward = 0;
             if (sequence.Results == null || !sequence.Results.IsVisible) RestoreCityAfterResults();

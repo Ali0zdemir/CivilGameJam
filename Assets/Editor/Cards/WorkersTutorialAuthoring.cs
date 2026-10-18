@@ -101,7 +101,7 @@ namespace CivilGameJam.Cards.Editor
         {
             var lessons = data.FindProperty("lessons"); lessons.arraySize = 12;
             Lesson(lessons.GetArrayElementAtIndex(10), "AP REWARDS", "Protected houses earn AP",
-                "{safeHouses} protected houses x {houseReward} AP = {survivalReward} AP.\nRound bonus: {roundBonus} AP. Total earned: +{earnedAP} AP.", "");
+                "Protected houses earn {houseReward} AP each.\n{safeHouses} houses: +{survivalReward} AP. Round bonus: +{roundBonus} AP.\nTotal earned: +{earnedAP} AP.", "");
             Lesson(lessons.GetArrayElementAtIndex(11), "NEXT DISASTER", "Protect every house to move on",
                 "Make all four houses earthquake-resistant.\nWhen every house survives, you can face the next disaster.", "");
         }

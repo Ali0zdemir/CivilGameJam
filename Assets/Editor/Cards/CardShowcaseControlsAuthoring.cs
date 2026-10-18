@@ -47,7 +47,7 @@ namespace CivilGameJam.Cards.Editor
                 EnsureUpgrades(controller, viewport.ViewRect);
             ConfigureUpgrades(world.GetComponentInChildren<RailSystemTestPanel>(), viewport.ViewRect, 0, "RAIL SYSTEM");
             ConfigureUpgrades(world.GetComponentInChildren<HouseSprinklerTestPanel>(), viewport.ViewRect, 1, "FIRE PROTECTION");
-            ConfigureUpgrades(world.GetComponentInChildren<HouseColumnsTestPanel>(), viewport.ViewRect, 2, "ELEVATOR");
+            ConfigureUpgrades(world.GetComponentInChildren<HouseColumnsTestPanel>(), viewport.ViewRect, 2, "ELEVATED FLOOR");
             var individual = new MonoBehaviour[] { quake, tsunami, fire }.Select(controller =>
                 (Button)new SerializedObject(controller).FindProperty("testButton").objectReferenceValue).ToArray();
             var sequence = world.GetComponentInChildren<MonsterSequenceController>();

@@ -38,13 +38,12 @@ namespace CivilGameJam.Cards
             bool visible = discovered && !waitingForFirstArrival;
             cardRect.gameObject.SetActive(visible);
             discovery.gameObject.SetActive(visible);
-            quantity.gameObject.SetActive(visible);
+            quantity.gameObject.SetActive(false);
             if (!preserveArtworkColors) background.color = discovered ? unlockedColor : lockedColor;
             icon.color = Color.white;
-            bool completed = discovered && !Owner.CanUseBlueprint(kind);
-            discovery.text = !discovered ? string.Empty : completed ? "COMPLETED" : "DISCOVERED";
-            discovery.color = discovered ? new Color(0.96f, 0.75f, 0.39f) : new Color(0.48f, 0.58f, 0.59f);
-            quantity.text = !discovered ? string.Empty : completed ? kind == UpgradeKind.RailSystem ? "Earthquake complete" : "Tsunami complete" : available > 0 ? "Reusable · drag" : "In use";
+            discovery.text = !discovered ? string.Empty : kind == UpgradeKind.RailSystem ? "Earthquake Blueprint"
+                : kind == UpgradeKind.Breakwater ? "Tsunami Blueprint" : "Fire Blueprint";
+            quantity.text = string.Empty;
         }
 
         public void OnPointerDown(PointerEventData data) { }

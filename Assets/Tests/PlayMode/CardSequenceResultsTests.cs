@@ -8,11 +8,51 @@ using NUnit.Framework;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 using UnityEngine.UI;
 
 public sealed partial class CardGamePlayModeTests
 {
+    [UnityTest]
+    public IEnumerator VictoryUsesSavedMainMenuButtonAndLoadsOnlyAnAvailableDestination()
+    {
+        var result = Object.FindFirstObjectByType<MonsterSequenceResults>();
+        var retry = ControlField<Button>(result, "retryButton");
+        var menu = ControlField<Button>(result, "mainMenuButton");
+        var ids = SequenceUIIds();
+        foreach (int clearedStage in new[] { 0, 1, 2 })
+        {
+            result.ShowRound(0, 4, 18, 4, clearedStage);
+            Assert.That(retry.gameObject.activeInHierarchy, Is.True);
+            Assert.That(menu.gameObject.activeSelf, Is.False);
+            Assert.That(retry.GetComponentInChildren<TMP_Text>().text, Is.EqualTo("CONTINUE"));
+        }
+        result.ShowRound(0, 4, 56, 4, 3);
+        Assert.That(retry.gameObject.activeSelf, Is.False);
+        Assert.That(menu.gameObject.activeInHierarchy, Is.True);
+        Assert.That(EventSystem.current.currentSelectedGameObject, Is.SameAs(menu.gameObject));
+        Assert.That(SequenceUIIds(), Is.EqualTo(ids), "The victory button must already exist before Play Mode.");
+        var directory = Path.GetFullPath(Path.Combine(Application.dataPath, "../Library/VictoryMenuPreviews"));
+        Directory.CreateDirectory(directory);
+        yield return CaptureCanvas(Path.Combine(directory, "victory-main-menu.png"), afterRender: camera => AssertTopButton(menu, camera));
+
+        var destination = typeof(MonsterSequenceResults).GetField("mainMenuScene", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        destination.SetValue(result, "__MenuNotCreatedYet__");
+        LogAssert.Expect(LogType.Warning, "Assign the main menu scene on MonsterSequenceResults and add it to Build Settings before using MAIN MENU.");
+        menu.onClick.Invoke();
+        Assert.That(result.IsVisible && menu.interactable, Is.True, "Until a menu is added, clicking must keep the victory report usable.");
+        Assert.That(SceneManager.GetActiveScene().name, Is.EqualTo("2DCardScene"));
+
+        destination.SetValue(result, "Assets/Scenes/MainMenuBackup.unity");
+        menu.onClick.Invoke(); menu.onClick.Invoke();
+        float deadline = Time.realtimeSinceStartup + 15f;
+        while (SceneManager.GetActiveScene().name != "MainMenuBackup" && Time.realtimeSinceStartup < deadline) yield return null;
+        Assert.That(SceneManager.GetActiveScene().name, Is.EqualTo("MainMenuBackup"));
+        Assert.That(Object.FindFirstObjectByType<CivilGameJam.Menu.MainMenuController>(), Is.Not.Null);
+        Assert.That(Object.FindFirstObjectByType<MonsterSequenceResults>(), Is.Null);
+    }
+
     [UnityTest]
     public IEnumerator MonsterSequenceResultsShowTheUniqueDestroyedHouseCountAndOnlyCloseOnRetry()
     {
@@ -54,7 +94,7 @@ public sealed partial class CardGamePlayModeTests
                     Assert.That(icon.gameObject.activeSelf, Is.EqualTo(links[i].House.GetInstalled(icon.Kind) != null), "Each slot mirrors its own real house.");
                 var text = reportCard.transform.Find("HouseReport").GetComponent<TMP_Text>().text;
                 Assert.That(text, Does.StartWith(number == 1 ? "EARTHQUAKE" : number == 2 ? "TSUNAMI" : "FIRE"));
-                Assert.That(text, Does.Contain(number == 1 ? "Seismic isolator" : number == 2 ? "Elevator" : "Sprinklers"));
+                Assert.That(text, Does.Contain(number == 1 ? "Seismic isolator" : number == 2 ? "Elevated Floor" : "Sprinklers"));
                 Assert.That(reportCard.transform.Find("EarthquakeDamage").gameObject.activeSelf,
                     Is.EqualTo(result.IsHouseDestroyed(links[i].Building.GetComponent<CivilGameJam.BuildingModelGeometry>())));
             }
@@ -187,6 +227,8 @@ public sealed partial class CardGamePlayModeTests
         Assert.That(result.IsVisible, Is.True);
         Assert.That(result.DestroyedHouseCount, Is.Zero);
         Assert.That(result.ProtectedHouseCount, Is.EqualTo(4));
+        Assert.That(result.ClearedStage, Is.EqualTo(1));
+        Assert.That(ControlField<TMP_Text>(result, "titleLabel").text, Is.EqualTo("EARTHQUAKE STAGE CLEARED"));
         Assert.That(ControlField<TMP_Text>(result, "destroyedCountLabel").text, Is.EqualTo("4 / 4"));
         rig.Sequence.StopSequence();
     }

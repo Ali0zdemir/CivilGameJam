@@ -195,6 +195,7 @@ namespace CivilGameJam.Cards
 
         public void OnDrag(PointerEventData eventData)
         {
+            if (Time.timeScale <= 0f) return;
             if (!IsDragging || eventData.pointerId != pointerId) return;
             Vector3 previous = Rect.position;
             dragPointer = eventData.position;
