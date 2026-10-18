@@ -71,7 +71,8 @@ namespace CivilGameJam.Cards.Editor
             }
             hint.name = "InsertCardHint";
             foreach (var child in hint.Cast<Transform>().ToArray())
-                if (child.name != "InsertCardUi") Object.DestroyImmediate(child.gameObject);
+                if (child.name != "InsertCardUi" && child.name != "InsertCardUi_Left" && child.name != "InsertCardUi_Right")
+                    Object.DestroyImmediate(child.gameObject);
             var group = Ensure<CanvasGroup>(hint.gameObject);
             group.alpha = 1f; group.interactable = false; group.blocksRaycasts = false;
             var sprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/EfeArts/Insert Card Ui.png");
@@ -79,8 +80,18 @@ namespace CivilGameJam.Cards.Editor
             var guide = Picture("InsertCardUi", hint, sprite, Vector2.zero, Vector2.zero);
             guide.rectTransform.anchorMin = Vector2.zero;
             guide.rectTransform.anchorMax = Vector2.one;
+            guide.gameObject.SetActive(false);
+            var left = Picture("InsertCardUi_Left", hint, sprite, new Vector2(-42f, 0f), hint.sizeDelta);
+            var right = Picture("InsertCardUi_Right", hint, sprite, new Vector2(42f, 0f), hint.sizeDelta);
+            left.rectTransform.localScale = right.rectTransform.localScale = Vector3.one * .9f;
+            left.gameObject.SetActive(true); right.gameObject.SetActive(true);
             hint.gameObject.SetActive(true);
             Refs(view, ("workerHint", group), ("personHint", guide.rectTransform), ("arrowHint", guide.rectTransform));
+            var data = new SerializedObject(view);
+            var pairs = data.FindProperty("pairedWorkerHints"); pairs.arraySize = 2;
+            pairs.GetArrayElementAtIndex(0).objectReferenceValue = left.rectTransform;
+            pairs.GetArrayElementAtIndex(1).objectReferenceValue = right.rectTransform;
+            data.ApplyModifiedPropertiesWithoutUndo();
         }
 
         private static RectTransform Rect(string name, Transform parent, Vector2 position, Vector2 size)

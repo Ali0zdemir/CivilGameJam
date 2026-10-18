@@ -23,6 +23,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
         var hud = APHud;
         var audio = Field<AudioSource>(hud, "notEnoughAudio");
         Assert.That(audio.clip.name, Is.EqualTo("not enough_"));
+        Assert.That(audio.volume, Is.EqualTo(.375f).Within(.00001f));
         Assert.That(audio.clip.loadState, Is.EqualTo(AudioDataLoadState.Loaded));
         Assert.That(audio.playOnAwake || audio.loop || audio.isPlaying, Is.False);
         Assert.That(audio.spatialBlend, Is.Zero);

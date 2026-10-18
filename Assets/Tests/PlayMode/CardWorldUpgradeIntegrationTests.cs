@@ -87,10 +87,10 @@ public sealed partial class CardAbilityPointsPlayModeTests
     }
 
     [UnityTest]
-    public IEnumerator AuthoredWaterRetryKeepsSeismicAndElevatorsAndReportsOnlyTheTwoFloodedHouses()
+    public IEnumerator AuthoredWaterRetryKeepsSeismicAndReportsFloodDamageBeforeDiscardingElevators()
     {
         yield return ReachTsunami();
-        bank.AddPoints(20); // Nine AP research, two twelve-AP workers and five AP carried.
+        bank.AddPoints(12); // Nine AP research, two eight-AP workers and five AP carried.
         PrepareElevators(1);
         yield return new WaitForSecondsRealtime(1.6f);
         round.Ready(); Until(() => round.RoundNumber == 3);
@@ -119,6 +119,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
         CaptureWorld("held-tsunami-damage-behind-report.png");
         AssertFreshPeople(System.Array.Empty<DraggableCard>());
         result.Retry(); round.AdvanceRound(100f);
+        Assert.That(houses.All(house => house.House.GetInstalled(UpgradeKind.Breakwater) == null), Is.True);
         Assert.That(houses.Any(house => house.Building.GetComponent<ApartmentTsunamiCollapse>().HasCollapsed ||
             house.Building.GetComponent<ApartmentEarthquakeAnimation>().HasCollapsed), Is.False);
         Assert.That(flooded.Any(house => house.Building.GetComponentsInChildren<MeshRenderer>(true).Any(renderer => renderer.forceRenderingOff)), Is.False);

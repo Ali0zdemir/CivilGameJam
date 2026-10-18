@@ -42,6 +42,8 @@ namespace CivilGameJam
         [SerializeField, Min(0)] private int nextRoundPoints = 10;
         [Tooltip("Bonus on entering Tsunami and every preparation turn after clearing the earthquake.")]
         [SerializeField, Min(0)] private int afterEarthquakeRoundPoints = 6;
+        [Tooltip("Permanent additional normal people per turn after clearing the earthquake.")]
+        [SerializeField, Min(0)] private int earthquakePeopleReward = 1;
         [SerializeField, Range(.1f, .85f)] private float damageAtEarthquakeProgress = .45f;
         [Tooltip("Time from the first house collapse until the next preparation turn.")]
         [SerializeField, Min(0f)] private float nextTurnAfterCollapseSeconds = 2.5f;
@@ -58,6 +60,7 @@ namespace CivilGameJam
         private bool rebuildAfterResults;
         private UpgradeKind upgradesToDiscard;
         private int pendingTransitionPoints;
+        private int pendingPeopleReward;
         public int RoundNumber { get; private set; } = 1;
         public int SequenceNumber { get; private set; } = 1;
         public EarthquakeRoundPhase Phase { get; private set; }
@@ -276,9 +279,15 @@ namespace CivilGameJam
                 if (house.eligible && house.protectedAtStart && !house.link.House.IsDestroyed) LastProtectedHouseCount++;
             LastSurvivalReward = LastProtectedHouseCount * Mathf.Max(0,
                 SequenceNumber == 3 ? firePointsPerProtectedHouse : SequenceNumber == 2 ? tsunamiPointsPerProtectedHouse : pointsPerProtectedHouse);
-            // Failed earthquake and fire attempts lose that stage's manufactured systems.
-            upgradesToDiscard = !survived && (SequenceNumber == 1 || SequenceNumber == 3) ? CurrentProtection : UpgradeKind.None;
+            // A failed stage loses all of its manufactured products, preserving earlier protection.
+            upgradesToDiscard = !survived ? CurrentProtection : UpgradeKind.None;
             game.EndBlueprintTurn(discardNewDiscoveries: !survived && SequenceNumber == 1);
+            if (survived && SequenceNumber == 1)
+            {
+                int reward = Mathf.Max(0, earthquakePeopleReward);
+                game.AwardPeoplePerTurn(reward);
+                pendingPeopleReward += reward;
+            }
             if (survived && SequenceNumber < 3)
             {
                 game.CompleteBlueprint(CurrentProtection);
@@ -311,6 +320,8 @@ namespace CivilGameJam
             abilityPoints.AddPoints(awardedPoints);
             rebuildAfterResults = true;
             sequence.ShowRoundResults(destroyedHouses, totalHouses, awardedPoints, LastProtectedHouseCount);
+            sequence.Results?.ShowPeopleReward(pendingPeopleReward, game.PeoplePerTurn);
+            pendingPeopleReward = 0;
             if (sequence.Results == null || !sequence.Results.IsVisible) RestoreCityAfterResults();
             abilityPoints.SetActionsLocked(false);
             RestoreDebugButtons();

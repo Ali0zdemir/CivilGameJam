@@ -25,6 +25,8 @@ public sealed class CardAbilityPointEditModeTests
         Assert.That(game.NormalResearchSeconds, Is.EqualTo(12.5f));
         Assert.That(game.EducatedResearchSeconds, Is.EqualTo(7.5f));
         Assert.That(gameData.FindProperty("normalPeoplePerTurn").intValue, Is.EqualTo(4));
+        Assert.That(game.Sidebar.PeopleArea.anchorMin.y, Is.EqualTo((2720f - 2684f) / 674f).Within(.0001f));
+        Assert.That(game.Sidebar.PeopleArea.anchorMax.y, Is.EqualTo((2720f - 2152f) / 674f).Within(.0001f));
         Assert.That(gameData.FindProperty("normalPersonPrefab").objectReferenceValue,
             Is.SameAs(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/PeopleCard.prefab")));
         var bankData = new SerializedObject(bank);
@@ -37,6 +39,11 @@ public sealed class CardAbilityPointEditModeTests
         Assert.That(data.FindProperty("bossDepartureSeconds").floatValue, Is.EqualTo(10));
         Assert.That(data.FindProperty("nextRoundPoints").intValue, Is.EqualTo(10));
         Assert.That(data.FindProperty("afterEarthquakeRoundPoints").intValue, Is.EqualTo(6));
+        Assert.That(data.FindProperty("earthquakePeopleReward").intValue, Is.EqualTo(1));
+        var resultsData = new SerializedObject(components.OfType<MonsterSequenceResults>().Single());
+        var peopleReward = (TMP_Text)resultsData.FindProperty("peopleRewardLabel").objectReferenceValue;
+        Assert.That(peopleReward, Is.Not.Null, "The earthquake reward uses the existing saved result text area.");
+        Assert.That(peopleReward.gameObject.activeSelf, Is.False);
         Assert.That(data.FindProperty("nextTurnAfterCollapseSeconds").floatValue, Is.EqualTo(2.5f));
         Assert.That(data.FindProperty("houses").arraySize, Is.EqualTo(4));
         Assert.That(data.FindProperty("debugStartButtons").arraySize, Is.EqualTo(8));
@@ -76,9 +83,9 @@ public sealed class CardAbilityPointEditModeTests
         Assert.That(station.AbilityPointCost(CardKind.Person), Is.EqualTo(normal));
         Assert.That(station.AbilityPointCost(CardKind.EducatedPerson), Is.EqualTo(educated));
         var prices = new SerializedObject(station);
-        Assert.That(prices.FindProperty("tsunamiNormalAbilityPointCost").intValue, Is.EqualTo(name == "SchoolCard" ? 2 : name == "FactoryCard" ? 12 : 9));
+        Assert.That(prices.FindProperty("tsunamiNormalAbilityPointCost").intValue, Is.EqualTo(name == "SchoolCard" ? 2 : name == "FactoryCard" ? 8 : 9));
         Assert.That(prices.FindProperty("tsunamiEducatedAbilityPointCost").intValue,
-            Is.EqualTo(name == "SchoolCard" ? 0 : name == "FactoryCard" ? 7 : 3));
+            Is.EqualTo(name == "SchoolCard" ? 0 : name == "FactoryCard" ? 4 : 3));
         Assert.That(prices.FindProperty("fireNormalAbilityPointCost").intValue,
             Is.EqualTo(name == "SchoolCard" ? 4 : 12));
         Assert.That(prices.FindProperty("fireEducatedAbilityPointCost").intValue,

@@ -34,9 +34,9 @@ namespace CivilGameJam.Cards.Editor
                     {
                         var prices = new SerializedObject(station);
                         prices.FindProperty("tsunamiNormalAbilityPointCost").intValue = card.Kind == CardKind.School ? 2
-                            : card.Kind == CardKind.Factory ? 12 : 9;
+                            : card.Kind == CardKind.Factory ? 8 : 9;
                         prices.FindProperty("tsunamiEducatedAbilityPointCost").intValue = card.Kind == CardKind.School ? 0
-                            : card.Kind == CardKind.Factory ? 7 : 3;
+                            : card.Kind == CardKind.Factory ? 4 : 3;
                         prices.FindProperty("fireNormalAbilityPointCost").intValue = card.Kind == CardKind.School ? 4
                             : 12;
                         prices.FindProperty("fireEducatedAbilityPointCost").intValue = card.Kind == CardKind.School ? 0
@@ -66,7 +66,7 @@ namespace CivilGameJam.Cards.Editor
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene);
             AssetDatabase.SaveAssets();
-            Debug.Log("Saved native artwork drop outlines, School 6.25s, tsunami educated research 3 AP / factory 5 AP, tsunami normal research 6 AP / factory 7 AP, fire school 4 AP, research 8/5 AP, factory 12/8 AP, fire survival 10 AP, post-earthquake turn bonus 6 AP and boss departure 10s.");
+            Debug.Log("Saved native artwork drop outlines, School 6.25s, tsunami research 9/3 AP and factory 8/4 AP (normal/educated), fire school 4 AP, research and factory 12/4 AP, fire survival 10 AP, post-earthquake turn bonus 6 AP and boss departure 10s.");
         }
 
         private static Image VaultReturnFrame(RectTransform area)

@@ -92,7 +92,6 @@ namespace CivilGameJam.Cards.Editor
             var data = new SerializedObject(breath);
             SetArray(data, "upperBody", body, head, muzzle, leftArm, rightArm);
             SetArray(data, "headParts", head, muzzle);
-            SetArray(data, "skin", skin);
             data.ApplyModifiedPropertiesWithoutUndo();
             Object.DestroyImmediate(oldModel.gameObject);
             model.gameObject.SetActive(false);

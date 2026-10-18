@@ -19,6 +19,7 @@ public sealed class CardAbilityFeedbackEditModeTests
         var data = new SerializedObject(hud);
         var sound = (AudioClip)data.FindProperty("notEnoughSound").objectReferenceValue;
         Assert.That(sound, Is.SameAs(AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Art/not enough_.wav")));
+        Assert.That(data.FindProperty("notEnoughVolume").floatValue, Is.EqualTo(.375f).Within(.00001f));
         var audioSettings = ((AudioImporter)AssetImporter.GetAtPath(AssetDatabase.GetAssetPath(sound))).defaultSampleSettings;
         Assert.That(audioSettings.preloadAudioData, Is.True);
         Assert.That(audioSettings.loadType, Is.EqualTo(AudioClipLoadType.DecompressOnLoad));

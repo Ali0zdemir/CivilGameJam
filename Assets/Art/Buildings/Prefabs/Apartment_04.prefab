@@ -2913,7 +2913,7 @@ MonoBehaviour:
   popupMaximumScale: 0.75
   dustAmount: 1.4
   collapseSound: {fileID: 8300000, guid: 5afef84e99af64c4193067a480557048, type: 3}
-  collapseSoundVolume: 0.12
+  collapseSoundVolume: 0.048
   collapseSoundStartSeconds: 0.025
 --- !u!114 &7404251878342621264
 MonoBehaviour:

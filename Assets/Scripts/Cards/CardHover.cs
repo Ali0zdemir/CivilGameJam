@@ -63,6 +63,7 @@ namespace CivilGameJam.Cards
         private void LateUpdate()
         {
             if (!selected || !CanShowHover) { Hide(); return; }
+            bool showDetails = card == null || !card.IsPerson;
             if (!showing)
             {
                 Owner.ShowInspection(this);
@@ -87,13 +88,14 @@ namespace CivilGameJam.Cards
                     raisedLayer.SetAsLastSibling();
                 }
                 feedback.SetHovered(true);
-                details.gameObject.SetActive(true);
+                details.gameObject.SetActive(showDetails);
                 if (hoverOutline != null) hoverOutline.enabled = true;
             }
 
             // The saved layout stays intact; only the expanded preview is kept inside the display.
             Preview.anchoredPosition = originalPosition;
             KeepInsideViewport(Preview);
+            if (!showDetails) return;
             RestoreDetailsPlacement();
             Rect bounds = BoundsInViewport(details);
             Rect area = viewport.rect;

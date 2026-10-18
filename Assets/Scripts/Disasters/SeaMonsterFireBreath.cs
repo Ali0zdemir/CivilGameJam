@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace CivilGameJam.Disasters
 {
-    /// <summary>Heats and bends the saved monster without moving its planted earthquake stance.</summary>
+    /// <summary>Charges and bends the saved monster without changing its colors or planted earthquake stance.</summary>
     [DisallowMultipleComponent]
     public sealed class SeaMonsterFireBreath : MonoBehaviour
     {
@@ -12,7 +12,6 @@ namespace CivilGameJam.Disasters
         [SerializeField] private Transform neckPivot;
         [SerializeField] private Transform[] upperBody = new Transform[0];
         [SerializeField] private Transform[] headParts = new Transform[0];
-        [SerializeField] private Renderer[] skin = new Renderer[0];
         [SerializeField, Min(0.1f)] private float chargeDuration = 2.4f;
         [SerializeField, Min(0.1f)] private float leanDuration = 0.85f;
         [SerializeField, Min(0.1f)] private float breathDuration = 3.8f;
@@ -21,19 +20,13 @@ namespace CivilGameJam.Disasters
         [SerializeField, Range(3f, 20f)] private float leanAngle = 12f;
         [SerializeField, Range(0f, .4f)] private float headLowering = .22f;
         [SerializeField, Range(5f, 85f)] private float breathDownAngle = 55.5f;
-        [SerializeField] private Color heatedColor = new Color(0.8f, 0.24f, 0.105f);
-        [SerializeField, Range(0f, 0.85f)] private float heatTint = 0.68f;
 
         private Vector3[] restPositions;
         private Quaternion[] restRotations;
-        private MaterialPropertyBlock[] originalProperties;
-        private Color[] originalColors;
-        private MaterialPropertyBlock properties;
         private bool posing;
         private Vector3 neckPosition;
         private Vector3 restMouthPosition;
         private Vector3 fireHeading;
-        private static readonly int BaseColor = Shader.PropertyToID("_BaseColor");
 
         public Transform Mouth => mouth;
         public SeaMonsterWalk Walk => walk;
@@ -52,7 +45,6 @@ namespace CivilGameJam.Disasters
         public void BeginFire()
         {
             ResetPose();
-            if (properties == null) properties = new MaterialPropertyBlock();
             if (walk != null) walk.CompleteWalk();
             restPositions = new Vector3[upperBody.Length];
             restRotations = new Quaternion[upperBody.Length];
@@ -66,16 +58,6 @@ namespace CivilGameJam.Disasters
                 ? headParts[0].localPosition - Vector3.up * (headParts[0].localScale.y * 0.5f) : new Vector3(0f, 2.59f, 0.14f);
             restMouthPosition = mouth != null ? model.InverseTransformPoint(mouth.position) : new Vector3(0f, 2.87f, 0.96f);
             fireHeading = Vector3.ProjectOnPlane(model.forward, Vector3.up).normalized;
-            originalProperties = new MaterialPropertyBlock[skin.Length];
-            originalColors = new Color[skin.Length];
-            for (var i = 0; i < skin.Length; i++)
-            {
-                if (skin[i] == null) continue;
-                originalProperties[i] = new MaterialPropertyBlock();
-                skin[i].GetPropertyBlock(originalProperties[i]);
-                originalColors[i] = originalProperties[i].HasProperty(BaseColor)
-                    ? originalProperties[i].GetColor(BaseColor) : skin[i].sharedMaterial.GetColor(BaseColor);
-            }
             posing = true;
             SetFireTime(0f);
         }
@@ -101,13 +83,6 @@ namespace CivilGameJam.Disasters
                     : hip + bend * (restPositions[i] - hip);
                 if (walk == null || !walk.OwnsArmRotation(upperBody[i]))
                     upperBody[i].localRotation = (isHead ? headRotation : bend) * restRotations[i];
-            }
-            for (var i = 0; i < skin.Length; i++)
-            {
-                if (skin[i] == null) continue;
-                skin[i].GetPropertyBlock(properties);
-                properties.SetColor(BaseColor, Color.Lerp(originalColors[i], heatedColor, Heat * heatTint));
-                skin[i].SetPropertyBlock(properties);
             }
         }
 
@@ -144,8 +119,6 @@ namespace CivilGameJam.Disasters
                 upperBody[i].localPosition = restPositions[i];
                 if (walk == null || !walk.OwnsArmRotation(upperBody[i])) upperBody[i].localRotation = restRotations[i];
             }
-            for (var i = 0; i < skin.Length; i++)
-                if (skin[i] != null) skin[i].SetPropertyBlock(originalProperties[i]);
         }
 
         private void OnDisable() => ResetPose();

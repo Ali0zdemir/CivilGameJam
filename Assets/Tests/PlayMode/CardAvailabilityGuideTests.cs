@@ -11,6 +11,67 @@ using UnityEngine.UI;
 public sealed partial class CardAbilityPointsPlayModeTests
 {
     [UnityTest]
+    public IEnumerator FinalSidebarKeepsDiscoveredPlansProductsAndFivePeopleInTheirSavedAreas()
+    {
+        bank.AddPoints(100);
+        game.RestrictResearchTo(UpgradeKind.None);
+        var graduate = Educate();
+        yield return new WaitForSecondsRealtime(.8f);
+        var seismic = Research(graduate);
+        yield return new WaitForSecondsRealtime(.8f);
+        foreach (var kind in new[] { UpgradeKind.Breakwater, UpgradeKind.Fire })
+        {
+            Research(Person(), kind);
+            yield return new WaitForSecondsRealtime(.8f);
+        }
+        Produce(seismic);
+        yield return new WaitForSecondsRealtime(1f);
+        foreach (var slot in game.Vault.Slots)
+        {
+            Assert.That(slot.CardRect.gameObject.activeInHierarchy, Is.True);
+            Assert.That(game.Vault.AvailableCount(slot.Kind), Is.EqualTo(1));
+            AssertSidebarCardInside(slot.CardRect, (RectTransform)slot.transform, slot.CardRect.localScale);
+        }
+        var products = game.Cards.Where(card => card.Kind == CardKind.Upgrade).ToArray();
+        Assert.That(products.Length, Is.EqualTo(2));
+        foreach (var product in products)
+        {
+            Assert.That(game.Sidebar.Owns(product), Is.True);
+            Assert.That(product.Rect.parent, Is.SameAs(game.Sidebar.UpgradesArea));
+            AssertSidebarCardInside(product.Rect, game.Sidebar.UpgradesArea, product.LayoutScale);
+        }
+        game.AwardPeoplePerTurn(1); game.ResetTurnPeople();
+        yield return new WaitForSecondsRealtime(.2f);
+        var people = game.Cards.Where(card => card.IsPerson).ToArray();
+        Assert.That(people.Length, Is.EqualTo(5));
+        foreach (var person in people)
+        {
+            Assert.That(person.Rect.parent, Is.SameAs(game.Sidebar.PeopleArea));
+            AssertSidebarCardInside(person.Rect, game.Sidebar.PeopleArea, person.LayoutScale);
+            foreach (var other in people.Where(other => other != person))
+            {
+                var difference = person.Rect.anchoredPosition - other.Rect.anchoredPosition;
+                var separation = Vector2.Scale(person.Rect.sizeDelta, person.LayoutScale);
+                Assert.That(Mathf.Abs(difference.x) >= separation.x || Mathf.Abs(difference.y) >= separation.y, Is.True);
+            }
+        }
+        yield return CapturePeopleRewardUI("final-sidebar-planning");
+        yield return CapturePeopleRewardUI("final-sidebar-four-k", 3840, 2160);
+        yield return CapturePeopleRewardUI("final-sidebar-ultrawide", 2560, 1080);
+        yield return CapturePeopleRewardUI("final-sidebar-four-three", 1024, 768);
+    }
+
+    private static void AssertSidebarCardInside(RectTransform card, RectTransform area, Vector3 scale)
+    {
+        var center = (Vector2)area.InverseTransformPoint(card.TransformPoint(card.rect.center));
+        var half = Vector2.Scale(card.rect.size, scale) / 2f;
+        Assert.That(center.x - half.x, Is.GreaterThanOrEqualTo(area.rect.xMin - .1f), card.name);
+        Assert.That(center.x + half.x, Is.LessThanOrEqualTo(area.rect.xMax + .1f), card.name);
+        Assert.That(center.y - half.y, Is.GreaterThanOrEqualTo(area.rect.yMin - .1f), card.name);
+        Assert.That(center.y + half.y, Is.LessThanOrEqualTo(area.rect.yMax + .1f), card.name);
+    }
+
+    [UnityTest]
     public IEnumerator SecondEarthquakeRoundOnlyShowsTheSeismicBlueprintInColor()
     {
         PrepareSeismic(1);
@@ -90,9 +151,8 @@ public sealed partial class CardAbilityPointsPlayModeTests
         var group = Field<CanvasGroup>(view, "workerHint");
         Assert.That(group.name, Is.EqualTo("InsertCardHint"));
         var guides = group.GetComponentsInChildren<Image>(true);
-        Assert.That(guides.Length, Is.EqualTo(1));
-        Assert.That(guides[0].sprite.name, Is.EqualTo("Insert Card Ui"));
-        Assert.That(guides[0].preserveAspect && !guides[0].raycastTarget, Is.True);
+        Assert.That(guides.Length, Is.EqualTo(3), "One saved single-person guide and two saved side-by-side guides.");
+        Assert.That(guides.All(guide => guide.sprite.name == "Insert Card Ui" && guide.preserveAspect && !guide.raycastTarget), Is.True);
         Assert.That(Field<RectTransform>(view, "personHint"), Is.SameAs(guides[0].rectTransform));
         Assert.That(Field<RectTransform>(view, "arrowHint"), Is.SameAs(guides[0].rectTransform));
         Assert.That(view.IsWorkerHintVisible, Is.False);
@@ -100,6 +160,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(factory.TryInsertBlueprint(plan), Is.True);
         yield return new WaitForSecondsRealtime(.75f);
         Assert.That(view.IsWorkerHintVisible, Is.True);
+        Assert.That(view.VisibleWorkerHintCount, Is.EqualTo(1), "Rail System keeps its single-person guide.");
         game.GetComponent<CardDock>().SetExpanded(true, true);
         yield return CaptureAvailabilityGuide("factory-insert-card-ui");
         int balance = bank.CurrentPoints;

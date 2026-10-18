@@ -37,7 +37,7 @@ public sealed partial class CardGamePlayModeTests
             var source = ControlField<AudioSource>(feedback, "collapseAudio");
             Assert.That(source, Is.Not.Null);
             Assert.That(source.clip.name, Is.EqualTo("afet sonucu bina yıkılma sesi 4"));
-            Assert.That(source.volume, Is.EqualTo(.12f).Within(.00001f));
+            Assert.That(source.volume, Is.EqualTo(.048f).Within(.00001f));
             Assert.That(source.clip.loadState, Is.EqualTo(AudioDataLoadState.Loaded));
             Assert.That(source.playOnAwake || source.loop, Is.False);
             Assert.That(source.spatialBlend, Is.Zero, "Camera distance must not delay or mute the collapse.");

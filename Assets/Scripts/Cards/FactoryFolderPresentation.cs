@@ -20,6 +20,7 @@ namespace CivilGameJam.Cards
         [SerializeField] private CanvasGroup workerHint;
         [SerializeField] private RectTransform personHint;
         [SerializeField] private RectTransform arrowHint;
+        [SerializeField] private RectTransform[] pairedWorkerHints = new RectTransform[2];
         [Min(.01f)] [SerializeField] private float hintFadeSeconds = .18f;
         [Min(0f)] [SerializeField] private float hintTravel = 5f;
         [Min(.1f)] [SerializeField] private float hintCycleSeconds = 1.4f;
@@ -31,6 +32,8 @@ namespace CivilGameJam.Cards
         private float entryProgress;
         private Vector2 arrowRest;
         private Vector3 personScale;
+        private Vector2[] pairedHintRest;
+        private Vector3[] pairedHintScale;
         private bool hintPoseSaved;
         private float hintTime;
         private DraggableCard shownBlueprint;
@@ -41,6 +44,17 @@ namespace CivilGameJam.Cards
         internal bool CanReturn => isActiveAndEnabled && card != null && entryImage != null && storedBlueprint != null &&
             pocket != null && shownBlueprint != null && !IsReturning;
         public bool IsWorkerHintVisible => workerHint != null && workerHint.gameObject.activeSelf && workerHint.alpha > .05f;
+        public int VisibleWorkerHintCount
+        {
+            get
+            {
+                if (!IsWorkerHintVisible) return 0;
+                int count = personHint != null && personHint.gameObject.activeSelf ? 1 : 0;
+                if (pairedWorkerHints != null)
+                    foreach (var hint in pairedWorkerHints) if (hint != null && hint.gameObject.activeSelf) count++;
+                return count;
+            }
+        }
         public Image EntryImage => entryImage;
         public Image StoredBlueprint => storedBlueprint;
 
@@ -230,6 +244,14 @@ namespace CivilGameJam.Cards
             if (hintPoseSaved || personHint == null || arrowHint == null) return;
             arrowRest = arrowHint.anchoredPosition;
             personScale = personHint.localScale;
+            int count = pairedWorkerHints == null ? 0 : pairedWorkerHints.Length;
+            pairedHintRest = new Vector2[count]; pairedHintScale = new Vector3[count];
+            for (int i = 0; i < count; i++)
+                if (pairedWorkerHints[i] != null)
+                {
+                    pairedHintRest[i] = pairedWorkerHints[i].anchoredPosition;
+                    pairedHintScale[i] = pairedWorkerHints[i].localScale;
+                }
             hintPoseSaved = true;
         }
 
@@ -255,7 +277,11 @@ namespace CivilGameJam.Cards
             if (workerHint == null) return;
             if (needsWorker && !HasAffordableWorker()) { HideHint(); return; }
             SaveHintPose();
-            if (needsWorker) workerHint.gameObject.SetActive(true);
+            if (needsWorker)
+            {
+                ShowHintCount(factory.RequiredWorkers - station.WorkerCount);
+                workerHint.gameObject.SetActive(true);
+            }
             workerHint.alpha = Mathf.MoveTowards(workerHint.alpha, needsWorker ? 1f : 0f,
                 Time.unscaledDeltaTime / Mathf.Max(.01f, hintFadeSeconds));
             if (!needsWorker && workerHint.alpha <= 0f) { HideHint(); return; }
@@ -265,16 +291,39 @@ namespace CivilGameJam.Cards
             {
                 personHint.localScale = personScale * (1f + wave * .045f);
                 arrowHint.anchoredPosition = arrowRest + Vector2.down * (wave * hintTravel);
+                for (int i = 0; i < pairedHintRest.Length; i++)
+                    if (pairedWorkerHints[i] != null)
+                    {
+                        pairedWorkerHints[i].localScale = pairedHintScale[i] * (1f + wave * .045f);
+                        pairedWorkerHints[i].anchoredPosition = pairedHintRest[i] + Vector2.down * (wave * hintTravel);
+                    }
             }
+        }
+
+        private void ShowHintCount(int missing)
+        {
+            bool pair = missing >= 2 && pairedWorkerHints != null && pairedWorkerHints.Length == 2 &&
+                pairedWorkerHints[0] != null && pairedWorkerHints[1] != null;
+            if (personHint != null) personHint.gameObject.SetActive(missing > 0 && !pair);
+            if (arrowHint != null && arrowHint != personHint) arrowHint.gameObject.SetActive(missing > 0 && !pair);
+            if (pairedWorkerHints != null)
+                foreach (var hint in pairedWorkerHints) if (hint != null) hint.gameObject.SetActive(pair);
         }
 
         private void HideHint()
         {
             hintTime = 0f;
+            ShowHintCount(0);
             if (workerHint != null) { workerHint.alpha = 0f; workerHint.gameObject.SetActive(false); }
             if (!hintPoseSaved) return;
             if (personHint != null) personHint.localScale = personScale;
             if (arrowHint != null) arrowHint.anchoredPosition = arrowRest;
+            for (int i = 0; i < pairedHintRest.Length; i++)
+                if (pairedWorkerHints[i] != null)
+                {
+                    pairedWorkerHints[i].localScale = pairedHintScale[i];
+                    pairedWorkerHints[i].anchoredPosition = pairedHintRest[i];
+                }
         }
 
         private bool HasAffordableWorker()

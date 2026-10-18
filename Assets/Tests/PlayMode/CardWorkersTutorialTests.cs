@@ -51,6 +51,14 @@ public sealed class CardWorkersTutorialTests
     }
 
     private BuildingStation Station(CardKind kind) => game.Cards.Single(card => card.Kind == kind).Station;
+    private Button ContinueButton => tutorial.GetComponentsInChildren<Button>(true).Single(button => button.name == "Continue");
+    private void ClickContinue()
+    {
+        var button = ContinueButton;
+        Assert.That(button.gameObject.activeInHierarchy && button.interactable, Is.True);
+        Assert.That(button.GetComponentInChildren<TMP_Text>().text, Is.EqualTo("CONTINUE"));
+        using (var mouse = new MouseDriver()) mouse.Click((RectTransform)button.transform);
+    }
 
     [UnityTest]
     public IEnumerator ProductSpotlightFitsTwoOneAndZeroVisibleCardsWithoutLightingEmptySpace()
@@ -172,7 +180,8 @@ public sealed class CardWorkersTutorialTests
     public IEnumerator WorkingAndCompletingSchoolBarsStayBrightAndLeftClickCannotSkipTraining()
     {
         var panel = (RectTransform)tutorial.transform.Find("Overlay/LessonPanel");
-        using (var mouse = new MouseDriver()) mouse.Click(panel);
+        ClickContinue();
+        Assert.That(ContinueButton.gameObject.activeSelf, Is.False);
         var school = Station(CardKind.School); school.enabled = false;
         using (var mouse = new MouseDriver()) mouse.Drag(tutorial.PracticeStudent.Rect, school.Card.Rect);
         Assert.That(tutorial.PracticeStudent.AssignedTo, Is.SameAs(school));
@@ -195,7 +204,10 @@ public sealed class CardWorkersTutorialTests
         yield return new WaitForSecondsRealtime(.9f);
         Assert.That(tutorial.CurrentStep, Is.EqualTo(2));
         using (var mouse = new MouseDriver()) mouse.Click(panel);
-        Assert.That(tutorial.CurrentStep, Is.EqualTo(3), "Left click advances the explanation after the real graduate has returned.");
+        Assert.That(tutorial.CurrentStep, Is.EqualTo(2), "Background clicks cannot advance the graduate explanation.");
+        ClickContinue();
+        Assert.That(tutorial.CurrentStep, Is.EqualTo(3), "CONTINUE advances the explanation after the real graduate has returned.");
+        Assert.That(ContinueButton.gameObject.activeSelf, Is.False);
     }
     private void AssertStartingResources()
     {
@@ -206,7 +218,7 @@ public sealed class CardWorkersTutorialTests
     }
 
     [UnityTest]
-    public IEnumerator IntroHighlightsAllThreeBuildingsAndTheWholePeopleSectionThenMouseClickEntersThePlayableLesson()
+    public IEnumerator IntroHighlightsAllThreeBuildingsAndPeopleAndOnlyContinueEntersThePlayableLesson()
     {
         AssertStartingResources();
         Assert.That(tutorial.CurrentStep, Is.Zero);
@@ -245,11 +257,19 @@ public sealed class CardWorkersTutorialTests
             var introPoint = Center(game.Cards.Last(card => card.IsPerson && card != student).Rect);
             SendMouse(mouse, module, introPoint, true, MouseButton.Right);
             SendMouse(mouse, module, introPoint, false, MouseButton.Right);
-            Assert.That(tutorial.CurrentStep, Is.Zero, "Only left click advances the introduction.");
+            Assert.That(tutorial.CurrentStep, Is.Zero, "Background clicks cannot advance the introduction.");
             SendMouse(mouse, module, introPoint, true);
             Assert.That(tutorial.CurrentStep, Is.Zero, "Wait for release so the same click cannot pick up a card.");
             SendMouse(mouse, module, introPoint, false);
+            Assert.That(tutorial.CurrentStep, Is.Zero, "Releasing a background click must leave the introduction open.");
+            var panelPoint = Center((RectTransform)tutorial.transform.Find("Overlay/LessonPanel"));
+            SendMouse(mouse, module, panelPoint, true); SendMouse(mouse, module, panelPoint, false);
+            Assert.That(tutorial.CurrentStep, Is.Zero, "Clicking the lesson panel must leave the introduction open.");
+            Assert.That(ContinueButton.gameObject.activeInHierarchy, Is.True);
+            var continuePoint = Center((RectTransform)ContinueButton.transform);
+            SendMouse(mouse, module, continuePoint, true); SendMouse(mouse, module, continuePoint, false);
             Assert.That(tutorial.CurrentStep, Is.EqualTo(1));
+            Assert.That(ContinueButton.gameObject.activeSelf, Is.False, "Hide CONTINUE while the person must be dragged and educated.");
             Assert.That(tutorial.WaitingForEducation, Is.True);
             Assert.That(game.AbilityPoints.ActionsLocked, Is.False);
             Assert.That(game.Cards.All(card => !card.IsHeld && !card.IsDragging), Is.True);
@@ -347,6 +367,8 @@ public sealed class CardWorkersTutorialTests
         Assert.That(tutorial.DisplayedDescription, Does.Contain("Research Center").And.Contain("less AP").And.Not.Contain("Factory"));
         Assert.That(tutorial.Spotlight.IsHighlighted(Center(Station(CardKind.Factory).Card.Rect)), Is.False);
         using (var mouse = new MouseDriver()) mouse.Click(panel);
+        Assert.That(tutorial.CurrentStep, Is.EqualTo(2));
+        ClickContinue();
         yield return new WaitForSecondsRealtime(.25f);
         Assert.That(tutorial.CurrentStep, Is.EqualTo(3));
         Assert.That(tutorial.DisplayedDescription, Does.Contain("blueprints").And.Contain("disaster protection"));
@@ -419,7 +441,7 @@ public sealed class CardWorkersTutorialTests
         Assert.That(panel.anchoredPosition, Is.EqualTo(position)); Assert.That(panel.sizeDelta, Is.EqualTo(size));
         Assert.That(tutorial.GetComponentsInChildren<Component>(true).Select(item => item.GetInstanceID()).OrderBy(id => id), Is.EqualTo(uiIds));
         yield return Capture("12-two-seismic-upgrades-ready");
-        using (var mouse = new MouseDriver()) mouse.Click(panel);
+        ClickContinue();
         yield return new WaitForSecondsRealtime(.4f);
         Assert.That(tutorial.CurrentStep, Is.EqualTo(8));
         Assert.That(tutorial.IsOpen, Is.True);
@@ -509,12 +531,16 @@ public sealed class CardWorkersTutorialTests
         yield return Capture("16-tutorial-earthquake-outcome");
         if (outcome != null) { outcome.ForceMeshUpdate(); Assert.That(outcome.isTextOverflowing, Is.False); }
         using (var mouse = new MouseDriver()) mouse.Click(panel);
+        Assert.That(tutorial.CurrentStep, Is.EqualTo(10));
+        ClickContinue();
         yield return new WaitForSecondsRealtime(.25f);
         Assert.That(tutorial.CurrentStep, Is.EqualTo(11));
         Assert.That(tutorial.DisplayedDescription, Does.Contain("all four houses earthquake-resistant").And.Contain("next disaster"));
         Assert.That(results.IsVisible && game.ActionsLocked, Is.True);
         yield return Capture("17-protect-all-houses-before-next-disaster");
         using (var mouse = new MouseDriver()) mouse.Click(panel);
+        Assert.That(tutorial.CurrentStep, Is.EqualTo(11));
+        ClickContinue();
         yield return new WaitForSecondsRealtime(.4f);
         Assert.That(tutorial.IsOpen || game.IsTutorialActive || game.ActionsLocked, Is.False);
         Assert.That(results.IsVisible, Is.True, "Keep the report and ruins in place until its own Continue button is pressed.");
@@ -583,6 +609,7 @@ public sealed class CardWorkersTutorialTests
         Assert.That(tutorial.CurrentStep, Is.EqualTo(step));
         var next = tutorial.GetComponentsInChildren<Button>(true).Single(button => button.name == "Continue");
         Assert.That(next.interactable, Is.False);
+        Assert.That(next.gameObject.activeSelf, Is.False, "Hide CONTINUE for assignments, blueprint selection, installations and READY.");
         tutorial.Next(); tutorial.Back();
         Assert.That(tutorial.CurrentStep, Is.EqualTo(step));
         Assert.That(Object.FindFirstObjectByType<EarthquakeRoundController>().CanReady, Is.False);
@@ -817,7 +844,6 @@ public sealed class CardWorkersTutorialTests
         foreach (var button in tutorial.GetComponentsInChildren<Button>(true))
             Assert.That(button.interactable, Is.EqualTo(button.name == "Skip"), button.name);
         tutorial.Next(); tutorial.Back();
-        tutorial.OnPointerClick(new PointerEventData(EventSystem.current) { button = PointerEventData.InputButton.Left });
         Assert.That(tutorial.CurrentStep, Is.EqualTo(1));
         Assert.That(tutorial.IsOpen, Is.True);
         Assert.That(tutorial.EducationCompleted, Is.False);

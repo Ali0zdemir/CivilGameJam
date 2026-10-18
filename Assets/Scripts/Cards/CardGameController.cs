@@ -39,6 +39,7 @@ namespace CivilGameJam.Cards
         [Header("Turn personnel")]
         [SerializeField] private GameObject normalPersonPrefab;
         [SerializeField, Min(1)] private int normalPeoplePerTurn = 4;
+        private int additionalPeoplePerTurn;
         private readonly List<PersonPose> startingPeople = new List<PersonPose>();
         private struct PersonPose { public Vector3 position, scale; public Vector2 size; }
 
@@ -184,6 +185,7 @@ namespace CivilGameJam.Cards
         public float EducatedResearchSeconds => Mathf.Max(0.1f, educatedResearchSeconds);
         public float CanvasScale => canvas.scaleFactor;
         public int NormalPeopleCount => CountPeople(CardKind.Person);
+        public int PeoplePerTurn => Mathf.Max(1, normalPeoplePerTurn) + additionalPeoplePerTurn;
         public int EducatedPeopleCount => CountPeople(CardKind.EducatedPerson);
 
         private void Start()
@@ -527,6 +529,8 @@ namespace CivilGameJam.Cards
             }
         }
 
+        public void AwardPeoplePerTurn(int count) => additionalPeoplePerTurn += Mathf.Max(0, count);
+
         public void ResetTurnPeople()
         {
             CloseInspection();
@@ -547,20 +551,35 @@ namespace CivilGameJam.Cards
                 person.gameObject.SetActive(false);
                 Destroy(person.gameObject);
             }
-            for (int i = 0; i < Mathf.Max(1, normalPeoplePerTurn); i++)
+            for (int i = 0; i < PeoplePerTurn; i++)
             {
                 var person = Spawn(normalPersonPrefab);
-                if (i < startingPeople.Count && sidebar.PeopleArea != null)
+                if (startingPeople.Count > 0 && sidebar.PeopleArea != null)
                 {
-                    var pose = startingPeople[i];
+                    var pose = startingPeople[Mathf.Min(i, startingPeople.Count - 1)];
                     person.Rect.SetParent(sidebar.PeopleArea, false);
                     person.Rect.sizeDelta = pose.size;
                     person.SetLayoutScale(pose.scale);
-                    sidebar.TrySnap(person, sidebar.PeopleArea.TransformPoint(pose.position));
+                    var position = PeoplePerTurn > startingPeople.Count ? ExpandedPeoplePosition(person, i) : pose.position;
+                    sidebar.TrySnap(person, sidebar.PeopleArea.TransformPoint(position));
                 }
                 else ReturnToTable(person, sidebar.transform.position, false);
             }
             RefreshPopulation();
+        }
+
+        private Vector3 ExpandedPeoplePosition(DraggableCard person, int index)
+        {
+            var area = sidebar.PeopleArea.rect;
+            var size = Vector2.Scale(person.Rect.rect.size, person.LayoutScale);
+            const float gap = 16f;
+            int maxColumns = Mathf.Max(1, Mathf.FloorToInt((area.width - 24f + gap) / (size.x + gap)));
+            int rows = Mathf.CeilToInt((float)PeoplePerTurn / maxColumns);
+            int columns = Mathf.CeilToInt((float)PeoplePerTurn / rows);
+            int row = index / columns;
+            int count = Mathf.Min(columns, PeoplePerTurn - row * columns);
+            return area.center + new Vector2((index % columns - (count - 1) * .5f) * (size.x + gap),
+                ((rows - 1) * .5f - row) * (size.y + gap));
         }
 
         private Vector2 FindFreePosition(DraggableCard incoming)

@@ -23,8 +23,19 @@ namespace CivilGameJam.Disasters
         [SerializeField, TextArea(1, 3)] private string tutorialOutcomeMessage =
             "Half of your houses survived thanks to the disaster prevention system you installed.";
         private bool explainNextRound;
+        [Header("Earthquake survival reward")]
+        [SerializeField] private TMP_Text peopleRewardLabel;
+        [SerializeField, TextArea(1, 3)] private string peopleRewardMessage =
+            "Surviving the earthquake earned you +{people} person! New turns start with {total} people.";
 
         public void ExplainNextRoundResult() => explainNextRound = true;
+
+        public void ShowPeopleReward(int people, int peoplePerTurn)
+        {
+            if (!IsVisible || people <= 0 || peopleRewardLabel == null) return;
+            peopleRewardLabel.text = peopleRewardMessage.Replace("{people}", people.ToString()).Replace("{total}", peoplePerTurn.ToString());
+            peopleRewardLabel.gameObject.SetActive(true);
+        }
 
         public bool IsVisible => overlay != null && overlay.activeSelf;
         public RectTransform EarnedPointsArea => earnedPointsCount != null ? earnedPointsCount.transform.parent as RectTransform : earnedPointsLabel?.rectTransform;
@@ -111,6 +122,7 @@ namespace CivilGameJam.Disasters
 
         private void Open(string reward, int earnedPoints = -1)
         {
+            if (peopleRewardLabel != null) peopleRewardLabel.gameObject.SetActive(false);
             if (tutorialOutcomeLabel != null)
             {
                 tutorialOutcomeLabel.text = tutorialOutcomeMessage;
@@ -129,6 +141,7 @@ namespace CivilGameJam.Disasters
         public void Hide()
         {
             explainNextRound = false;
+            if (peopleRewardLabel != null) peopleRewardLabel.gameObject.SetActive(false);
             if (tutorialOutcomeLabel != null) tutorialOutcomeLabel.gameObject.SetActive(false);
             if (EventSystem.current != null && retryButton != null && EventSystem.current.currentSelectedGameObject == retryButton.gameObject)
                 EventSystem.current.SetSelectedGameObject(null);

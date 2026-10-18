@@ -49,6 +49,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
         var dock = game.GetComponent<CardDock>(); dock.enabled = false; dock.SetExpanded(false, true);
         houses = game.GetComponentsInChildren<HouseCityUpgradeLink>().OrderBy(link => link.House.Card.InitialGridCell).ToArray();
         Assert.That(bank.CurrentPoints, Is.EqualTo(10)); Assert.That(round.RoundNumber, Is.EqualTo(1));
+        Assert.That(game.PeoplePerTurn, Is.EqualTo(4));
         Assert.That(Field<TMP_Text>(round, "roundLabel"), Is.Not.Null, "The authored Turn UI must be bound to the playable round.");
         Assert.That(Field<TMP_Text>(round, "roundLabel").text, Is.EqualTo("1"));
     }
@@ -72,7 +73,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
     private DraggableCard Research(DraggableCard worker, UpgradeKind kind = UpgradeKind.RailSystem)
     {
         // Synchronous setup skips completed researchers' return animations before reusing both pockets.
-        foreach (var person in game.Cards.Where(card => card.IsPerson && card.UsedThisTurn && card.IsFlying)) person.StopFlight();
+        FinishCompletedWorkerReturns();
         Assert.That(research.TryAssign(worker), Is.True);
         for (int i = 1; i < CardGameController.RequiredResearchers(kind); i++)
             Assert.That(research.TryAssign(Person()), Is.True);
@@ -82,10 +83,16 @@ public sealed partial class CardAbilityPointsPlayModeTests
     }
     private DraggableCard Produce(DraggableCard plan)
     {
+        FinishCompletedWorkerReturns();
         while (factoryStation.WorkerCount < FactoryProduction.RequiredWorkersFor(plan.UpgradeType))
             Assert.That(factoryStation.TryAssign(Person()), Is.True);
         Assert.That(factory.TryInsertBlueprint(plan), Is.True); factory.AdvanceWork(100f);
         return game.Cards.Last(card => card.Kind == CardKind.Upgrade && !card.IsStored);
+    }
+    private void FinishCompletedWorkerReturns()
+    {
+        // These fixtures advance jobs synchronously; finish only completed workers' visual returns.
+        foreach (var person in game.Cards.Where(card => card.IsPerson && card.UsedThisTurn && card.IsFlying)) person.StopFlight();
     }
     private void PrepareSeismic(int batches)
     {
@@ -266,6 +273,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(round.LastRoundSurvived, Is.True); Assert.That(round.SequenceNumber, Is.EqualTo(2));
         Assert.That(sequence.SelectedSequence, Is.EqualTo(2));
         Assert.That(round.LastProtectedHouseCount, Is.EqualTo(4)); Assert.That(round.LastSurvivalReward, Is.EqualTo(12));
+        Assert.That(game.PeoplePerTurn, Is.EqualTo(5)); Assert.That(game.NormalPeopleCount, Is.EqualTo(5));
         Assert.That(sequence.IsRunning && bank.ActionsLocked, Is.True, "Water follows the protected earthquake without another READY.");
         sequence.StopSequence(); round.AdvanceRound(0f); Invoke(navigation, "AdvanceNavigation", 2f);
         Assert.That(bank.CurrentPoints, Is.Zero); Assert.That(round.CanReady, Is.True);
@@ -392,7 +400,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(round.SequenceNumber, Is.EqualTo(2)); Assert.That(round.LastRoundSurvived, Is.True);
         Assert.That(bank.CurrentPoints, Is.EqualTo(3), "Keep carried AP unchanged until the following tsunami has completed.");
         Assert.That(houses.All(house => house.House.GetInstalled(UpgradeKind.RailSystem) != null), Is.True);
-        AssertFreshPeople(Array.Empty<DraggableCard>());
+        AssertFreshPeople(Array.Empty<DraggableCard>(), 5);
         Until(() => sequence.Results.IsVisible);
         Assert.That(bank.CurrentPoints, Is.EqualTo(27), "Carry three AP, then pay the deferred eighteen and the tsunami's six AP together.");
     }
@@ -485,7 +493,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(houses.All(house => house.Building.GetComponent<ApartmentTsunamiCollapse>().HasCollapsed), Is.True);
         sequence.Results.Retry();
         Assert.That(houses.All(house => !house.House.IsDestroyed && !house.Building.GetComponent<ApartmentTsunamiCollapse>().HasCollapsed), Is.True);
-        AssertFreshPeople(Array.Empty<DraggableCard>());
+        AssertFreshPeople(Array.Empty<DraggableCard>(), 5);
     }
 
     [UnityTest]
@@ -514,6 +522,101 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(game.Vault.SlotFor(UpgradeKind.Fire).IsArriving, Is.False);
     }
 
+    [Test]
+    public void TsunamiFactoryReservesFourPerEducatedPersonAndEightPerNormalPersonAndRefundsEachCharge()
+    {
+        bank.AddPoints(100);
+        game.RestrictResearchTo(UpgradeKind.None);
+        foreach (var station in new[] { school, research, factoryStation }) station.UseSequencePrices(2);
+        var plan = Research(Person(), UpgradeKind.Breakwater);
+        var educated = Educate(); var normal = Person();
+        Assert.That(factoryStation.AbilityPointCost(CardKind.Person), Is.EqualTo(8));
+        Assert.That(factoryStation.AbilityPointCost(CardKind.EducatedPerson), Is.EqualTo(4));
+        Assert.That(factory.TryInsertBlueprint(plan), Is.True);
+        int before = bank.CurrentPoints;
+        Assert.That(factoryStation.TryAssign(educated), Is.True);
+        Assert.That(bank.CurrentPoints, Is.EqualTo(before - 4));
+        Assert.That(factory.WorkRate, Is.Zero, "Elevator production still needs two people.");
+        Assert.That(factoryStation.TryAssign(normal), Is.True);
+        Assert.That(bank.CurrentPoints, Is.EqualTo(before - 12));
+        Assert.That(factory.CurrentOrderCost, Is.EqualTo(12));
+        factoryStation.ReleaseWorker(0, false);
+        Assert.That(bank.CurrentPoints, Is.EqualTo(before - 8));
+        factoryStation.ReleaseWorker(1, false);
+        Assert.That(bank.CurrentPoints, Is.EqualTo(before));
+        Assert.That(educated.CanStartWork && normal.CanStartWork, Is.True);
+    }
+
+    [UnityTest]
+    public IEnumerator EarthquakeAwardsOnePermanentPersonAndOnlyACompleteTsunamiWinKeepsElevators()
+    {
+        bank.AddPoints(4); PrepareSeismic(2);
+        var rails = houses.Select(house => house.House.GetInstalled(UpgradeKind.RailSystem)).ToArray();
+        yield return new WaitForSecondsRealtime(1.6f);
+        round.Ready(); Until(() => sequence.Results.IsVisible);
+        Assert.That(round.SequenceNumber, Is.EqualTo(2));
+        AssertFreshPeople(Array.Empty<DraggableCard>(), 5);
+        Assert.That(game.PeoplePerTurn, Is.EqualTo(5));
+        var reward = Field<TMP_Text>(sequence.Results, "peopleRewardLabel");
+        var people = game.Cards.Where(card => card.IsPerson).ToArray();
+        var area = game.Sidebar.PeopleArea;
+        var bounds = people.Select(person =>
+        {
+            var corners = new Vector3[4]; person.Rect.GetWorldCorners(corners);
+            var min = area.InverseTransformPoint(corners[0]); var max = area.InverseTransformPoint(corners[2]);
+            return Rect.MinMaxRect(min.x, min.y, max.x, max.y);
+        }).ToArray();
+        Assert.That(area.rect.Contains(bounds[4].min + Vector2.one * .1f) && area.rect.Contains(bounds[4].max - Vector2.one * .1f), Is.True);
+        Assert.That(bounds.Take(4).Any(other => other.Overlaps(bounds[4])), Is.False, "The extra person must fit without covering the original four.");
+        Assert.That(people[4].Rect.sizeDelta, Is.EqualTo(people[0].Rect.sizeDelta));
+        Assert.That(people[4].LayoutScale, Is.EqualTo(people[0].LayoutScale));
+        Assert.That(reward.gameObject.activeInHierarchy, Is.True);
+        Assert.That(reward.text, Does.Contain("earthquake").And.Contain("+1 person").And.Contain("5 people"));
+        Canvas.ForceUpdateCanvases(); reward.ForceMeshUpdate();
+        Assert.That(reward.isTextOverflowing, Is.False, "The reward fits the existing saved result text area.");
+        yield return CapturePeopleRewardUI("earthquake-reward");
+        sequence.Results.Retry(); Assert.That(reward.gameObject.activeSelf, Is.False);
+        yield return CapturePeopleRewardUI("five-people-planning");
+        yield return CapturePeopleRewardUI("five-people-ultrawide", 2560, 1080);
+        yield return CapturePeopleRewardUI("five-people-four-three", 1024, 768);
+        bank.AddPoints(100);
+        var plan = Research(Person(), UpgradeKind.Breakwater);
+        Produce(plan); Produce(plan);
+        var products = game.Cards.Where(card => card.Kind == CardKind.Upgrade && card.UpgradeType == UpgradeKind.Breakwater).ToArray();
+        Assert.That(products.Length, Is.EqualTo(4));
+        for (int i = 0; i < 3; i++) Assert.That(houses[i].House.TryInstall(products[i]), Is.True);
+        yield return new WaitForSecondsRealtime(1.6f);
+        round.Ready(); Until(() => sequence.Results.IsVisible);
+        Assert.That(round.LastRoundSurvived, Is.False);
+        Assert.That(round.SequenceNumber, Is.EqualTo(2));
+        Assert.That(sequence.Results.ProtectedHouseCount, Is.EqualTo(3), "Three safe houses cannot clear the four-house gate.");
+        Assert.That(reward.gameObject.activeSelf, Is.False, "The earthquake person reward is announced once.");
+        sequence.Results.Retry();
+        Assert.That(game.Cards.Any(card => card.Kind == CardKind.Upgrade && card.UpgradeType == UpgradeKind.Breakwater), Is.False,
+            "A failed tsunami removes the three installed Elevators and the unused fourth item.");
+        Assert.That(houses.All(house => house.House.GetInstalled(UpgradeKind.Breakwater) == null), Is.True);
+        Assert.That(game.Vault.IsDiscovered(UpgradeKind.Breakwater) && game.CanUseBlueprint(UpgradeKind.Breakwater), Is.True);
+        for (int i = 0; i < houses.Length; i++) Assert.That(houses[i].House.GetInstalled(UpgradeKind.RailSystem), Is.SameAs(rails[i]));
+        AssertFreshPeople(Array.Empty<DraggableCard>(), 5);
+        yield return new WaitForSecondsRealtime(1.6f);
+        Assert.That(houses.All(house => !house.Building.GetComponent<ApartmentUpgradeModel>().IsElevated), Is.True);
+        Produce(plan); Produce(plan);
+        var winningProducts = game.Cards.Where(card => card.Kind == CardKind.Upgrade && card.UpgradeType == UpgradeKind.Breakwater).ToArray();
+        for (int i = 0; i < 4; i++) Assert.That(houses[i].House.TryInstall(winningProducts[i]), Is.True);
+        yield return new WaitForSecondsRealtime(1.6f);
+        round.Ready(); Until(() => sequence.Results.IsVisible);
+        Assert.That(round.LastRoundSurvived, Is.True); Assert.That(round.SequenceNumber, Is.EqualTo(3));
+        Assert.That(sequence.Results.ProtectedHouseCount, Is.EqualTo(4));
+        Assert.That(reward.gameObject.activeSelf, Is.False);
+        sequence.Results.Retry();
+        for (int i = 0; i < 4; i++) Assert.That(houses[i].House.GetInstalled(UpgradeKind.Breakwater), Is.SameAs(winningProducts[i]));
+        Assert.That(houses.All(house => house.Building.GetComponent<ApartmentUpgradeModel>().IsElevated), Is.True);
+        Assert.That(game.CanUseBlueprint(UpgradeKind.Breakwater), Is.False);
+        AssertFreshPeople(Array.Empty<DraggableCard>(), 5);
+        game.ResetTurnPeople(); AssertFreshPeople(Array.Empty<DraggableCard>(), 5);
+        Assert.That(game.PeoplePerTurn, Is.EqualTo(5), "Later rounds retain the bonus without awarding it again.");
+    }
+
     [UnityTest]
     public IEnumerator RollingBackAnArrivingDiscoveryLeavesNoGhostAndItCanBeResearchedAgain()
     {
@@ -534,11 +637,50 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(bank.CurrentPoints, Is.EqualTo(2));
     }
 
-    private void AssertFreshPeople(DraggableCard[] oldPeople)
+    private void AssertFreshPeople(DraggableCard[] oldPeople, int? count = null)
     {
-        Assert.That(game.NormalPeopleCount, Is.EqualTo(4)); Assert.That(game.EducatedPeopleCount, Is.Zero);
+        Assert.That(game.NormalPeopleCount, Is.EqualTo(count ?? (round.SequenceNumber >= 2 ? 5 : 4))); Assert.That(game.EducatedPeopleCount, Is.Zero);
         Assert.That(game.Cards.Where(card => card.IsPerson).All(card => card.CanStartWork && !card.IsStored && card.gameObject.activeSelf), Is.True);
         Assert.That(oldPeople.Any(person => game.Cards.Contains(person)), Is.False);
+    }
+
+    private IEnumerator CapturePeopleRewardUI(string name, int width = 1600, int height = 900)
+    {
+        var canvas = game.GetComponentInParent<Canvas>();
+        var mode = canvas.renderMode; var previousCamera = canvas.worldCamera; float distance = canvas.planeDistance;
+        var cameraObject = new GameObject("Reward screenshot", typeof(Camera)); var camera = cameraObject.GetComponent<Camera>();
+        camera.enabled = false; camera.orthographic = true; camera.orthographicSize = 450f;
+        camera.nearClipPlane = .1f; camera.farClipPlane = 100f; camera.cullingMask = 1 << canvas.gameObject.layer;
+        var target = new RenderTexture(width, height, 24); camera.targetTexture = target;
+        var previousTarget = RenderTexture.active; Texture2D pixels = null;
+        try
+        {
+            canvas.renderMode = RenderMode.ScreenSpaceCamera; canvas.worldCamera = camera; canvas.planeDistance = 10f;
+            Canvas.ForceUpdateCanvases(); yield return null; Canvas.ForceUpdateCanvases();
+            var city = Object.FindFirstObjectByType<CityViewport>(); city.RefreshViewport(); city.WorldCamera.Render();
+            foreach (var person in game.Cards.Where(card => card.IsPerson && !card.IsStored))
+            {
+                var corners = new Vector3[4]; person.Rect.GetWorldCorners(corners);
+                foreach (var corner in corners)
+                {
+                    var point = camera.WorldToScreenPoint(corner);
+                    Assert.That(point.x, Is.InRange(0f, (float)width), "Every person must remain on screen.");
+                    Assert.That(point.y, Is.InRange(0f, (float)height), "The lower row cannot be cropped.");
+                }
+            }
+            camera.Render(); RenderTexture.active = target;
+            pixels = new Texture2D(width, height, TextureFormat.RGB24, false);
+            pixels.ReadPixels(new Rect(0, 0, width, height), 0, 0); pixels.Apply();
+            var directory = Path.GetFullPath("Library/CardGameTestResults/PeopleReward"); Directory.CreateDirectory(directory);
+            File.WriteAllBytes(Path.Combine(directory, name + ".png"), pixels.EncodeToPNG());
+        }
+        finally
+        {
+            canvas.renderMode = mode; canvas.worldCamera = previousCamera; canvas.planeDistance = distance;
+            RenderTexture.active = previousTarget; Canvas.ForceUpdateCanvases(); camera.targetTexture = null;
+            if (pixels != null) Object.Destroy(pixels);
+            target.Release(); Object.Destroy(target); Object.Destroy(cameraObject);
+        }
     }
 
     private void Until(Func<bool> condition)

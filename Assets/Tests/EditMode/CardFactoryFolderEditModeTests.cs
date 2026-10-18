@@ -29,6 +29,13 @@ public sealed class CardFactoryFolderEditModeTests
         var factory = view.GetComponent<FactoryProduction>();
         Assert.That(new SerializedObject(factory).FindProperty("folderPresentation").objectReferenceValue, Is.SameAs(view));
         var hint = (CanvasGroup)data.FindProperty("workerHint").objectReferenceValue;
+        var pair = data.FindProperty("pairedWorkerHints");
+        Assert.That(pair.arraySize, Is.EqualTo(2));
+        var pairRects = Enumerable.Range(0, 2).Select(index => (RectTransform)pair.GetArrayElementAtIndex(index).objectReferenceValue).ToArray();
+        Assert.That(pairRects.All(rect => rect != null && rect.IsChildOf(hint.transform)), Is.True);
+        Assert.That(pairRects[0].anchoredPosition.x, Is.LessThan(pairRects[1].anchoredPosition.x));
+        Assert.That(pairRects.All(rect => rect.gameObject.activeSelf && rect.GetComponent<Image>().sprite.name == "Insert Card Ui" && !rect.GetComponent<Image>().raycastTarget), Is.True);
+        Assert.That(((RectTransform)data.FindProperty("personHint").objectReferenceValue).gameObject.activeSelf, Is.False);
         Assert.That(hint.GetComponentsInChildren<TMPro.TMP_Text>(true), Is.Empty, "The one-person prompt contains no words or numbers.");
         Assert.That(hint.blocksRaycasts, Is.False);
         Assert.That(hint.gameObject.activeSelf, Is.True, "Keep the guide visible for editing; Initialize hides it until a usable order needs a worker.");

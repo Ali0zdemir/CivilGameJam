@@ -13,7 +13,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
     private IEnumerator ReachFire()
     {
         yield return ReachTsunami();
-        bank.AddPoints(39); // Fund nine AP research and two complete twenty-four AP factory crews.
+        bank.AddPoints(23); // Fund nine AP research and two complete sixteen-AP factory crews.
         PrepareElevators(2);
         yield return new WaitForSecondsRealtime(1.6f);
         round.Ready();
@@ -89,6 +89,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
         var plan = Research(Person(), UpgradeKind.Fire);
         for (int i = 0; i < batches; i++)
         {
+            FinishCompletedWorkerReturns();
             // Multi-order fixtures span worker turns while preserving their AP accounting.
             if (game.Cards.Count(card => card.Kind == CardKind.Person && card.CanStartWork && !card.IsStored) < 2)
                 game.ResetTurnPeople();

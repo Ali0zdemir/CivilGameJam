@@ -11,7 +11,7 @@ namespace CivilGameJam.Disasters
         [SerializeField, Range(.1f, 3f)] private float dustAmount = 1.4f;
         [Header("Building collapse sound")]
         [SerializeField] private AudioClip collapseSound;
-        [SerializeField, Range(0f, 1f)] private float collapseSoundVolume = .12f;
+        [SerializeField, Range(0f, 1f)] private float collapseSoundVolume = .048f;
         [Tooltip("Skip the recording's leading silence so its attack starts with the visible collapse.")]
         [SerializeField, Min(0f)] private float collapseSoundStartSeconds;
         private readonly System.Random random = new System.Random();

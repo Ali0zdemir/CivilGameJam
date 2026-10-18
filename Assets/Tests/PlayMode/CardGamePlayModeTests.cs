@@ -125,7 +125,8 @@ public sealed partial class CardGamePlayModeTests
         Assert.That(UIIds(game), Is.EqualTo(savedUI));
         Hover(people[1], true);
         yield return new WaitForSecondsRealtime(0.32f);
-        Assert.That(people[1].GetComponent<CardHover>().Details.gameObject.activeSelf, Is.True);
+        Assert.That(people[1].GetComponent<CardHover>().Details.gameObject.activeSelf, Is.False);
+        Assert.That(Vector3.Distance(people[1].Rect.localScale, people[1].LayoutScale * 1.21125f), Is.LessThan(0.001f));
         Assert.That(game.Sidebar.Area.GetSiblingIndex(), Is.GreaterThan(game.CardLayer.GetSiblingIndex()));
         Hover(people[1], false);
     }
@@ -145,6 +146,12 @@ public sealed partial class CardGamePlayModeTests
         Assert.That(graduate.Rect.parent, Is.SameAs(area));
         Assert.That(Vector3.Distance(graduate.Rect.position, chosenPosition), Is.LessThan(0.01f),
             "Graduating must retain the player's chosen place instead of introducing a slot.");
+        Hover(graduate, true);
+        yield return new WaitForSecondsRealtime(.32f);
+        Assert.That(graduate.GetComponent<CardHover>().Details.gameObject.activeSelf, Is.False);
+        Assert.That(Vector3.Distance(graduate.Rect.localScale, graduate.LayoutScale * 1.21125f), Is.LessThan(.001f));
+        Hover(graduate, false);
+        yield return new WaitForSecondsRealtime(.32f);
         var person = People()[0];
         Drag(person, area.TransformPoint(new Vector2(area.rect.xMin + 2f, area.rect.yMax - 2f)));
         Assert.That(person.Rect.parent, Is.SameAs(area));
@@ -878,8 +885,7 @@ public sealed partial class CardGamePlayModeTests
                 yield return new WaitForSecondsRealtime(0.32f);
                 var edgeDetails = edgePerson.GetComponent<CardHover>().Details;
                 AssertOnScreen(edgePerson.Rect, camera, resolution);
-                AssertOnScreen(edgeDetails, camera, resolution);
-                Assert.That(edgeDetails.pivot.x, Is.EqualTo(1f), "Near the right edge, info must open to the left: " + context);
+                Assert.That(edgeDetails.gameObject.activeSelf, Is.False, "People must not open an information panel: " + context);
                 Hover(edgePerson, false);
                 yield return new WaitForSecondsRealtime(0.32f);
                 edgePerson.Rect.anchoredPosition = originalPosition;

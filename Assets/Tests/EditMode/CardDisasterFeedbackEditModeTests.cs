@@ -24,7 +24,7 @@ public sealed class CardDisasterFeedbackEditModeTests
         Assert.That(sound, Is.Not.Null);
         var soundPath = AssetDatabase.GetAssetPath(sound);
         Assert.That(soundPath, Is.EqualTo("Assets/Art/BinaYıkılmaSound/afet sonucu bina yıkılma sesi 4.wav"));
-        Assert.That(data.FindProperty("collapseSoundVolume").floatValue, Is.EqualTo(.12f).Within(.00001f));
+        Assert.That(data.FindProperty("collapseSoundVolume").floatValue, Is.EqualTo(.048f).Within(.00001f));
         var importer = (AudioImporter)AssetImporter.GetAtPath(soundPath);
         Assert.That(importer.defaultSampleSettings.loadType, Is.EqualTo(AudioClipLoadType.DecompressOnLoad));
         Assert.That(importer.defaultSampleSettings.compressionFormat, Is.EqualTo(AudioCompressionFormat.PCM));

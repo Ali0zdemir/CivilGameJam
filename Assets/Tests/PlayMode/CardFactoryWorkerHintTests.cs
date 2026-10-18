@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Linq;
 using CivilGameJam.Cards;
 using NUnit.Framework;
 using UnityEngine;
@@ -6,6 +7,53 @@ using UnityEngine.TestTools;
 
 public sealed partial class CardAbilityPointsPlayModeTests
 {
+    [UnityTest]
+    public IEnumerator ElevatorAndFireGuidesFollowTheMissingCrewAndDisappearWithoutAP()
+    {
+        bank.AddPoints(100);
+        game.RestrictResearchTo(UpgradeKind.None);
+        var view = factory.GetComponent<FactoryFolderPresentation>();
+        var originalUI = view.GetComponentsInChildren<Transform>(true).Select(item => item.GetInstanceID()).OrderBy(id => id).ToArray();
+        foreach (var kind in new[] { UpgradeKind.Breakwater, UpgradeKind.Fire })
+        {
+            game.ResetTurnPeople();
+            factoryStation.UseSequencePrices(kind == UpgradeKind.Breakwater ? 2 : 3);
+            var plan = Research(Person(), kind);
+            Assert.That(factory.TryInsertBlueprint(plan), Is.True);
+            Assert.That(view.VisibleWorkerHintCount, Is.Zero, "Wait until the blueprint has entered its folder.");
+            yield return new WaitForSecondsRealtime(.75f);
+            Assert.That(view.VisibleWorkerHintCount, Is.EqualTo(2));
+            var pair = Field<UnityEngine.RectTransform[]>(view, "pairedWorkerHints");
+            Assert.That(pair.All(hint => hint.gameObject.activeInHierarchy), Is.True);
+            Assert.That(pair[0].position.x, Is.LessThan(pair[1].position.x));
+            var group = (UnityEngine.RectTransform)Field<UnityEngine.CanvasGroup>(view, "workerHint").transform;
+            var savedPosition = group.anchoredPosition; var savedSize = group.sizeDelta; var savedScale = group.localScale;
+            int available = bank.CurrentPoints; Assert.That(bank.TrySpend(available), Is.True);
+            yield return null;
+            Assert.That(view.VisibleWorkerHintCount, Is.Zero);
+            bank.AddPoints(available); yield return new WaitForSecondsRealtime(.25f);
+            Assert.That(view.VisibleWorkerHintCount, Is.EqualTo(2));
+            yield return CaptureAvailabilityGuide("factory-" + kind + "-two-person-guides");
+            Assert.That(factoryStation.TryAssign(Person()), Is.True);
+            yield return new WaitForSecondsRealtime(.25f);
+            Assert.That(view.VisibleWorkerHintCount, Is.EqualTo(1));
+            Assert.That(factory.WorkRate, Is.Zero);
+            Assert.That(pair.All(hint => !hint.gameObject.activeSelf), Is.True);
+            Assert.That(factoryStation.TryAssign(Person()), Is.True);
+            yield return new WaitForSecondsRealtime(.25f);
+            Assert.That(view.VisibleWorkerHintCount, Is.Zero);
+            Assert.That(factory.WorkRate, Is.EqualTo(2f));
+            factoryStation.ReleaseWorker(1, false); yield return new WaitForSecondsRealtime(.25f);
+            Assert.That(view.VisibleWorkerHintCount, Is.EqualTo(1), "Removing a worker restores one missing-person guide.");
+            Assert.That(factory.ReleaseBlueprint(false), Is.SameAs(plan)); yield return null;
+            Assert.That(view.VisibleWorkerHintCount, Is.Zero);
+            Assert.That(group.anchoredPosition, Is.EqualTo(savedPosition));
+            Assert.That(group.sizeDelta, Is.EqualTo(savedSize)); Assert.That(group.localScale, Is.EqualTo(savedScale));
+            Assert.That(view.GetComponentsInChildren<Transform>(true).Select(item => item.GetInstanceID()).OrderBy(id => id), Is.EqualTo(originalUI),
+                "The guide must use saved objects throughout every order.");
+        }
+    }
+
     [UnityTest]
     public IEnumerator FactoryWorkerHintFollowsAvailableAPAndTheCurrentSequencePrice()
     {
@@ -27,7 +75,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
         bank.AddPoints(5);
         yield return new WaitForSecondsRealtime(.25f);
         Assert.That(view.IsWorkerHintVisible, Is.True);
-        factoryStation.UseSequencePrices(2); // Tsunami normal factory: 12 AP.
+        factoryStation.UseSequencePrices(2); // Tsunami normal factory: 8 AP.
         yield return null;
         Assert.That(view.IsWorkerHintVisible, Is.False);
         bank.AddPoints(7);
@@ -35,7 +83,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(view.IsWorkerHintVisible, Is.True);
         factoryStation.UseSequencePrices(3); // Fire normal factory: 12 AP.
         yield return null;
-        Assert.That(view.IsWorkerHintVisible, Is.True, "Both later sequences charge twelve AP for a normal factory worker.");
+        Assert.That(view.IsWorkerHintVisible, Is.True, "Twelve AP still cover a normal factory worker in the fire stage.");
         Assert.That(bank.TrySpend(1), Is.True);
         yield return null;
         Assert.That(view.IsWorkerHintVisible, Is.False);

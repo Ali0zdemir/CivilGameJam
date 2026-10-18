@@ -24,7 +24,7 @@ namespace CivilGameJam.Cards
 
     /// <summary>New-game lessons, using only the UI already saved under Canvas/WorkersTutorial.</summary>
     [DisallowMultipleComponent, DefaultExecutionOrder(350)]
-    public sealed class WorkersTutorial : MonoBehaviour, IPointerClickHandler
+    public sealed class WorkersTutorial : MonoBehaviour
     {
         public const string CompletionPreferenceKey = "CivilGameJam.Tutorial.Workers.v5";
 
@@ -221,6 +221,7 @@ namespace CivilGameJam.Cards
             if (nextLabel != null) nextLabel.text = "CONTINUE";
             if (back != null) { back.gameObject.SetActive(CurrentStep == 2); back.interactable = CurrentStep == 2; }
             next.interactable = !RequiredAction;
+            next.gameObject.SetActive(next.interactable);
             if (skip != null) skip.interactable = true;
             if (budget != null) budget.text = game.AbilityPoints.CurrentPoints + " AP";
             if (schoolPrice != null) schoolPrice.text = "SCHOOL  -" + school.AbilityPointCost(CardKind.Person) + " AP";
@@ -434,10 +435,6 @@ namespace CivilGameJam.Cards
         }
         public void Back() { if (IsOpen && !closing && CurrentStep == 2) ShowStep(1); }
         public void Skip() { if (IsOpen && !closing && !game.IsChoosingBlueprint) Close(true); }
-        public void OnPointerClick(PointerEventData eventData)
-        {
-            if (eventData.button == PointerEventData.InputButton.Left) Next();
-        }
         private void Close(bool skipped = false)
         {
             if (!ProductionCompleted && !skipped) return;

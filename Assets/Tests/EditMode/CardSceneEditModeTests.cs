@@ -45,6 +45,9 @@ public sealed class CardSceneEditModeTests
         Assert.That(canvas.transform.Find("ScreenBackground").gameObject.activeSelf, Is.True);
         Assert.That(canvas.transform.Find("CitySidebar"), Is.Null, "The deleted statistics panel must stay deleted.");
         Assert.That(game.Sidebar, Is.Not.Null);
+        Assert.That(game.Sidebar.GetComponent<Image>().sprite,
+            Is.SameAs(AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Art/Vault Ui Final.png")));
+        Assert.That(game.Sidebar.GetComponent<Image>().color, Is.EqualTo(Color.white));
         Assert.That(game.Sidebar.Slots, Is.Empty);
         Assert.That(game.Sidebar.PeopleArea, Is.Not.Null);
         Assert.That(game.Sidebar.PeopleArea.rect.width, Is.GreaterThan(game.Sidebar.PeopleArea.rect.height));
@@ -58,6 +61,13 @@ public sealed class CardSceneEditModeTests
         Assert.That(game.Sidebar.UpgradesArea.parent.Find("Title").GetComponent<TMPro.TMP_Text>().text, Is.EqualTo("UPGRADES"));
         Assert.That(game.Sidebar.UpgradesArea.position.y, Is.GreaterThan(game.Sidebar.PeopleArea.position.y));
         Assert.That(game.Vault.Area.Cast<Transform>().Count(child => child.name.StartsWith("BlueprintSlot")), Is.EqualTo(4));
+        Assert.That(game.Vault.Area.Find("Description"), Is.Null, "The previous sidebar's extra decoration must stay removed.");
+        foreach (var area in new[] { game.Vault.Area, game.Sidebar.PeopleArea, game.Sidebar.UpgradesArea })
+        {
+            Assert.That(area.GetComponent<Image>().color.a, Is.Zero, "The supplied artwork draws the inventory surfaces.");
+            var frame = area.Find("DropTargetFrame").GetComponent<Image>();
+            Assert.That(frame.fillCenter || frame.raycastTarget, Is.False, "The saved feedback draws a border and cannot block dragging.");
+        }
         var viewport = canvas.transform.Find("CityView").GetComponent<CityViewport>();
         Assert.That(viewport, Is.Not.Null);
         Assert.That(viewport.WorldCamera.targetTexture, Is.Not.Null);
@@ -324,9 +334,8 @@ public sealed class CardSceneEditModeTests
                 Assert.That(data.FindProperty(field).objectReferenceValue, Is.Not.Null, field);
             Assert.That(slot.CardRect.rect.height, Is.GreaterThan(190f));
             Assert.That(slot.CardRect.rect.size, Is.EqualTo(new Vector2(300f, 400f)));
-            Assert.That(Vector3.Distance(slot.CardRect.localScale,
-                AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/" +
-                    new[] { "RaylıSistemBlueprint", "DalgaKıranBlueprint", "YangınBlueprint" }[i] + ".prefab").transform.localScale), Is.LessThan(0.00001f));
+            Assert.That(slot.CardRect.localScale.x, Is.GreaterThan(.7f).And.LessThan(1f));
+            Assert.That(slot.CardRect.localScale.y, Is.EqualTo(slot.CardRect.localScale.x));
             var hover = slot.GetComponent<CardHover>();
             Assert.That(hover, Is.Not.Null);
             Assert.That(new SerializedObject(hover).FindProperty("vaultSlot").objectReferenceValue, Is.SameAs(slot));

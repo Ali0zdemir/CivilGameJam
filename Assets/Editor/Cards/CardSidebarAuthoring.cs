@@ -14,6 +14,172 @@ namespace CivilGameJam.Cards.Editor
         private static readonly Color Muted = new Color(0.52f, 0.65f, 0.67f);
         private static readonly Color Gold = new Color(0.96f, 0.75f, 0.39f);
 
+        [MenuItem("Tools/Card Game/Use Final Vault Sidebar")]
+        public static void SaveFinalVaultForBatch()
+        {
+            if (EditorApplication.isPlayingOrWillChangePlaymode)
+                throw new System.InvalidOperationException("Save the sidebar in Edit Mode.");
+            var scene = EditorSceneManager.OpenScene("Assets/2DCardScene.unity");
+            ApplyFinalVault(Object.FindFirstObjectByType<CardGameController>());
+            var tutorial = Object.FindFirstObjectByType<WorkersTutorial>(FindObjectsInactive.Include);
+            if (tutorial != null) tutorial.gameObject.SetActive(true);
+            EditorSceneManager.MarkSceneDirty(scene);
+            if (!EditorSceneManager.SaveScene(scene)) throw new System.IO.IOException("Could not save the final Vault sidebar.");
+            AssetDatabase.SaveAssets();
+        }
+
+        private static void ApplyFinalVault(CardGameController game)
+        {
+            if (game == null || game.Sidebar == null || game.Vault == null)
+                throw new System.InvalidOperationException("The saved sidebar and Vault references are required.");
+            var sidebar = game.Sidebar;
+            sidebar.RefreshLayout();
+            var artwork = sidebar.GetComponent<Image>();
+            artwork.sprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Art/Vault Ui Final.png");
+            if (artwork.sprite == null) throw new System.InvalidOperationException("Import Vault Ui Final first.");
+            artwork.color = Color.white;
+            artwork.type = Image.Type.Simple;
+            artwork.preserveAspect = false;
+            foreach (var oldEdge in sidebar.GetComponents<Outline>()) Object.DestroyImmediate(oldEdge);
+
+            // Pixel coordinates are normalized anchors in the supplied 1070 x 2720 artwork.
+            // Every drop area follows the same panel at all CanvasScaler resolutions.
+            var full = new Rect(0f, 0f, 1070f, 2720f);
+            var scaler = game.GetComponentInParent<Canvas>().rootCanvas.GetComponent<CanvasScaler>();
+            float margin = new SerializedObject(sidebar).FindProperty("margin").floatValue;
+            float designHeight = (scaler.referenceResolution.y - 2f * margin) / ((RectTransform)game.transform).localScale.y;
+            var vaultBounds = new Rect(0f, 0f, 1070f, 1540f);
+            var vault = game.Vault.Area;
+            vault.SetParent(sidebar.transform, false);
+            InArtwork(vault, full, vaultBounds);
+            ClearSurface(vault);
+            FinalTitle(vault.Find("Title").GetComponent<TMP_Text>(), vaultBounds, new Rect(42f, 36f, 986f, 100f), "VAULT");
+            var obsolete = vault.Find("Description");
+            if (obsolete != null) Object.DestroyImmediate(obsolete.gameObject);
+            for (int index = 0; index < 4; index++)
+            {
+                var slot = vault.Find("BlueprintSlot" + index) as RectTransform;
+                if (slot == null) throw new System.InvalidOperationException("Missing saved Vault slot " + index);
+                var bounds = new Rect(index % 2 == 0 ? 44f : 564f, index < 2 ? 204f : 892f, 462f, 610f);
+                InArtwork(slot, vaultBounds, bounds);
+                ClearSurface(slot);
+                var empty = slot.Find("EmptyLabel");
+                if (empty != null) Object.DestroyImmediate(empty.gameObject);
+                if (index >= game.Vault.Slots.Count) continue;
+                var visual = game.Vault.Slots[index].CardRect;
+                Canvas.ForceUpdateCanvases();
+                float blueprintScale = Mathf.Min(slot.rect.width * .9f / visual.rect.width,
+                    (designHeight * bounds.height / full.height - 44f) / visual.rect.height);
+                visual.localScale = Vector3.one * blueprintScale;
+                visual.anchorMin = visual.anchorMax = visual.pivot = new Vector2(.5f, .5f);
+                visual.anchoredPosition = new Vector2(0f, 20f);
+                var slotData = new SerializedObject(game.Vault.Slots[index]);
+                slotData.FindProperty("preserveArtworkColors").boolValue = true;
+                slotData.ApplyModifiedPropertiesWithoutUndo();
+                foreach (string labelName in new[] { "Discovery", "Quantity" })
+                {
+                    var label = slot.Find(labelName) as RectTransform;
+                    if (label == null) continue;
+                    label.anchorMin = label.anchorMax = new Vector2(.5f, 0f);
+                    label.anchoredPosition = new Vector2(0f, labelName == "Discovery" ? 26f : 7f);
+                }
+            }
+            FinalDropFrame(vault);
+
+            var upgrades = sidebar.UpgradesArea;
+            var upgradesRoot = (RectTransform)upgrades.parent;
+            var upgradesBounds = new Rect(0f, 1540f, 1070f, 506f);
+            InArtwork(upgradesRoot, full, upgradesBounds);
+            ClearSurface(upgradesRoot);
+            FinalTitle(upgradesRoot.Find("Title").GetComponent<TMP_Text>(), upgradesBounds,
+                new Rect(42f, 1544f, 986f, 60f), "UPGRADES");
+            InArtwork(upgrades, upgradesBounds, new Rect(44f, 1690f, 982f, 310f));
+            ClearSurface(upgrades);
+            FinalDropFrame(upgrades);
+
+            var people = sidebar.PeopleArea;
+            var peopleRoot = (RectTransform)people.parent;
+            var peopleBounds = new Rect(0f, 2046f, 1070f, 674f);
+            InArtwork(peopleRoot, full, peopleBounds);
+            ClearSurface(peopleRoot);
+            FinalTitle(peopleRoot.Find("Title").GetComponent<TMP_Text>(), peopleBounds,
+                new Rect(42f, 2052f, 986f, 70f), "PEOPLE");
+            InArtwork(people, peopleBounds, new Rect(44f, 2152f, 982f, 532f));
+            ClearSurface(people);
+            FinalDropFrame(people);
+            Canvas.ForceUpdateCanvases();
+
+            float peopleScale = Mathf.Min(1f, (designHeight * 532f / full.height - 32f) / (2f * 165f + 16f));
+            peopleScale = Mathf.Floor(peopleScale * 100f) / 100f;
+            foreach (string prefabName in new[] { "PeopleCard", "EducatedPeopleCard" })
+            {
+                string path = "Assets/Prefabs/" + prefabName + ".prefab";
+                var prefab = PrefabUtility.LoadPrefabContents(path);
+                try
+                {
+                    prefab.transform.localScale = Vector3.one * peopleScale;
+                    PrefabUtility.SaveAsPrefabAsset(prefab, path);
+                }
+                finally { PrefabUtility.UnloadPrefabContents(prefab); }
+            }
+            var peopleCards = people.GetComponentsInChildren<DraggableCard>(true).Where(card => card.IsPerson)
+                .OrderBy(card => card.name).ToArray();
+            for (int index = 0; index < peopleCards.Length; index++)
+            {
+                var rect = peopleCards[index].Rect;
+                rect.localScale = Vector3.one * peopleScale;
+                rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(.5f, .5f);
+                rect.anchoredPosition = new Vector2((index % 2 - .5f) * (132f * peopleScale + 36f),
+                    (.5f - index / 2) * (165f * peopleScale + 16f));
+                PrefabUtility.RecordPrefabInstancePropertyModifications(rect);
+            }
+            var spotlight = Object.FindFirstObjectByType<TutorialSpotlight>(FindObjectsInactive.Include);
+            if (spotlight != null) Refs(spotlight, ("peoplePanel", peopleRoot));
+            vault.SetAsFirstSibling();
+            Debug.Log($"Saved final Vault artwork: blueprints={game.Vault.Slots.Count}, peopleArea={people.rect.size}, peopleScale={peopleScale}, upgradesArea={upgrades.rect.size}.");
+        }
+
+        private static void InArtwork(RectTransform rect, Rect parent, Rect region)
+        {
+            rect.anchorMin = new Vector2((region.xMin - parent.xMin) / parent.width, 1f - (region.yMax - parent.yMin) / parent.height);
+            rect.anchorMax = new Vector2((region.xMax - parent.xMin) / parent.width, 1f - (region.yMin - parent.yMin) / parent.height);
+            rect.pivot = new Vector2(.5f, .5f);
+            rect.offsetMin = rect.offsetMax = Vector2.zero;
+            rect.localScale = Vector3.one;
+        }
+
+        private static void ClearSurface(RectTransform rect)
+        {
+            var image = rect.GetComponent<Image>();
+            if (image != null) image.color = Color.clear;
+            foreach (var edge in rect.GetComponents<Outline>()) Object.DestroyImmediate(edge);
+        }
+
+        private static void FinalTitle(TMP_Text title, Rect parent, Rect region, string value)
+        {
+            InArtwork(title.rectTransform, parent, region);
+            title.text = value; title.fontSize = title.fontSizeMax = 30f; title.fontSizeMin = 24f;
+            title.enableAutoSizing = true; title.alignment = TextAlignmentOptions.MidlineLeft;
+            title.color = value == "PEOPLE" ? new Color(.25f, .14f, .08f) : Gold;
+            title.raycastTarget = false;
+        }
+
+        private static void FinalDropFrame(RectTransform area)
+        {
+            var frame = area.Find("DropTargetFrame") as RectTransform;
+            if (frame == null)
+            {
+                frame = new GameObject("DropTargetFrame", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image)).GetComponent<RectTransform>();
+                frame.gameObject.layer = area.gameObject.layer; frame.SetParent(area, false);
+            }
+            frame.anchorMin = Vector2.zero; frame.anchorMax = Vector2.one;
+            frame.offsetMin = frame.offsetMax = Vector2.zero; frame.SetAsFirstSibling();
+            var image = frame.GetComponent<Image>();
+            image.sprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd");
+            image.type = Image.Type.Sliced; image.fillCenter = false; image.color = Color.clear; image.raycastTarget = false;
+            CardTsunamiTurnAuthoring.ConfigureFeedback(area.gameObject, image, false);
+        }
+
         [MenuItem("Tools/Card Game/Save Sidebar Upgrade Inventory")]
         public static void SaveUpgradeInventoryForBatch()
         {
@@ -167,6 +333,9 @@ namespace CivilGameJam.Cards.Editor
         public static void Arrange(CardGameController game)
         {
             if (game == null || game.Vault == null) throw new System.InvalidOperationException("Open the authored card scene first.");
+            if (game.Sidebar != null && game.Sidebar.GetComponent<Image>().sprite != null &&
+                game.Sidebar.GetComponent<Image>().sprite.name == "Vault Ui Final")
+            { ApplyFinalVault(game); return; }
             Canvas.ForceUpdateCanvases();
             var canvas = game.GetComponentInParent<Canvas>().rootCanvas;
             var rect = Box("CardSidebar", game.transform, Surface, true);

@@ -24,7 +24,7 @@ namespace CivilGameJam.Cards
         [SerializeField, Min(0f)] private float shakeDistance = 5f;
         [Header("Insufficient AP sound")]
         [SerializeField] private AudioClip notEnoughSound;
-        [SerializeField, Range(0f, 1f)] private float notEnoughVolume = .75f;
+        [SerializeField, Range(0f, 1f)] private float notEnoughVolume = .375f;
         private AudioSource notEnoughAudio;
         [Header("Ready attention")]
         [SerializeField] private Color readyColor = new Color(.55f, 1f, .75f, 1f);

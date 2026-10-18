@@ -83,7 +83,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(houses.Select(house => house.House.GetInstalled(CivilGameJam.Cards.UpgradeKind.RailSystem)), Is.EqualTo(rails));
         Assert.That(houses.Any(house => house.House.IsDestroyed), Is.False);
         Assert.That(research.AbilityPointCost(CivilGameJam.Cards.CardKind.Person), Is.EqualTo(9));
-        Assert.That(factoryStation.AbilityPointCost(CivilGameJam.Cards.CardKind.Person), Is.EqualTo(12));
+        Assert.That(factoryStation.AbilityPointCost(CivilGameJam.Cards.CardKind.Person), Is.EqualTo(10));
         CaptureWorld("roar-earthquake-survived-before-water.png");
         Step(monster.WaveReleaseDelay + .1f);
         Assert.That(monster.Model.gameObject.activeSelf && wave.IsVisible, Is.True);

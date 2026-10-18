@@ -164,11 +164,11 @@ public sealed partial class CardAbilityPointsPlayModeTests
         yield return ReachTsunami();
         Assert.That(school.AbilityPointCost(CardKind.Person), Is.EqualTo(2));
         Assert.That(research.AbilityPointCost(CardKind.EducatedPerson), Is.EqualTo(3));
-        Assert.That(factoryStation.AbilityPointCost(CardKind.EducatedPerson), Is.EqualTo(7));
+        Assert.That(factoryStation.AbilityPointCost(CardKind.EducatedPerson), Is.EqualTo(4));
         Assert.That(research.AbilityPointCost(CardKind.Person), Is.EqualTo(9));
-        Assert.That(factoryStation.AbilityPointCost(CardKind.Person), Is.EqualTo(12));
+        Assert.That(factoryStation.AbilityPointCost(CardKind.Person), Is.EqualTo(8));
         Assert.That(research.transform.Find("FolderArt/APEducated").GetComponentInChildren<TMP_Text>(true).text, Is.EqualTo("3 AP"));
-        Assert.That(factoryStation.transform.Find("FolderArt/APEducated").GetComponentInChildren<TMP_Text>(true).text, Is.EqualTo("7 AP"));
+        Assert.That(factoryStation.transform.Find("FolderArt/APEducated").GetComponentInChildren<TMP_Text>(true).text, Is.EqualTo("4 AP"));
 
         var graduate = Educate();
         Assert.That(bank.CurrentPoints, Is.EqualTo(16));
@@ -188,16 +188,16 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(bank.CurrentPoints, Is.EqualTo(11));
         Assert.That(factoryStation.TryAssign(maker), Is.True);
         Assert.That(factory.TryInsertBlueprint(plan), Is.True);
-        Assert.That(bank.CurrentPoints, Is.EqualTo(4));
+        Assert.That(bank.CurrentPoints, Is.EqualTo(7));
         factory.AdvanceWork(.2f);
         factoryStation.ReleaseWorker(0, false);
         Assert.That(bank.CurrentPoints, Is.EqualTo(11));
         Assert.That(factory.Progress, Is.Zero);
         Assert.That(factoryStation.TryAssign(maker), Is.True);
-        Assert.That(bank.CurrentPoints, Is.EqualTo(4));
+        Assert.That(bank.CurrentPoints, Is.EqualTo(7));
         factory.AdvanceWork(100f);
         Assert.That(factory.Progress, Is.Zero, "One educated worker still waits for a second person.");
-        bank.AddPoints(8);
+        bank.AddPoints(1);
         Assert.That(factoryStation.TryAssign(Person()), Is.True);
         Assert.That(bank.CurrentPoints, Is.Zero);
         factory.AdvanceWork(100f);
@@ -210,6 +210,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
         var plan = Research(Person(), UpgradeKind.Breakwater);
         for (int i = 0; i < batches; i++)
         {
+            FinishCompletedWorkerReturns();
             // Multi-order fixtures span worker turns while preserving their AP accounting.
             if (game.Cards.Count(card => card.Kind == CardKind.Person && card.CanStartWork && !card.IsStored) < 2)
                 game.ResetTurnPeople();
@@ -225,7 +226,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
     {
         yield return ReachTsunami();
         // Carried AP cover one researcher and two complete factory crews.
-        bank.AddPoints(39);
+        bank.AddPoints(23);
         PrepareElevators(2);
         Assert.That(bank.CurrentPoints, Is.Zero);
         var rails = houses.Select(house => house.House.GetInstalled(UpgradeKind.RailSystem)).ToArray();
@@ -268,7 +269,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
     public IEnumerator TwoElevatedHousesPayTwelveAPAndRetryWaterWithAllSeismicProtectionIntact()
     {
         yield return ReachTsunami();
-        bank.AddPoints(20); // Nine AP research, two twelve-AP workers and five AP carried.
+        bank.AddPoints(12); // Nine AP research, two eight-AP workers and five AP carried.
         PrepareElevators(1);
         Assert.That(bank.CurrentPoints, Is.EqualTo(5));
         yield return new WaitForSecondsRealtime(1.6f);

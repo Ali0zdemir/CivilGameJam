@@ -54,7 +54,7 @@ namespace CivilGameJam.Cards.Editor
             var notEnoughSound = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Art/not enough_.wav");
             if (notEnoughSound == null) throw new InvalidOperationException("Missing insufficient-AP sound.");
             hudData.FindProperty("notEnoughSound").objectReferenceValue = notEnoughSound;
-            hudData.FindProperty("notEnoughVolume").floatValue = .75f;
+            hudData.FindProperty("notEnoughVolume").floatValue = .375f;
             hudData.FindProperty("bank").objectReferenceValue = bank;
             hudData.FindProperty("counter").objectReferenceValue = counter;
             hudData.FindProperty("balanceLabel").objectReferenceValue = balance;

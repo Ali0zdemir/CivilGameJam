@@ -13,7 +13,7 @@ using UnityEngine.UI;
 public sealed partial class CardGamePlayModeTests
 {
     [UnityTest]
-    public IEnumerator MonsterFireHeatsThenLeansAndSpreadsFromItsMouthAfterTheEarthquake()
+    public IEnumerator MonsterFireKeepsItsColorWhileLeaningAndSpreadingFromItsMouthAfterTheEarthquake()
     {
         game.GetComponent<CardDock>().SetExpanded(false, true);
         var fire = Object.FindFirstObjectByType<FireTestController>();
@@ -37,19 +37,20 @@ public sealed partial class CardGamePlayModeTests
             "The fire must animate the saved monster, including its saved mouth.");
         AdvanceMonsterFireTo(fire, breath.ChargeDuration * 0.5f);
         Assert.That(breath.Heat, Is.InRange(0.45f, 0.55f));
-        Assert.That(breath.Lean, Is.Zero, "The monster heats before it bends.");
+        Assert.That(breath.Lean, Is.Zero, "The monster charges before it bends.");
         var properties = new MaterialPropertyBlock(); body.GetPropertyBlock(properties);
-        var warm = properties.GetColor("_BaseColor");
-        Assert.That(warm.r, Is.GreaterThan(originalColor.r));
-        Assert.That(warm.r, Is.LessThan(0.8f));
-        Assert.That(warm.g, Is.GreaterThan(0.15f));
+        Assert.That(properties.HasProperty("_BaseColor"), Is.False, "Charging must not tint the monster red.");
+        Assert.That(body.sharedMaterial.GetColor("_BaseColor"), Is.EqualTo(originalColor));
         Assert.That(fire.IgnitedBuildingCount, Is.Zero);
         var directory = Path.GetFullPath(Path.Combine(Application.dataPath, "../Library/MonsterFireWork"));
         Directory.CreateDirectory(directory);
-        yield return CaptureCanvas(Path.Combine(directory, "01-monster-warming.png"));
+        yield return CaptureCanvas(Path.Combine(directory, "01-monster-charging.png"));
 
         AdvanceMonsterFireTo(fire, breath.FlameStartTime + breath.TravelDuration * 0.45f);
         Assert.That(breath.Lean, Is.GreaterThan(0.95f));
+        body.GetPropertyBlock(properties);
+        Assert.That(properties.HasProperty("_BaseColor"), Is.False, "Breathing fire must keep the monster's original color.");
+        Assert.That(body.sharedMaterial.GetColor("_BaseColor"), Is.EqualTo(originalColor));
         Assert.That(Vector3.Distance(monster.Model.Find("Left_Foot").position, leftFoot), Is.LessThan(0.0001f));
         Assert.That(Vector3.Distance(monster.Model.Find("Right_Foot").position, rightFoot), Is.LessThan(0.0001f));
         Assert.That(fire.IgnitedBuildingCount, Is.Zero, "Buildings cannot ignite before the flame reaches the city.");
@@ -108,7 +109,7 @@ public sealed partial class CardGamePlayModeTests
         Assert.That(monster.Model.localPosition, Is.EqualTo(departurePosition), "The city fire ending cannot move the departing monster back to its firing point.");
         Assert.That(body.sharedMaterial.GetColor("_BaseColor"), Is.EqualTo(originalColor), "Shared model materials must remain unchanged.");
         body.GetPropertyBlock(properties);
-        Assert.That(properties.HasProperty("_BaseColor"), Is.False, "The original renderer properties are restored.");
+        Assert.That(properties.HasProperty("_BaseColor"), Is.False, "The monster's colors stay unchanged after fire ends.");
     }
 
     [UnityTest]

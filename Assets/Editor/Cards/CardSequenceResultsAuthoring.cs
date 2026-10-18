@@ -28,6 +28,7 @@ namespace CivilGameJam.Cards.Editor
             label.text = data.FindProperty("tutorialOutcomeMessage").stringValue;
             label.gameObject.SetActive(false);
             data.FindProperty("tutorialOutcomeLabel").objectReferenceValue = label;
+            data.FindProperty("peopleRewardLabel").objectReferenceValue = label;
             data.ApplyModifiedPropertiesWithoutUndo();
         }
 

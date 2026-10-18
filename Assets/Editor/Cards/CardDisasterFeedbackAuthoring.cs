@@ -37,7 +37,7 @@ namespace CivilGameJam.Cards.Editor
                     settings.FindProperty("geometry").objectReferenceValue = root.GetComponent<BuildingModelGeometry>();
                     settings.FindProperty("constructionDustMaterial").objectReferenceValue = dust;
                     settings.FindProperty("collapseSound").objectReferenceValue = AssetDatabase.LoadAssetAtPath<AudioClip>(soundPath);
-                    settings.FindProperty("collapseSoundVolume").floatValue = .12f;
+                    settings.FindProperty("collapseSoundVolume").floatValue = .048f;
                     settings.FindProperty("collapseSoundStartSeconds").floatValue = .025f;
                     settings.ApplyModifiedPropertiesWithoutUndo();
                     foreach (var collapse in new Component[] { root.GetComponent<ApartmentEarthquakeAnimation>(), root.GetComponent<ApartmentTsunamiCollapse>() })
