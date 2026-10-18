@@ -93,7 +93,10 @@ namespace CivilGameJam
             if (!IsAnimating) FinishPlacement();
         }
 
-        private void Update() => AdvancePlacement(Time.unscaledDeltaTime);
+        private void Update()
+        {
+            if (Time.timeScale > 0f) AdvancePlacement(Time.unscaledDeltaTime);
+        }
 
         private void AdvancePlacement(float seconds)
         {

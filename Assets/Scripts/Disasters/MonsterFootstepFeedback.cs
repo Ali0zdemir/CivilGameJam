@@ -95,7 +95,10 @@ namespace CivilGameJam.Disasters
             }
         }
 
-        private void Update() => AdvanceEffects(Time.unscaledDeltaTime);
+        private void Update()
+        {
+            if (Time.timeScale > 0f) AdvanceEffects(Time.unscaledDeltaTime);
+        }
 
         private void AdvanceEffects(float deltaTime)
         {

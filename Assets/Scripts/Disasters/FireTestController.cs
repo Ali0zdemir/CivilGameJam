@@ -183,7 +183,7 @@ namespace CivilGameJam.Disasters
 
         private void Update()
         {
-            if (IsRunning) AdvanceFire(Time.unscaledDeltaTime);
+            if (Time.timeScale > 0f && IsRunning) AdvanceFire(Time.unscaledDeltaTime);
         }
 
         private void AdvanceFire(float deltaTime)

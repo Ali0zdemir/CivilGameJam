@@ -83,7 +83,7 @@ namespace CivilGameJam
                            (current.Kind == UpgradeKind.RailSystem && current.Link.RailSystem != null && current.Link.RailSystem.IsTransitioning ||
                             current.Kind == UpgradeKind.Breakwater && current.Link.FloodProtection != null && current.Link.FloodProtection.IsTransitioning))
                         yield return null;
-                    for (float age = 0f; age < holdSeconds && current.IsValid && !Interrupted; age += Time.unscaledDeltaTime)
+                    for (float age = 0f; age < holdSeconds && current.IsValid && !Interrupted; age += Time.deltaTime)
                         yield return null;
                     if (Interrupted) break;
                     current = null;

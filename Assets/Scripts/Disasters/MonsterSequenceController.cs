@@ -144,7 +144,7 @@ namespace CivilGameJam.Disasters
 
         private void Update()
         {
-            if (IsRunning) AdvanceSequence(Time.unscaledDeltaTime);
+            if (Time.timeScale > 0f && IsRunning) AdvanceSequence(Time.unscaledDeltaTime);
         }
 
         private void LateUpdate()

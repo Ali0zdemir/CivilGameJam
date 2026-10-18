@@ -63,6 +63,7 @@ namespace CivilGameJam.Cards
 
         private void Update()
         {
+            if (Time.timeScale <= 0f) return;
             Vector2 pointer = Input.mousePresent ? (Vector2)Input.mousePosition : new Vector2(-1f, Screen.height + 1f);
             TickPointer(pointer, Time.unscaledDeltaTime);
         }

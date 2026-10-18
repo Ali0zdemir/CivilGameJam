@@ -114,6 +114,7 @@ namespace CivilGameJam
 
         private void Update()
         {
+            if (Time.timeScale <= 0f) return;
             if (!Initialize()) return;
             var mouse = Mouse.current;
             if (mouse == null || !Application.isFocused) { dragging = false; return; }
@@ -205,6 +206,7 @@ namespace CivilGameJam
 
         private void LateUpdate()
         {
+            if (Time.timeScale <= 0f) return;
             if (Initialize()) AdvanceNavigation(Time.unscaledDeltaTime);
         }
 

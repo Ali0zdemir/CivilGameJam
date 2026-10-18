@@ -131,7 +131,10 @@ namespace CivilGameJam
             Refresh();
         }
 
-        private void Update() => AdvanceRound(Time.unscaledDeltaTime);
+        private void Update()
+        {
+            if (Time.timeScale > 0f) AdvanceRound(Time.unscaledDeltaTime);
+        }
 
         public void AdvanceRound(float seconds)
         {

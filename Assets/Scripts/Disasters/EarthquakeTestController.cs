@@ -150,7 +150,7 @@ namespace CivilGameJam.Disasters
 
         private void LateUpdate()
         {
-            if (!IsRunning) return;
+            if (Time.timeScale <= 0f || !IsRunning) return;
             AdvanceShake(Time.unscaledDeltaTime);
         }
 

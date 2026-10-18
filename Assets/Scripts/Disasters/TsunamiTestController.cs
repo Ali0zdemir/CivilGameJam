@@ -285,7 +285,7 @@ namespace CivilGameJam.Disasters
 
         private void Update()
         {
-            if (IsRunning) AdvanceTsunami(Time.unscaledDeltaTime);
+            if (Time.timeScale > 0f && IsRunning) AdvanceTsunami(Time.unscaledDeltaTime);
         }
 
         private void AdvanceTsunami(float deltaTime)
