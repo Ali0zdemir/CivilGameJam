@@ -8,6 +8,33 @@ using UnityEngine;
 
 public sealed class SeaMonsterTsunamiEditModeTests
 {
+    [Test]
+    public void TsunamiAftermathDelayIsSavedOnTheExistingSequenceBeforePlay()
+    {
+        EditorSceneManager.OpenScene("Assets/2DCardScene.unity");
+        var sequence = Object.FindFirstObjectByType<MonsterSequenceController>();
+        Assert.That(new SerializedObject(sequence).FindProperty("tsunamiAftermathSeconds").floatValue, Is.EqualTo(3f));
+    }
+
+    [Test]
+    public void OffscreenEarthquakeHasItsSavedNonLoopingGodzillaV1AudioBeforePlay()
+    {
+        EditorSceneManager.OpenScene("Assets/2DCardScene.unity");
+        var sequence = Object.FindFirstObjectByType<MonsterSequenceController>();
+        var data = new SerializedObject(sequence);
+        var source = (AudioSource)data.FindProperty("earthquakeRoar").objectReferenceValue;
+        Assert.That(source, Is.Not.Null);
+        Assert.That(source.gameObject, Is.SameAs(sequence.gameObject), "Use the persistent controller, not the hidden monster mesh, to play the roar.");
+        Assert.That(source.gameObject.activeInHierarchy, Is.True);
+        Assert.That(source.clip, Is.SameAs(AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/EfeArts/Godzilla/Godzilla.v1.WAV")));
+        Assert.That(source.clip.length, Is.GreaterThan(1.5f));
+        Assert.That(source.playOnAwake || source.loop, Is.False);
+        Assert.That(source.spatialBlend, Is.Zero, "The offscreen roar must be audible from the normal city camera.");
+        Assert.That(data.FindProperty("earthquakeRoarDelay").floatValue, Is.EqualTo(2f));
+        Assert.That(source.volume, Is.EqualTo(.7f).Within(.00001f));
+        Assert.That(source.pitch, Is.EqualTo(1f).Within(.00001f), "Keep the original recording speed before and during Play Mode.");
+    }
+
     [TestCase("Assets/2DCardScene.unity")]
     public void MonsterAndSeaAreSavedOnTheNewIncomingSideBeforePlay(string path)
     {

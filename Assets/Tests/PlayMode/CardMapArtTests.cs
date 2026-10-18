@@ -11,6 +11,66 @@ using UnityEngine.TestTools;
 public sealed partial class CardGamePlayModeTests
 {
     [UnityTest]
+    public IEnumerator CityWaterRecedesGraduallyTowardTheSeaBeforeTheFloodIsCleared()
+    {
+        game.GetComponent<CardDock>().SetExpanded(false, true);
+        var rig = new SequencePreview();
+        var wave = ControlField<AuthoredTsunamiWave>(rig.Tsunami, "authoredWave");
+        var ids = UIIds(game);
+        rig.Tsunami.StartTsunami();
+        var limit = 0;
+        while (!rig.Tsunami.IsWaterReceding && limit++ < 1800)
+            AdvanceTsunamiCamera(rig.Tsunami, rig.Navigation, .05f);
+        Assert.That(rig.Tsunami.IsWaterReceding, Is.True);
+        var flood = ControlField<object>(rig.Tsunami, "flood");
+        float MeanDepth() => (float)flood.GetType().GetProperty("MeanDepth").GetValue(flood);
+        var surface = rig.Tsunami.transform.Find("Tsunami_Water/City_Flood_Flow").GetComponent<MeshFilter>();
+        var initialDepth = MeanDepth();
+        var initialCoverage = rig.Tsunami.FloodCoverage;
+        Assert.That(initialDepth, Is.GreaterThan(.001f));
+        var directory = Path.GetFullPath("Library/CardGameTestResults/TsunamiRecession/Previews");
+        Directory.CreateDirectory(directory);
+        CaptureCityWorldFrame(Path.Combine(directory, "water-recession-start.png"));
+        var previousDepth = initialDepth;
+        var previousCoverage = initialCoverage;
+        foreach (var progress in new[] { .1f, .3f, .5f, .7f, .9f })
+        {
+            while (rig.Tsunami.WaterRecessionProgress < progress && limit++ < 2400)
+                AdvanceTsunamiCamera(rig.Tsunami, rig.Navigation, .05f);
+            Assert.That(rig.Tsunami.IsRunning, Is.True, "Keep rendering the water throughout its recession.");
+            Assert.That(MeanDepth(), Is.LessThanOrEqualTo(previousDepth + .00001f));
+            Assert.That(rig.Tsunami.FloodCoverage, Is.LessThanOrEqualTo(previousCoverage + .00001f));
+            if (progress <= .5f) Assert.That(surface.sharedMesh.vertexCount, Is.GreaterThan(0));
+            previousDepth = MeanDepth(); previousCoverage = rig.Tsunami.FloodCoverage;
+            if (progress == .5f)
+            {
+                Assert.That(MeanDepth(), Is.GreaterThan(0f).And.LessThan(initialDepth));
+                Assert.That(rig.Tsunami.FloodCoverage, Is.LessThan(initialCoverage));
+                var depths = ControlField<float[]>(flood, "depth");
+                var startDepths = ControlField<float[]>(flood, "recessionDepth");
+                var rows = ControlField<int>(flood, "rows");
+                var columns = ControlField<int>(flood, "columns");
+                Assert.That(depths.Skip(columns * (rows * 3 / 4)).All(depth => depth < .00001f), Is.True,
+                    "The inland quarter should dry before the shoreline.");
+                Assert.That(depths.Take(columns * (rows / 4)).Where((depth, i) => startDepths[i] > .001f).Any(depth => depth > .0001f), Is.True,
+                    "The last water remains by the sea while inland tiles dry.");
+                CaptureCityWorldFrame(Path.Combine(directory, "water-recession-middle.png"));
+            }
+        }
+        CaptureCityWorldFrame(Path.Combine(directory, "water-recession-ending.png"));
+        while (rig.Tsunami.IsRunning && limit++ < 3000)
+            AdvanceTsunamiCamera(rig.Tsunami, rig.Navigation, .05f);
+        Assert.That(rig.Tsunami.IsRunning, Is.False);
+        Assert.That(rig.Tsunami.WaterRecessionProgress, Is.GreaterThan(.999f));
+        Assert.That(surface.sharedMesh.vertexCount, Is.Zero);
+        Assert.That(UIIds(game), Is.EqualTo(ids));
+        rig.Tsunami.StartTsunami();
+        Assert.That(rig.Tsunami.WaterRecessionProgress, Is.Zero, "Replay must clear the recession state.");
+        rig.Tsunami.StopTsunami();
+        yield return null;
+    }
+
+    [UnityTest]
     public IEnumerator ResizedAuthoredWaveKeepsItsSavedPoseAndOnlyEmitsSprayAtWaterContact()
     {
         game.GetComponent<CardDock>().SetExpanded(false, true);
@@ -68,15 +128,17 @@ public sealed partial class CardGamePlayModeTests
     }
 
     [UnityTest]
-    public IEnumerator TsunamiTraversesBothSavedPointsAtPlayerZoomInWideAndTallGameCameras()
+    public IEnumerator TsunamiStopsAtCityEdgeAndSmoothlyDissipatesAtPlayerZoomInWideAndTallGameCameras()
     {
         game.GetComponent<CardDock>().SetExpanded(false, true);
         var rig = new SequencePreview();
         var wave = ControlField<AuthoredTsunamiWave>(rig.Tsunami, "authoredWave");
         var camera = ControlField<Camera>(rig.Navigation, "controlledCamera");
         var oldAspect = camera.aspect;
-        var originalScale = wave.Surface.transform.lossyScale;
-        var directory = Path.GetFullPath(Path.Combine(Application.dataPath, "../Library/TsunamiFullRouteWork/Previews"));
+        var originalScale = wave.transform.localScale;
+        var originalEnd = wave.EndPosition;
+        var originalMesh = wave.Surface.GetComponent<MeshFilter>().sharedMesh;
+        var directory = Path.GetFullPath("Library/CardGameTestResults/TsunamiAftermath/Previews");
         Directory.CreateDirectory(directory);
         PresentationField(wave, "movementSpeed", 8f);
         try
@@ -88,48 +150,61 @@ public sealed partial class CardGamePlayModeTests
                 var homeZoom = ControlField<float>(rig.Navigation, "currentZoom");
                 rig.Tsunami.StartTsunami();
                 Assert.That(wave.transform.localPosition, Is.EqualTo(wave.StartPosition));
+                Assert.That(wave.transform.localScale, Is.EqualTo(originalScale), "Replay restores the artist's complete crest.");
+                var endDistance = rig.Tsunami.WaveEndDistance;
+                Assert.That(endDistance, Is.LessThan(wave.EndDistance), "The city edge must stop the original route before the mountains.");
+                Assert.That(endDistance, Is.EqualTo(rig.Tsunami.CityBounds.max.z).Within(.0001f));
                 AdvanceTsunamiCamera(rig.Tsunami, rig.Navigation, rig.Monster.WaveReleaseDelay + .2f);
                 var view = aspect < 1f ? "tall" : "wide";
                 var capturedMiddle = false;
                 var capturedEnd = false;
+                var capturedDissipation = false;
+                var previousStrength = 1f;
                 while (rig.Tsunami.IsRunning)
                 {
                     if (wave.IsVisible)
                     {
                         AssertOpaqueWaveAtPlayerZoom(camera, wave, rig.Navigation);
-                        var routeProgress = Mathf.InverseLerp(wave.StartDistance, wave.EndDistance, wave.FrontDistance);
-                        Assert.That(Vector3.Distance(wave.transform.localPosition, Vector3.Lerp(wave.StartPosition, wave.EndPosition, routeProgress)), Is.LessThan(.0001f));
-                        Assert.That(wave.transform.localPosition.y, Is.EqualTo(wave.StartPosition.y));
-                        Assert.That(wave.Surface.transform.lossyScale, Is.EqualTo(originalScale));
+                        Assert.That(wave.FrontDistance, Is.LessThanOrEqualTo(endDistance + .0001f));
+                        var routeProgress = Mathf.InverseLerp(wave.StartDistance, endDistance, wave.FrontDistance);
+                        var fullPosition = Vector3.Lerp(wave.StartPosition, wave.EndPosition,
+                            Mathf.InverseLerp(wave.StartDistance, wave.EndDistance, wave.FrontDistance));
+                        Assert.That(wave.transform.localPosition.x, Is.EqualTo(fullPosition.x).Within(.0001f));
+                        Assert.That(wave.transform.localPosition.z, Is.EqualTo(fullPosition.z).Within(.0001f));
+                        Assert.That(wave.transform.localScale.x, Is.EqualTo(originalScale.x));
+                        Assert.That(wave.transform.localScale.z, Is.EqualTo(originalScale.z));
+                        Assert.That(wave.transform.localScale.y, Is.EqualTo(originalScale.y * wave.Strength).Within(.00001f));
                         Assert.That(rig.Navigation.InputBlocked, Is.True);
                         if (!capturedMiddle && routeProgress >= .5f)
                         {
-                            CaptureCenteredFrame(camera, Path.Combine(directory, view + "-middle.png"));
+                            CaptureCenteredFrame(camera, Path.Combine(directory, view + "-crossing.png"));
                             capturedMiddle = true;
-                            if (aspect > 1f)
-                            {
-                                yield return CaptureCanvas(Path.Combine(directory, "game-view.png"), afterRender: uiCamera =>
-                                {
-                                    InvokeCity(rig.Tsunami, "AdvanceTsunami", 0f);
-                                    InvokeCity(rig.Navigation, "AdvanceNavigation", .05f);
-                                    AssertOpaqueWaveAtPlayerZoom(camera, wave, rig.Navigation);
-                                    camera.Render(); uiCamera.Render();
-                                });
-                                camera.aspect = aspect;
-                            }
                         }
-                        if (!capturedEnd && routeProgress >= .999f)
+                        if (rig.Tsunami.HasReachedCityEnd)
                         {
-                            CaptureCenteredFrame(camera, Path.Combine(directory, view + "-end.png"));
-                            capturedEnd = true;
+                            Assert.That(wave.FrontDistance, Is.EqualTo(endDistance).Within(.0001f));
+                            Assert.That(wave.Strength, Is.LessThanOrEqualTo(previousStrength + .00001f));
+                            previousStrength = wave.Strength;
+                            if (!capturedEnd)
+                            {
+                                CaptureCenteredFrame(camera, Path.Combine(directory, view + "-city-edge.png"));
+                                capturedEnd = true;
+                            }
+                            if (!capturedDissipation && wave.Strength < .4f && wave.Strength > .05f)
+                            {
+                                CaptureCenteredFrame(camera, Path.Combine(directory, view + "-dissipating.png"));
+                                capturedDissipation = true;
+                            }
                         }
                     }
                     AdvanceTsunamiCamera(rig.Tsunami, rig.Navigation, .05f);
                 }
-                Assert.That(capturedMiddle, Is.True);
-                Assert.That(capturedEnd, Is.True);
-                Assert.That(wave.transform.localPosition, Is.EqualTo(wave.EndPosition));
+                Assert.That(capturedMiddle && capturedEnd && capturedDissipation, Is.True);
+                Assert.That(wave.FrontDistance, Is.EqualTo(endDistance).Within(.0001f));
                 Assert.That(wave.IsVisible, Is.False);
+                Assert.That(wave.transform.localScale, Is.EqualTo(originalScale));
+                Assert.That(wave.EndPosition, Is.EqualTo(originalEnd));
+                Assert.That(wave.Surface.GetComponent<MeshFilter>().sharedMesh, Is.SameAs(originalMesh));
                 InvokeCity(rig.Navigation, "AdvanceNavigation", 2f);
                 Assert.That(rig.Navigation.PanOffset, Is.EqualTo(homePan));
                 Assert.That(ControlField<float>(rig.Navigation, "currentZoom"), Is.EqualTo(homeZoom));
@@ -268,7 +343,7 @@ public sealed partial class CardGamePlayModeTests
         Assert.That(wave.transform.localPosition.y, Is.EqualTo(wave.StartPosition.y), "The path keeps the height shown in the Inspector.");
         InvokeCity(tsunami, "AdvanceTsunami", tsunami.TestDuration);
         Assert.That(tsunami.IsRunning || wave.IsVisible, Is.False);
-        Assert.That(wave.transform.localPosition, Is.EqualTo(wave.EndPosition));
+        Assert.That(wave.FrontDistance, Is.EqualTo(tsunami.WaveEndDistance).Within(.0001f));
         Assert.That(wave.GetInstanceID(), Is.EqualTo(waveId));
         Assert.That(wave.Surface.GetComponent<MeshFilter>().sharedMesh, Is.SameAs(mesh));
         Assert.That(wave.Surface.sharedMaterials.Select(material => material.GetColor("_BaseColor")), Is.EqualTo(originalColors));

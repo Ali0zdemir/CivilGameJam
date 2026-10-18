@@ -14,6 +14,130 @@ using Object = UnityEngine.Object;
 
 public sealed partial class CardAbilityPointsPlayModeTests
 {
+    [UnityTest]
+    public IEnumerator BossTsunamiReportsThreeSecondsAfterTheLastHouseFalls()
+    {
+        yield return ReachTsunami();
+        var water = Field<TsunamiTestController>(round, "tsunami");
+        var collapses = houses.Select(house => house.Building.GetComponent<ApartmentTsunamiCollapse>()).ToArray();
+        round.Ready();
+        var clock = 0f;
+        var lastFall = -1f;
+        var state = string.Empty;
+        for (var frame = 0; frame < 3000 && !sequence.Results.IsVisible; frame++)
+        {
+            Step(.05f); clock += .05f;
+            if (lastFall < 0f && collapses.All(collapse => collapse.HasCollapsed && !collapse.IsPlaying))
+            {
+                lastFall = clock;
+                state = "cityEnd=" + water.HasReachedCityEnd + ", quakeRunning=" + earthquake.IsRunning +
+                    ", waterRunning=" + water.IsRunning + ", waterProgress=" + water.WaterRecessionProgress +
+                    ", stage=" + sequence.Stage;
+                Assert.That(sequence.Results.IsVisible, Is.False);
+            }
+        }
+        var directory = Path.GetFullPath("Library/CardGameTestResults/BossTsunamiTiming");
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(Path.Combine(directory, "native-timeline.txt"),
+            "lastFall=" + lastFall + ", report=" + clock + ", difference=" + (clock - lastFall) + "; " + state);
+        Assert.That(lastFall, Is.GreaterThan(0f));
+        Assert.That(sequence.Results.IsVisible, Is.True);
+        Assert.That(clock - lastFall, Is.EqualTo(3f).Within(.06f), "Start the result delay at the final authored collapse, without an extra dust/water/walk wait.");
+        AssertVisibleTsunamiRuins();
+        Assert.That(bank.CurrentPoints, Is.EqualTo(24));
+    }
+
+    [UnityTest]
+    public IEnumerator ReadyTsunamiKeepsRuinsVisibleAndReportsAfterThreeSecondsOfSmoothRecession()
+    {
+        yield return ReachTsunami();
+        Set(navigation, "targetPan", new Vector2(.7f, -.3f));
+        Set(navigation, "targetZoom", 5.6f);
+        Invoke(navigation, "AdvanceNavigation", 2f);
+        var homePan = navigation.PanOffset;
+        var homeZoom = Field<float>(navigation, "currentZoom");
+        var water = Field<TsunamiTestController>(round, "tsunami");
+        var wave = Field<AuthoredTsunamiWave>(water, "authoredWave");
+        var fullScale = wave.transform.localScale;
+        Assert.That(sequence.TsunamiAftermathSeconds, Is.EqualTo(3f));
+        Set(water, "floodRunoffTime", 25f);
+        Set(round, "bossDepartureSeconds", 50f);
+        round.Ready();
+        Until(() => Field<bool>(sequence, "tsunamiAftermathStarted"));
+        Assert.That(water.HasFinishedHouseCollapses, Is.True);
+        Assert.That(round.RoundNumber, Is.EqualTo(2));
+        Assert.That(sequence.Results.IsVisible, Is.False);
+        var cityPan = navigation.PanOffset;
+        var cityZoom = Field<float>(navigation, "currentZoom");
+        Assert.That(Field<Object>(navigation, "eventFocusOwner"), Is.SameAs(sequence));
+        Step(.7f);
+        AssertVisibleTsunamiRuins();
+        Assert.That(water.WaterRecessionProgress, Is.GreaterThan(0f).And.LessThan(1f));
+        Assert.That(navigation.PanOffset, Is.EqualTo(cityPan));
+        Assert.That(Field<float>(navigation, "currentZoom"), Is.EqualTo(cityZoom));
+        Assert.That(Field<bool>(navigation, "eventReturning"), Is.False);
+        Assert.That(bank.ActionsLocked && navigation.InputBlocked, Is.True);
+        Assert.That(round.RoundNumber, Is.EqualTo(2));
+        sequence.StopSequence(); round.AdvanceRound(0f);
+        Invoke(navigation, "AdvanceNavigation", 2f);
+        Assert.That(navigation.PanOffset, Is.EqualTo(homePan));
+        Assert.That(Field<float>(navigation, "currentZoom"), Is.EqualTo(homeZoom));
+        Assert.That(bank.CurrentPoints, Is.EqualTo(18), "Cancelling the watch cannot pay a retry bonus.");
+        Assert.That(round.RoundNumber, Is.EqualTo(2));
+        Assert.That(wave.transform.localScale, Is.EqualTo(fullScale));
+        Assert.That(houses.Any(house => house.House.IsDestroyed), Is.False);
+        Assert.That(round.CanReady, Is.True);
+
+        round.Ready();
+        Until(() => Field<bool>(sequence, "tsunamiAftermathStarted"));
+        cityPan = navigation.PanOffset;
+        cityZoom = Field<float>(navigation, "currentZoom");
+        var untilLastFrame = sequence.TsunamiAftermathSeconds - .05f;
+        while (Field<float>(sequence, "tsunamiAftermathElapsed") < untilLastFrame - .00001f)
+        {
+            Step(Mathf.Min(.05f, untilLastFrame - Field<float>(sequence, "tsunamiAftermathElapsed")));
+            Assert.That(navigation.PanOffset, Is.EqualTo(cityPan), "Hold the city for the full three-second watch.");
+            Assert.That(Field<float>(navigation, "currentZoom"), Is.EqualTo(cityZoom));
+            Assert.That(Field<bool>(navigation, "eventReturning"), Is.False);
+            Assert.That(Field<Object>(navigation, "eventFocusOwner"), Is.SameAs(sequence));
+            AssertVisibleTsunamiRuins();
+        }
+        Assert.That(round.RoundNumber, Is.EqualTo(2), "Keep watching for three seconds after the last house collapse.");
+        Assert.That(sequence.Results.IsVisible, Is.False);
+        Assert.That(bank.CurrentPoints, Is.EqualTo(18));
+        Assert.That(sequence.IsRunning && navigation.InputBlocked, Is.True);
+        CaptureWorld("tsunami-three-second-visible-ruins.png");
+        Step(.06f);
+        Assert.That(Field<float>(sequence, "tsunamiAftermathElapsed"), Is.EqualTo(3.01f).Within(.001f));
+        Assert.That(sequence.PresentationFinished, Is.True, "The remaining boss route and original 25-second runoff cannot extend the report delay.");
+        Assert.That(water.IsRunning, Is.False);
+        Assert.That(water.WaterRecessionProgress, Is.GreaterThan(.999f), "Finish the gradual recession before clearing the water.");
+        Assert.That(round.RoundNumber, Is.EqualTo(3));
+        Assert.That(sequence.Results.IsVisible, Is.True);
+        Assert.That(sequence.Results.DestroyedHouseCount, Is.EqualTo(4));
+        Assert.That(bank.CurrentPoints, Is.EqualTo(24));
+        Assert.That(houses.All(house => house.House.IsDestroyed), Is.True, "The watch must keep damage behind the eventual report.");
+        AssertVisibleTsunamiRuins();
+        sequence.Results.Retry();
+        Assert.That(houses.Any(house => house.House.IsDestroyed), Is.False);
+        Assert.That(bank.CurrentPoints, Is.EqualTo(24));
+    }
+
+    private void AssertVisibleTsunamiRuins()
+    {
+        var ruins = houses.Select(house => house.Building.GetComponent<ApartmentTsunamiCollapse>())
+            .Where(collapse => collapse.HasCollapsed).ToArray();
+        Assert.That(ruins, Is.Not.Empty);
+        foreach (var collapse in ruins)
+        {
+            Assert.That(collapse.IsPlaying, Is.False);
+            var mesh = Field<Transform>(collapse, "animationRoot").GetComponentsInChildren<MeshRenderer>(true);
+            Assert.That(mesh.Any(renderer => renderer.enabled && renderer.gameObject.activeInHierarchy), Is.True);
+            Assert.That(mesh.Any(renderer => renderer.forceRenderingOff), Is.False,
+                "Tsunami ruins must remain visible before and behind the result panel.");
+        }
+    }
+
     private IEnumerator ReachTsunami()
     {
         bank.AddPoints(4);
@@ -21,6 +145,9 @@ public sealed partial class CardAbilityPointsPlayModeTests
         yield return new WaitForSecondsRealtime(1.6f);
         round.Ready();
         Until(() => round.RoundNumber == 2);
+        // Stop at the real earthquake-to-water handoff to isolate planning/pricing tests.
+        // The uninterrupted cinematic and its water loss have their own integration test.
+        sequence.StopSequence(); round.AdvanceRound(0f); Invoke(navigation, "AdvanceNavigation", 2f);
         Assert.That(round.SequenceNumber, Is.EqualTo(2));
         Assert.That(bank.CurrentPoints, Is.EqualTo(18));
         AssertFreshPeople(System.Array.Empty<DraggableCard>());
@@ -101,6 +228,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(round.LastRoundSurvived, Is.True);
         Assert.That(round.LastProtectedHouseCount, Is.EqualTo(4));
         Assert.That(round.LastSurvivalReward, Is.EqualTo(24));
+        Assert.That(Field<float>(sequence, "tsunamiAftermathElapsed"), Is.GreaterThanOrEqualTo(sequence.TsunamiAftermathSeconds - .0001f));
         Assert.That(round.LastRoundGrant, Is.EqualTo(6));
         Assert.That(bank.CurrentPoints, Is.EqualTo(30), "0 unspent + 24 water survival + 6 turn bonus.");
         AssertFreshPeople(previousPeople);
@@ -114,6 +242,8 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(game.CanUseBlueprint(UpgradeKind.RailSystem) || game.CanUseBlueprint(UpgradeKind.Breakwater), Is.False);
         Assert.That(game.CanUseBlueprint(UpgradeKind.Fire), Is.True);
         Assert.That(sequence.SelectedSequence, Is.EqualTo(3));
+        Assert.That(round.CanReady, Is.False);
+        sequence.Results.Retry();
         round.Ready();
         Assert.That(sequence.IsRunning && bank.ActionsLocked, Is.True);
         Assert.That(sequence.ActiveSequence, Is.EqualTo(3));
@@ -139,6 +269,8 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(houses.All(house => house.House.GetInstalled(UpgradeKind.RailSystem) != null &&
             house.Building.GetComponent<ApartmentUpgradeModel>().HasSeismic), Is.True);
         Assert.That(houses.Count(house => house.House.GetInstalled(UpgradeKind.Breakwater) != null), Is.EqualTo(2));
+        Assert.That(houses.Count(house => house.House.IsDestroyed), Is.EqualTo(2));
+        sequence.Results.Retry();
         Assert.That(houses.All(house => !house.House.IsDestroyed), Is.True);
         Assert.That(game.Vault.IsDiscovered(UpgradeKind.Breakwater) && game.CanUseBlueprint(UpgradeKind.Breakwater), Is.True);
         AssertFreshPeople(System.Array.Empty<DraggableCard>());
@@ -150,6 +282,8 @@ public sealed partial class CardAbilityPointsPlayModeTests
         bank.AddPoints(4); PrepareSeismic(2);
         var walk = Object.FindFirstObjectByType<SeaMonsterWalk>();
         walk.AfterEventPoint.position = walk.WalkPoint.position + Vector3.forward * 200f;
+        // Keep water from ending the departure timer test at the first building contact.
+        foreach (var house in houses) house.FloodProtection.SetInstalled(true);
         yield return new WaitForSecondsRealtime(1.6f);
         round.Ready(); Until(() => sequence.Stage == MonsterSequenceStage.WalkingToSecondPoint);
         var monster = Object.FindFirstObjectByType<SeaMonsterEmergence>();
@@ -159,7 +293,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Step(.11f);
         Assert.That(monster.Model.gameObject.activeSelf || walk.IsWalkingAfterEvent, Is.False);
         Assert.That(Field<float>(sequence, "departureElapsed"), Is.InRange(10f, 10.05f));
-        Until(() => round.RoundNumber == 2);
+        Until(() => round.RoundNumber == 3);
         Assert.That(round.SequenceNumber, Is.EqualTo(2));
         Assert.That(navigation.InputBlocked, Is.False);
     }

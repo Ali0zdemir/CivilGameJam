@@ -1,3 +1,4 @@
+using System;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -21,6 +22,49 @@ namespace CivilGameJam.Disasters
         public int DestroyedHouseCount { get; private set; }
         public int TotalHouseCount { get; private set; }
         public int ProtectedHouseCount { get; private set; }
+        public event Action Dismissed;
+
+        public float ExpectedCollapseDustTail
+        {
+            get
+            {
+                var tail = 0f;
+                foreach (var house in houses)
+                    if (house != null && house.TryGetComponent<ApartmentEarthquakeAnimation>(out var quake) &&
+                        quake.IsRunning && !quake.IsProtected && house.TryGetComponent<BuildingCollapseFeedback>(out var feedback))
+                        tail = Mathf.Max(tail, feedback.MaximumDustLifetime);
+                return tail;
+            }
+        }
+
+        public bool HouseCollapseAnimationsFinished
+        {
+            get
+            {
+                foreach (var house in houses)
+                {
+                    if (house == null) continue;
+                    if (house.TryGetComponent<ApartmentEarthquakeAnimation>(out var quake) && quake.IsRunning && !quake.IsProtected) return false;
+                    if (house.TryGetComponent<ApartmentTsunamiCollapse>(out var flood) && flood.IsPlaying) return false;
+                }
+                return true;
+            }
+        }
+
+        public bool HouseEffectsFinished
+        {
+            get
+            {
+                foreach (var house in houses)
+                {
+                    if (house == null) continue;
+                    if (house.TryGetComponent<ApartmentEarthquakeAnimation>(out var quake) && quake.IsRunning) return false;
+                    if (house.TryGetComponent<ApartmentTsunamiCollapse>(out var flood) && flood.IsPlaying) return false;
+                    if (house.TryGetComponent<BuildingCollapseFeedback>(out var feedback) && feedback.IsPlaying) return false;
+                }
+                return true;
+            }
+        }
 
         private void Awake() => Hide();
 
@@ -66,7 +110,12 @@ namespace CivilGameJam.Disasters
             if (overlay != null) overlay.SetActive(false);
         }
 
-        public void Retry() => Hide();
+        public void Retry()
+        {
+            var wasVisible = IsVisible;
+            Hide();
+            if (wasVisible) Dismissed?.Invoke();
+        }
 
         private void OnDisable() => Hide();
     }

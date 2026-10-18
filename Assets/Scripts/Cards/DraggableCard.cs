@@ -133,6 +133,7 @@ namespace CivilGameJam.Cards
         {
             if (eventData.button != PointerEventData.InputButton.Left || pressed || IsDragging ||
                 IsStored || UsedThisTurn || IsReturningFromFolder || game.IsChoosingBlueprint || game.ActionsLocked ||
+                IsBuilding && game.BuildingPlacementLocked ||
                 houseUpgrades != null && houseUpgrades.IsDestroyed) return;
             pressed = true;
             pointerId = eventData.pointerId;
@@ -155,6 +156,7 @@ namespace CivilGameJam.Cards
         {
             if (eventData.button != PointerEventData.InputButton.Left || IsDragging ||
                 IsStored || UsedThisTurn || IsReturningFromFolder || game.IsChoosingBlueprint || game.ActionsLocked ||
+                IsBuilding && game.BuildingPlacementLocked ||
                 houseUpgrades != null && houseUpgrades.IsDestroyed ||
                 (pressed && pointerId != eventData.pointerId)) return;
 
@@ -194,6 +196,19 @@ namespace CivilGameJam.Cards
             KeepDragGrip();
             feedback.TrackDrag(game.CardLayer.InverseTransformVector(Rect.position - previous));
             game.PreviewDrop(this, eventData.position, eventData.pressEventCamera);
+        }
+
+        internal void CancelBuildingDrag()
+        {
+            if (!IsBuilding || !IsDragging) return;
+            IsDragging = false;
+            pressed = false;
+            feedback.EndDragMotion();
+            game.EndCardDrag(this);
+            RefreshAvailability();
+            var cell = game.Grid.IndexOf(this);
+            if (cell >= 0) game.Grid.TryPlace(this, cell);
+            feedback.Release();
         }
 
         internal void KeepDragGrip()

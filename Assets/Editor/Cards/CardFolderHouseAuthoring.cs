@@ -15,6 +15,7 @@ namespace CivilGameJam.Cards.Editor
     {
         private const string ArtRoot = "Assets/EfeArts/";
         private static Sprite Sprite(string name) => AssetDatabase.LoadAssetAtPath<Sprite>(ArtRoot + name + ".png") ??
+            AssetDatabase.LoadAssetAtPath<Sprite>(ArtRoot + "People/" + name + ".png") ??
             throw new InvalidOperationException("Missing EfeArts sprite: " + name);
 
         public static void ApplyForBatch()
@@ -192,18 +193,18 @@ namespace CivilGameJam.Cards.Editor
                 var slot = layer.gameObject.GetComponent<WorkerSlot>() ?? layer.gameObject.AddComponent<WorkerSlot>();
                 float width = layer.rect.width * 320f / 240f;
                 float visibleHeight = width * 300f / 320f;
-                var portrait = Image("Portrait", layer, Sprite("People Card Small"));
+                var portrait = Image("Portrait", layer, Sprite("People Card Small Revised"));
                 At(portrait.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, (layer.rect.height - visibleHeight) * 0.5f),
                     Vector2.one * width, new Vector2(0.5f, 0.5f));
                 portrait.gameObject.SetActive(false);
-                var entry = Image("EntryPreview", layer, Sprite("People Card Small"));
+                var entry = Image("EntryPreview", layer, Sprite("People Card Small Revised"));
                 At(entry.rectTransform, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(320f, 320f), new Vector2(0.5f, 0.5f));
                 var entryCanvas = entry.gameObject.AddComponent<Canvas>();
                 entryCanvas.overrideSorting = true; entryCanvas.sortingOrder = 10;
                 entry.gameObject.SetActive(false);
                 Refs(slot, ("station", station), ("background", background), ("portrait", portrait), ("entryImage", entry),
                     ("entryCanvas", entryCanvas),
-                    ("normalPortrait", Sprite("People Card Small")), ("educatedPortrait", Sprite("Educated People Card Small")));
+                    ("normalPortrait", Sprite("People Card Small Revised")), ("educatedPortrait", Sprite("Educated People Card Small")));
                 var data = new SerializedObject(slot); data.FindProperty("index").intValue = i; data.ApplyModifiedPropertiesWithoutUndo();
                 workers[i] = slot;
             }

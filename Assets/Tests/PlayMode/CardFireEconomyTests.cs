@@ -21,6 +21,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(round.SequenceNumber, Is.EqualTo(3));
         Assert.That(bank.CurrentPoints, Is.EqualTo(30));
         AssertFreshPeople(Array.Empty<DraggableCard>());
+        sequence.Results.Retry();
     }
 
     private static string Badge(BuildingStation station, string name) =>

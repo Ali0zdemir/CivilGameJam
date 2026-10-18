@@ -67,6 +67,7 @@ namespace CivilGameJam.Cards
         public CardSidebar Sidebar => sidebar;
         public AbilityPoints AbilityPoints => abilityPoints;
         public bool ActionsLocked => abilityPoints != null && abilityPoints.ActionsLocked;
+        public bool BuildingPlacementLocked => ActionsLocked || grid != null && grid.IsPlacementLocked;
         public bool IsChoosingBlueprint => choosingStation != null;
         public bool HasUndiscoveredBlueprints
         {
@@ -126,6 +127,11 @@ namespace CivilGameJam.Cards
                     if (card != null && ((card.Station != null && card.Station.IsAnimatingWorkers) || card.IsInstallingUpgrade || card.IsStoringBlueprint)) return true;
                 return false;
             }
+        }
+
+        public void CancelBuildingDrag()
+        {
+            if (draggedCard != null && draggedCard.IsBuilding) draggedCard.CancelBuildingDrag();
         }
         public float EducationSeconds => Mathf.Max(0.1f, educationSeconds);
         public float NormalResearchSeconds => Mathf.Max(0.1f, normalResearchSeconds);

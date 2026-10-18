@@ -58,7 +58,7 @@ namespace CivilGameJam.Cards.Editor
             hudData.FindProperty("spendSeconds").floatValue = 1f;
             hudData.FindProperty("warningSeconds").floatValue = 1f;
             hudData.FindProperty("popupSeconds").floatValue = 1.3f;
-            hudData.FindProperty("counterGlow").objectReferenceValue = Glow("CounterGlow", counter, 4f);
+            hudData.FindProperty("counterGlow").objectReferenceValue = Glow("CounterGlow", counter, 2f, true);
             hudData.FindProperty("readyGlow").objectReferenceValue = Glow("ReadyAttentionGlow", (RectTransform)ready.transform, 6f);
             var labels = hudData.FindProperty("spendLabels"); labels.arraySize = 4;
             var font = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>("Assets/EfeArts/Fonts/Pixellari SDF.asset");
@@ -71,7 +71,7 @@ namespace CivilGameJam.Cards.Editor
                 rect.anchoredPosition = new Vector2(0f, -8f - i * 72f);
                 var label = rect.GetComponent<TextMeshProUGUI>() ?? rect.gameObject.AddComponent<TextMeshProUGUI>();
                 label.font = font;
-                label.fontSize = label.fontSizeMax = 40f; label.fontSizeMin = 18f;
+                label.fontSize = label.fontSizeMax = 32f; label.fontSizeMin = 14.4f;
                 label.enableAutoSizing = true;
                 label.alignment = TextAlignmentOptions.Center;
                 label.text = "-4 AP";
@@ -100,15 +100,27 @@ namespace CivilGameJam.Cards.Editor
             return rect;
         }
 
-        private static Image Glow(string name, RectTransform parent, float padding)
+        private static Image Glow(string name, RectTransform parent, float padding, bool fitToArtwork = false)
         {
             var rect = EnsureRect(name, parent);
             rect.SetAsFirstSibling();
             rect.anchorMin = Vector2.zero; rect.anchorMax = Vector2.one;
+            var artwork = parent.GetComponent<Image>();
+            if (fitToArtwork && artwork != null && artwork.sprite != null && artwork.preserveAspect &&
+                parent.rect.width > 0f && parent.rect.height > 0f)
+            {
+                var size = parent.rect.size;
+                var spriteSize = artwork.sprite.rect.size;
+                var drawn = spriteSize * Mathf.Min(size.x / spriteSize.x, size.y / spriteSize.y);
+                var inset = Vector2.Scale(size - drawn, parent.pivot);
+                rect.anchorMin = new Vector2(inset.x / size.x, inset.y / size.y);
+                rect.anchorMax = rect.anchorMin + new Vector2(drawn.x / size.x, drawn.y / size.y);
+            }
             rect.offsetMin = Vector2.one * -padding; rect.offsetMax = Vector2.one * padding;
             var image = rect.GetComponent<Image>() ?? rect.gameObject.AddComponent<Image>();
             image.sprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd");
             image.type = Image.Type.Sliced; image.fillCenter = false;
+            image.pixelsPerUnitMultiplier = fitToArtwork ? 2f : 1f;
             image.color = Color.clear; image.raycastTarget = false; image.maskable = false;
             rect.gameObject.SetActive(false);
             return image;

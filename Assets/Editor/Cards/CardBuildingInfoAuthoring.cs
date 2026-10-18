@@ -201,57 +201,29 @@ namespace CivilGameJam.Cards.Editor
         private static void ConfigureHouseInformation(GameObject root)
         {
             var details = root.GetComponent<CardHover>().Details;
-            var panel = details.Find("Information");
-            var title = panel.Find("Title").GetComponent<TextMeshProUGUI>();
-            var body = panel.Find("Description").GetComponent<TextMeshProUGUI>();
-            GetCopy(CardKind.House, out string heading, out string description, out _);
-            Label(title, heading, 26f, title.color, 18f, 36f, FontStyles.Bold);
-            Label(body, description, 19f, body.color, 60f, 52f, FontStyles.Normal);
-            title.gameObject.SetActive(true);
-            body.gameObject.SetActive(true);
-            details.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, 128f);
             var display = root.GetComponent<HouseUpgradeInformation>() ?? root.AddComponent<HouseUpgradeInformation>();
             var data = new SerializedObject(display);
             data.FindProperty("house").objectReferenceValue = root.GetComponent<HouseUpgrades>();
-            data.FindProperty("details").objectReferenceValue = details;
-            data.FindProperty("defaultTitle").objectReferenceValue = title;
-            data.FindProperty("defaultDescription").objectReferenceValue = body;
             var entries = data.FindProperty("entries");
             entries.arraySize = 3;
-            string[] names = ProtectionRows;
-            string[] headings = { "Rail System", "Elevator", "Fire Protection" };
-            string[] descriptions = { "Protected from earthquakes.", "Protected from floods.", "Protected from fires." };
-            for (int i = 0; i < names.Length; i++)
+            string[] messages =
             {
-                var row = panel.Find(names[i]) as RectTransform;
-                if (row == null)
-                {
-                    row = new GameObject(names[i], typeof(RectTransform)).GetComponent<RectTransform>();
-                    row.gameObject.layer = panel.gameObject.layer;
-                    row.SetParent(panel, false);
-                    var rowTitle = Object.Instantiate(title.gameObject, row, false);
-                    rowTitle.name = "Title";
-                    var rowBody = Object.Instantiate(body.gameObject, row, false);
-                    rowBody.name = "Description";
-                }
-                row.anchorMin = new Vector2(0f, 1f);
-                row.anchorMax = Vector2.one;
-                row.pivot = new Vector2(0.5f, 1f);
-                row.sizeDelta = new Vector2(0f, 96f);
-                row.anchoredPosition = Vector2.zero;
-                var rowHeading = row.Find("Title").GetComponent<TextMeshProUGUI>();
-                var rowDescription = row.Find("Description").GetComponent<TextMeshProUGUI>();
-                Label(rowHeading, headings[i], 26f, ProtectionColors[i], 18f, 36f, FontStyles.Bold);
-                Label(rowDescription, descriptions[i], 19f, body.color, 60f, 32f, FontStyles.Normal);
-                row.gameObject.SetActive(false);
+                "<color=#FFAA55>Rail System</color>\nEarthquake resistant.",
+                "<color=#53B9FF>Elevator</color>\nFlood resistant.",
+                "<color=#FF6767>Fire Protection</color>\nFire resistant."
+            };
+            for (int i = 0; i < entries.arraySize; i++)
+            {
+                var label = details.Find("Information (" + (i + 1) + ")/Description")?.GetComponent<TextMeshProUGUI>();
+                if (label == null) throw new InvalidOperationException(root.name + " needs its three authored protection labels.");
                 var entry = entries.GetArrayElementAtIndex(i);
                 entry.FindPropertyRelative("kind").enumValueIndex = i + 1;
-                entry.FindPropertyRelative("row").objectReferenceValue = row;
-                foreach (var item in new Object[] { row, rowHeading, rowHeading.rectTransform, rowDescription, rowDescription.rectTransform })
-                    SaveObject(item);
+                entry.FindPropertyRelative("row").objectReferenceValue = label.rectTransform.parent;
+                entry.FindPropertyRelative("description").objectReferenceValue = label;
+                entry.FindPropertyRelative("installedDescription").stringValue = messages[i];
             }
             data.ApplyModifiedPropertiesWithoutUndo();
-            foreach (var item in new Object[] { display, details, title, title.rectTransform, body, body.rectTransform }) SaveObject(item);
+            SaveObject(display);
         }
 
         private static void Label(TextMeshProUGUI label, string text, float size, Color color, float top, float height, FontStyles style)

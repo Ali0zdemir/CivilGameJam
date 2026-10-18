@@ -11,6 +11,9 @@ namespace CivilGameJam.Cards
         [SerializeField, Min(0)] private int startingPoints = 10;
         [SerializeField] private TMP_Text balanceLabel;
         [SerializeField] private int currentPoints = 10;
+        private TMP_Text formattedLabel;
+        private string balancePrefix, balanceSuffix;
+        private bool hasBalanceValue;
         public int CurrentPoints => currentPoints;
         public bool ActionsLocked { get; private set; }
         public event Action Changed;
@@ -57,14 +60,45 @@ namespace CivilGameJam.Cards
 
         private void Refresh()
         {
-            if (balanceLabel != null) balanceLabel.text = currentPoints + " AP";
+            if (balanceLabel != null)
+            {
+                if (formattedLabel != balanceLabel) CaptureBalanceFormat();
+                if (hasBalanceValue) balanceLabel.text = balancePrefix + currentPoints + balanceSuffix;
+            }
             Changed?.Invoke();
+        }
+
+        private void CaptureBalanceFormat()
+        {
+            formattedLabel = balanceLabel;
+            hasBalanceValue = false;
+            var text = balanceLabel.text ?? string.Empty;
+            for (int i = 0; i < text.Length; i++)
+            {
+                // Preserve the authored wording and TMP tags; update only the visible AP number.
+                if (text[i] == '<')
+                {
+                    int end = text.IndexOf('>', i);
+                    if (end >= 0) { i = end; continue; }
+                }
+                if (!char.IsDigit(text[i])) continue;
+                int last = i + 1;
+                while (last < text.Length && char.IsDigit(text[last])) last++;
+                balancePrefix = text.Substring(0, i);
+                balanceSuffix = text.Substring(last);
+                hasBalanceValue = true;
+                return;
+            }
         }
 
         private void OnValidate()
         {
-            if (!Application.IsPlaying(gameObject)) currentPoints = Mathf.Max(0, startingPoints);
-            else currentPoints = Mathf.Max(0, currentPoints);
+            if (!Application.IsPlaying(gameObject))
+            {
+                currentPoints = Mathf.Max(0, startingPoints);
+                return;
+            }
+            currentPoints = Mathf.Max(0, currentPoints);
             Refresh();
         }
     }

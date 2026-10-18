@@ -18,8 +18,9 @@ public sealed partial class CardGamePlayModeTests
         var positions = cells.Select(cell => cell.position).ToArray();
         var groundMatrix = ground.localToWorldMatrix;
         var groundMesh = ground.GetComponent<MeshFilter>().sharedMesh;
-        var pads = rig.Tsunami.BuildingsRoot.GetComponentsInChildren<MeshFilter>().Where(filter => filter.name.Contains("Ground")).ToArray();
+        var pads = rig.Tsunami.BuildingsRoot.Cast<Transform>().Where(building => building.gameObject.activeSelf).SelectMany(TravellingGrounds).ToArray();
         var meshes = pads.Select(filter => filter.sharedMesh).ToArray();
+        var padPositions = pads.Select(filter => filter.transform.position).ToArray();
         var directory = Path.GetFullPath(Path.Combine(Application.dataPath, "../Library/TileMapWork/Previews"));
         Directory.CreateDirectory(directory);
         CaptureCityWorldFrame(Path.Combine(directory, "01-tile-map.png"));
@@ -40,6 +41,8 @@ public sealed partial class CardGamePlayModeTests
         Assert.That(ground.GetComponent<MeshFilter>().sharedMesh, Is.SameAs(groundMesh));
         Assert.That(cells.Select(cell => cell.position), Is.EqualTo(positions));
         Assert.That(pads.Select(filter => filter.sharedMesh), Is.EqualTo(meshes));
+        Assert.That(pads.Select(filter => filter.transform.position), Is.EqualTo(padPositions), "Building grounds remain seated while the apartment bodies shake, collapse or change upgrade variants.");
+        Assert.That(pads.All(filter => filter.gameObject.activeInHierarchy && filter.GetComponent<MeshRenderer>().enabled), Is.True);
         Assert.That(house.RailSystem.IsInstalled && house.FloodProtection.IsInstalled && house.FireProtection.IsInstalled, Is.True);
         Assert.That(Object.FindFirstObjectByType<MonsterSequenceResults>().IsVisible, Is.True);
         rig.Sequence.StopSequence();

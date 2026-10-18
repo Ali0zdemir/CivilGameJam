@@ -67,17 +67,17 @@ public sealed partial class CardGamePlayModeTests
                 var cityPan = ControlField<Vector2>(navigation, "targetPan");
                 var cityZoom = ControlField<float>(navigation, "targetZoom");
                 var zoomSeconds = ControlField<float>(rig.Sequence, "cameraZoomSeconds");
-                Assert.That(cityZoom, Is.InRange(homeZoom / 1.3f - 0.0001f, homeZoom));
+                Assert.That(cityZoom, Is.EqualTo(homeZoom), "The offscreen roar holds the normal player viewing distance.");
                 rig.For(zoomSeconds * 0.25f);
                 Assert.That(ControlField<float>(navigation, "currentZoom"), Is.EqualTo(homeZoom), "Centre the city before changing the zoom.");
                 Assert.That(Vector2.Distance(navigation.PanOffset, homePan), Is.GreaterThan(0.001f));
                 rig.For(zoomSeconds * 0.25f);
-                Assert.That(ControlField<float>(navigation, "currentZoom"), Is.GreaterThan(cityZoom).And.LessThan(homeZoom));
-                AssertCityViewportCenter(camera, rig.Tsunami);
+                Assert.That(ControlField<float>(navigation, "currentZoom"), Is.EqualTo(homeZoom));
                 rig.For(zoomSeconds * 0.5f + 0.05f);
                 Assert.That(navigation.PanOffset, Is.EqualTo(cityPan));
                 Assert.That(ControlField<float>(navigation, "currentZoom"), Is.EqualTo(cityZoom));
                 Capture("02-city-zoom");
+                Assert.That(rig.Monster.Model.gameObject.activeSelf, Is.False);
                 var cityDepth = Vector3.Dot(rig.Tsunami.transform.TransformPoint(rig.Tsunami.CityBounds.center) - camera.transform.position, camera.transform.forward);
                 var cityAnchor = camera.ViewportToWorldPoint(new Vector3(0.5f, 0.5f, cityDepth));
                 rig.Until(() =>
@@ -97,9 +97,12 @@ public sealed partial class CardGamePlayModeTests
                 });
                 Assert.That(navigation.IsEventCameraActive && navigation.InputBlocked, Is.True);
                 var heldZoom = ControlField<float>(navigation, "currentZoom");
+                var heldPan = navigation.PanOffset;
                 var returnSeconds = ControlField<float>(rig.Sequence, "cameraReturnSeconds");
                 InvokeCity(navigation, "AdvanceNavigation", returnSeconds * 0.5f - ControlField<float>(navigation, "eventElapsed"));
-                Assert.That(ControlField<float>(navigation, "currentZoom"), Is.GreaterThan(heldZoom).And.LessThan(homeZoom));
+                Assert.That(ControlField<float>(navigation, "currentZoom"), Is.EqualTo(heldZoom));
+                Assert.That(Vector2.Distance(navigation.PanOffset, homePan),
+                    Is.GreaterThan(0f).And.LessThan(Vector2.Distance(heldPan, homePan)), "Return smoothly to the previous city view.");
                 Assert.That(navigation.InputBlocked, Is.True, "Scroll and drag stay blocked until the smooth return finishes.");
                 Capture("03-returning");
                 InvokeCity(navigation, "AdvanceNavigation", returnSeconds);

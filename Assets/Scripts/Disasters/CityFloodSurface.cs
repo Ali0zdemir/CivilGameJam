@@ -20,6 +20,8 @@ namespace CivilGameJam.Disasters
         private readonly float runoffFloor;
         private readonly bool[] solid;
         private readonly float[] depth;
+        private readonly float[] recessionDepth;
+        private bool receding;
         private readonly float[] fluxX;
         private readonly float[] fluxZ;
         private readonly float[] available;
@@ -77,6 +79,7 @@ namespace CivilGameJam.Disasters
             dx = area.size.x / columns;
             dz = area.size.z / rows;
             depth = new float[columns * rows];
+            recessionDepth = new float[depth.Length];
             solid = new bool[depth.Length];
             available = new float[depth.Length];
             foam = new float[depth.Length];
@@ -120,6 +123,7 @@ namespace CivilGameJam.Disasters
 
         public void Clear()
         {
+            receding = false;
             Array.Clear(depth, 0, depth.Length);
             Array.Clear(fluxX, 0, fluxX.Length);
             Array.Clear(fluxZ, 0, fluxZ.Length);
@@ -132,6 +136,39 @@ namespace CivilGameJam.Disasters
             DischargedVolume = RunoffAmount = 0f;
             WetCoverage = MeanDepth = MaximumDepth = 0f;
             Mesh.Clear();
+        }
+
+        public void BeginRecession()
+        {
+            if (receding) return;
+            receding = true;
+            Array.Copy(depth, recessionDepth, depth.Length);
+            Array.Clear(fluxX, 0, fluxX.Length);
+            Array.Clear(fluxZ, 0, fluxZ.Length);
+        }
+
+        public void Recede(float deltaTime, float progress)
+        {
+            if (!receding) BeginRecession();
+            var dt = Mathf.Max(0f, deltaTime);
+            clock += dt;
+            progress = Mathf.Clamp01(progress);
+            var level = 1f - .65f * Mathf.SmoothStep(0f, 1f, progress);
+            for (var z = 0; z < rows; z++)
+            {
+                // Dry the inland rows first, then let the last shallow water return to the shore.
+                var start = (1f - (z + .5f) / rows) * .75f;
+                var remaining = (1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(start, start + .25f, progress))) * level;
+                for (var x = 0; x < columns; x++)
+                {
+                    var i = z * columns + x;
+                    var nextDepth = recessionDepth[i] * remaining;
+                    DischargedVolume += Mathf.Max(0f, depth[i] - nextDepth) * dx * dz;
+                    depth[i] = nextDepth;
+                    foam[i] *= Mathf.Exp(-dt * 1.3f);
+                }
+            }
+            RecordRunoffHistory();
         }
 
         public void Advance(float deltaTime, float inletLevel)
@@ -245,7 +282,12 @@ namespace CivilGameJam.Disasters
                 var sourceFoam = atWall ? Mathf.Clamp01(speed * 0.45f) : Mathf.Clamp01((speed - 1.2f) * 0.22f);
                 foam[i] = Mathf.Max(foam[i] * Mathf.Exp(-dt * 1.3f), sourceFoam);
             }
-            if (clock >= nextHistoryTime)
+            RecordRunoffHistory();
+        }
+
+        private void RecordRunoffHistory()
+        {
+            while (clock >= nextHistoryTime)
             {
                 historyCursor = (historyCursor + 1) % HistorySamples;
                 var offset = historyCursor * outletCount;

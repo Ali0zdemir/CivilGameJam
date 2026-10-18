@@ -15,6 +15,7 @@ namespace CivilGameJam.Cards
         [Tooltip("Prefer the authored right side when there is room. The last grid column opens left.")]
         [SerializeField] private bool keepDetailsOnRight;
         private RectTransform viewport;
+        private Graphic[] detailGraphics;
         private Transform originalParent;
         private Vector2 originalPosition;
         private Vector2 detailMin, detailMax, detailPivot, detailPosition;
@@ -38,6 +39,7 @@ namespace CivilGameJam.Cards
             detailMax = details.anchorMax;
             detailPivot = details.pivot;
             detailPosition = details.anchoredPosition;
+            detailGraphics = details.GetComponentsInChildren<Graphic>(true);
             details.gameObject.SetActive(false);
             if (hoverOutline != null) hoverOutline.enabled = false;
         }
@@ -137,16 +139,26 @@ namespace CivilGameJam.Cards
 
         private Rect BoundsInViewport(RectTransform rect)
         {
-            rect.GetWorldCorners(corners);
             Vector2 min = new Vector2(float.PositiveInfinity, float.PositiveInfinity);
             Vector2 max = new Vector2(float.NegativeInfinity, float.NegativeInfinity);
+            IncludeBounds(rect, ref min, ref max);
+            // Authored information cards can extend beyond their shared root without resizing it.
+            if (rect == details && detailGraphics != null)
+                foreach (var graphic in detailGraphics)
+                    if (graphic != null && graphic.isActiveAndEnabled)
+                        IncludeBounds(graphic.rectTransform, ref min, ref max);
+            return Rect.MinMaxRect(min.x, min.y, max.x, max.y);
+        }
+
+        private void IncludeBounds(RectTransform rect, ref Vector2 min, ref Vector2 max)
+        {
+            rect.GetWorldCorners(corners);
             foreach (var corner in corners)
             {
                 Vector2 point = viewport.InverseTransformPoint(corner);
                 min = Vector2.Min(min, point);
                 max = Vector2.Max(max, point);
             }
-            return Rect.MinMaxRect(min.x, min.y, max.x, max.y);
         }
 
         private void KeepInsideViewport(RectTransform rect)

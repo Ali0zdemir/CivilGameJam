@@ -151,6 +151,7 @@ namespace CivilGameJam.Disasters
                 Debug.LogWarning("Assign the buildings root and the fire, smoke, street and gas materials before starting the test.", this);
                 return;
             }
+            CityLayoutEvents.PrepareForDisaster();
             if (tsunami != null && tsunami.IsRunning) tsunami.StopTsunami();
             if (earthquake != null) earthquake.FinishForFire();
             CacheBurnSites();
@@ -272,7 +273,7 @@ namespace CivilGameJam.Disasters
             foreach (Transform building in buildingsRoot)
             {
                 if (!building.gameObject.activeInHierarchy) continue;
-                if (building.TryGetComponent<ApartmentTsunamiCollapse>(out var collapse) && collapse.HasDisappeared) continue;
+                if (building.TryGetComponent<ApartmentTsunamiCollapse>(out var collapse) && collapse.HasCollapsed) continue;
                 building.TryGetComponent<BuildingModelGeometry>(out var model);
                 if (model != null) AppendModelSites(model, sprinklers);
                 else AddBurnSite(building, null, sprinklers);
@@ -752,6 +753,11 @@ namespace CivilGameJam.Disasters
         public void StopFire()
         {
             if (Application.isPlaying) ResetTest(false);
+        }
+
+        public void FinishPresentation()
+        {
+            if (Application.isPlaying && IsRunning) ResetTest(true);
         }
 
         private void OnDisable() => ResetTest(false);

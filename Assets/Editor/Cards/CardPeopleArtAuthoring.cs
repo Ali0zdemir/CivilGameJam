@@ -90,8 +90,8 @@ namespace CivilGameJam.Cards.Editor
                 var prefab = PrefabUtility.LoadPrefabContents(path);
                 try
                 {
-                    string artName = name == "PeopleCard" ? "People Card Small" : "Educated People Card Small";
-                    var sprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/EfeArts/" + artName + ".png");
+                    string artName = name == "PeopleCard" ? "People Card Small Revised" : "Educated People Card Small";
+                    var sprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/EfeArts/People/" + artName + ".png");
                     if (sprite == null) throw new InvalidOperationException("Missing EfeArts people sprite: " + artName);
                     var artwork = prefab.transform.Find("Artwork") as RectTransform;
                     if (artwork == null)

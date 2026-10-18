@@ -62,6 +62,7 @@ namespace CivilGameJam.Disasters
         private Vector3 cameraPosition;
         private Quaternion cameraRotation;
         private float elapsed;
+        private float offscreenDuration;
         private float shakePhase;
         private float vibrationPhase;
         private float noiseSeed;
@@ -69,15 +70,19 @@ namespace CivilGameJam.Disasters
         private float joltAge;
         private Vector3 joltRotation;
         private bool poseCaptured;
+        private bool animateMonster = true;
         private readonly System.Random random = new System.Random();
         private readonly List<ApartmentEarthquakeAnimation> activeBuildingAnimations = new List<ApartmentEarthquakeAnimation>();
         private float buildingStaggerStep;
 
         public bool IsRunning { get; private set; }
-        public float TestDuration => seaMonsterWalk != null
-            ? seaMonsterWalk.WalkDuration + Mathf.Max(0f, afterLastStepDelay) : Mathf.Max(3f, duration);
+        public bool HasCompleted { get; private set; }
+        public float ElapsedSeconds => elapsed;
+        public float TestDuration => animateMonster && seaMonsterWalk != null
+            ? seaMonsterWalk.WalkDuration + Mathf.Max(0f, afterLastStepDelay)
+            : offscreenDuration > 0f ? offscreenDuration : Mathf.Max(3f, duration);
         public float NormalizedProgress => IsRunning ? Mathf.Clamp01(elapsed / TestDuration) : 0f;
-        private float ReleaseStartProgress => seaMonsterWalk != null ? seaMonsterWalk.WalkDuration / TestDuration : 0.72f;
+        private float ReleaseStartProgress => animateMonster && seaMonsterWalk != null ? seaMonsterWalk.WalkDuration / TestDuration : 0.72f;
 
         private void Awake()
         {
@@ -90,11 +95,19 @@ namespace CivilGameJam.Disasters
 
         public void StartSequenceEarthquake() => BeginEarthquake(true);
 
-        private void BeginEarthquake(bool preserveTsunami)
+        public void StartOffscreenEarthquake() => BeginEarthquake(false, false);
+
+        public void StartOffscreenEarthquake(float synchronizedDuration) => BeginEarthquake(false, false, synchronizedDuration);
+
+        private void BeginEarthquake(bool preserveTsunami, bool showMonster = true, float synchronizedDuration = 0f)
         {
             if (!Application.isPlaying || !isActiveAndEnabled || IsRunning || cameraTransform == null) return;
             if (cameraTransform.GetComponent<Camera>() == null) return;
+            CityLayoutEvents.PrepareForDisaster();
             if (fire != null) fire.StopFire();
+            animateMonster = showMonster;
+            offscreenDuration = !showMonster && synchronizedDuration > 0f ? Mathf.Max(3f, synchronizedDuration) : 0f;
+            HasCompleted = false;
             cameraPosition = cameraTransform.localPosition;
             cameraRotation = cameraTransform.localRotation;
             poseCaptured = true;
@@ -108,7 +121,7 @@ namespace CivilGameJam.Disasters
             IsRunning = true;
             if (progressFeedback != null) progressFeedback.Begin();
             if (navigation != null) navigation.AcquireEventInputLock(this);
-            if (seaMonsterWalk != null) seaMonsterWalk.BeginWalk(preserveTsunami);
+            if (animateMonster && seaMonsterWalk != null) seaMonsterWalk.BeginWalk(preserveTsunami);
             PrepareBuildingAnimations();
             if (testButton != null) testButton.interactable = false;
             if (statusLabel != null) statusLabel.text = "Earthquake started";
@@ -152,7 +165,7 @@ namespace CivilGameJam.Disasters
 
             var testDuration = TestDuration;
             elapsed = Mathf.Min(elapsed + Mathf.Max(0f, deltaTime), testDuration);
-            if (seaMonsterWalk != null && !seaMonsterWalk.HasStartedAfterEventWalk) seaMonsterWalk.SetWalkTime(elapsed);
+            if (animateMonster && seaMonsterWalk != null && !seaMonsterWalk.HasStartedAfterEventWalk) seaMonsterWalk.SetWalkTime(elapsed);
             var progress = elapsed / testDuration;
             for (var i = 0; i < activeBuildingAnimations.Count; i++)
             {
@@ -240,10 +253,15 @@ namespace CivilGameJam.Disasters
             if (Application.isPlaying) ResetTest();
         }
 
+        public void FinishPresentation()
+        {
+            if (Application.isPlaying && IsRunning) ResetTest(true);
+        }
+
         public void FinishForFire()
         {
             if (!IsRunning) return;
-            if (seaMonsterWalk != null) seaMonsterWalk.CompleteWalk();
+            if (animateMonster && seaMonsterWalk != null) seaMonsterWalk.CompleteWalk();
             ResetTest(true);
         }
 
@@ -255,6 +273,7 @@ namespace CivilGameJam.Disasters
         private void ResetTest(bool completed = false)
         {
             IsRunning = false;
+            HasCompleted = completed;
             foreach (var animation in buildingAnimations)
                 if (animation != null)
                 {

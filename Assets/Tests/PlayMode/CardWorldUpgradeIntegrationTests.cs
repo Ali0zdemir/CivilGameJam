@@ -37,11 +37,27 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(Field<TMP_Text>(result, "earnedPointsLabel").text, Is.EqualTo("AP EARNED: +10"));
         Assert.That(bank.CurrentPoints, Is.EqualTo(20));
         Assert.That(round.SequenceNumber, Is.EqualTo(1));
+        Assert.That(houses.All(house => house.House.IsDestroyed), Is.True);
+        Assert.That(authored.HasCollapsed, Is.True);
+        Assert.That(Vector3.Distance(body.localPosition, position), Is.GreaterThan(.1f));
+        var fallenPosition = body.localPosition; var fallenRotation = body.localRotation;
+        Step(4f);
+        yield return null;
+        Assert.That(body.localPosition, Is.EqualTo(fallenPosition));
+        Assert.That(body.localRotation, Is.EqualTo(fallenRotation));
+        Assert.That(result.IsVisible, Is.True);
+        Assert.That(round.CanReady, Is.False);
+        round.Ready();
+        Assert.That(sequence.IsRunning, Is.False, "A report cannot be skipped by another READY.");
+        CaptureWorld("held-earthquake-ruins-behind-report.png");
+        AssertFreshPeople(System.Array.Empty<DraggableCard>());
+        result.Retry(); round.AdvanceRound(100f);
         Assert.That(houses.Any(house => house.House.IsDestroyed), Is.False);
         Assert.That(body.localPosition, Is.EqualTo(position));
         Assert.That(body.localRotation, Is.EqualTo(rotation));
-        AssertFreshPeople(System.Array.Empty<DraggableCard>());
-        result.Retry(); round.AdvanceRound(100f);
+        Assert.That(authored.HasCollapsed, Is.False);
+        CaptureWorld("held-earthquake-rebuilt-after-close.png");
+        result.Retry();
         Assert.That(result.IsVisible, Is.False);
         Assert.That(round.RoundNumber, Is.EqualTo(2));
         Assert.That(bank.CurrentPoints, Is.EqualTo(20), "Closing the report cannot pay rewards twice.");
@@ -49,24 +65,21 @@ public sealed partial class CardAbilityPointsPlayModeTests
     }
 
     [UnityTest]
-    public IEnumerator AuthoredAllSafeRoundKeepsCardsAndAPAndReportsZeroLossesBeforeTheWaterStage()
+    public IEnumerator AuthoredAllSafeRoundKeepsCardsAndAPAndStartsWaterWithoutAnIntermediateResultsPanel()
     {
         bank.AddPoints(4); PrepareSeismic(2);
         var installed = houses.Select(house => house.House.GetInstalled(UpgradeKind.RailSystem)).ToArray();
         yield return new WaitForSecondsRealtime(1.6f);
         round.Ready(); Until(() => round.RoundNumber == 2);
         var result = sequence.GetComponent<MonsterSequenceResults>();
-        Assert.That(result.IsVisible, Is.True);
-        Assert.That(result.DestroyedHouseCount, Is.Zero);
-        Assert.That(result.ProtectedHouseCount, Is.EqualTo(4));
-        Assert.That(Field<TMP_Text>(result, "destroyedCountLabel").text, Is.EqualTo("4 / 4"));
-        Assert.That(Field<TMP_Text>(result, "earnedPointsLabel").text, Is.EqualTo("AP EARNED: +18"));
+        Assert.That(result.IsVisible, Is.False, "The earthquake success cannot interrupt the continuous monster entrance.");
+        Assert.That(round.LastProtectedHouseCount, Is.EqualTo(4));
+        Assert.That(round.LastSurvivalReward + round.LastRoundGrant, Is.EqualTo(18));
         Assert.That(round.SequenceNumber, Is.EqualTo(2));
         Assert.That(bank.CurrentPoints, Is.EqualTo(18));
         Assert.That(houses.Select(house => house.House.GetInstalled(UpgradeKind.RailSystem)), Is.EqualTo(installed));
         Assert.That(houses.All(house => house.Building.GetComponent<ApartmentUpgradeModel>().HasSeismic), Is.True);
         Assert.That(houses.Any(house => house.Building.GetComponent<ApartmentEarthquakeAnimation>().IsRunning), Is.False);
-        result.Retry(); round.Ready();
         Assert.That(sequence.IsRunning && sequence.ActiveSequence == 2, Is.True);
         sequence.StopSequence(); round.AdvanceRound(0f);
         Assert.That(result.IsVisible, Is.False, "Cancellation must not show a completed-round report.");
@@ -90,10 +103,25 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(round.SequenceNumber, Is.EqualTo(2));
         Assert.That(houses.All(house => house.Building.GetComponent<ApartmentUpgradeModel>().HasSeismic), Is.True);
         Assert.That(houses.Count(house => house.Building.GetComponent<ApartmentUpgradeModel>().IsElevated), Is.EqualTo(2));
-        Assert.That(houses.Any(house => house.Building.GetComponent<ApartmentTsunamiCollapse>().HasCollapsed ||
-            house.Building.GetComponent<ApartmentEarthquakeAnimation>().HasCollapsed), Is.False);
+        var flooded = houses.Where(house => house.Building.GetComponent<ApartmentTsunamiCollapse>().HasCollapsed).ToArray();
+        Assert.That(flooded.Length, Is.EqualTo(2));
+        AssertVisibleTsunamiRuins();
+        var bodies = flooded.SelectMany(house => Enumerable.Range(1, 6)
+            .Select(i => house.Building.Find("Apartment_Motion/Apartments_Normal/Apartment" + i))).ToArray();
+        var collapsedPositions = bodies.Select(body => body.localPosition).ToArray();
+        var collapsedRotations = bodies.Select(body => body.localRotation).ToArray();
+        Step(4f);
+        yield return null;
+        AssertVisibleTsunamiRuins();
+        Assert.That(bodies.Select(body => body.localPosition), Is.EqualTo(collapsedPositions));
+        Assert.That(bodies.Select(body => body.localRotation), Is.EqualTo(collapsedRotations));
+        CaptureWorld("held-tsunami-damage-behind-report.png");
         AssertFreshPeople(System.Array.Empty<DraggableCard>());
         result.Retry(); round.AdvanceRound(100f);
+        Assert.That(houses.Any(house => house.Building.GetComponent<ApartmentTsunamiCollapse>().HasCollapsed ||
+            house.Building.GetComponent<ApartmentEarthquakeAnimation>().HasCollapsed), Is.False);
+        Assert.That(flooded.Any(house => house.Building.GetComponentsInChildren<MeshRenderer>(true).Any(renderer => renderer.forceRenderingOff)), Is.False);
+        CaptureWorld("held-tsunami-rebuilt-after-close.png");
         Assert.That(bank.CurrentPoints, Is.EqualTo(23));
     }
 }

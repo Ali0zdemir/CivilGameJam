@@ -112,6 +112,11 @@ namespace CivilGameJam.Disasters
         private bool cameraFollowFinished;
         private bool monsterReleasedToWalk;
         private bool sequenceOwnsCamera;
+        private Object sequenceCameraOwner;
+        private bool waterReceding;
+        private float sequenceRecessionStart = -1f;
+        private float sequenceRecessionSeconds;
+        private float sequenceRecessionFrom;
 
         private sealed class ImpactSite
         {
@@ -123,6 +128,40 @@ namespace CivilGameJam.Disasters
         }
 
         public bool IsRunning { get; private set; }
+        public bool HasReachedCityEnd { get; private set; }
+        public bool HasSequenceCameraOwner => sequenceCameraOwner != null;
+        public bool HasFinishedHouseCollapses
+        {
+            get
+            {
+                var collapsed = false;
+                foreach (var site in impactSites)
+                {
+                    if (site.Collapse == null || !site.Collapse.isActiveAndEnabled || site.Building == null ||
+                        !site.Building.gameObject.activeInHierarchy) continue;
+                    if (site.Collapse.HasCollapsed)
+                    {
+                        collapsed = true;
+                        if (site.Collapse.IsPlaying) return false;
+                    }
+                    else if (IsRunning && !site.Hit && Mathf.Abs(site.LocalBounds.center.x) <= waveWidth * .5f &&
+                             (!site.Building.TryGetComponent<ApartmentUpgradeModel>(out var apartment) || !apartment.IsElevatorProtected))
+                        return false;
+                }
+                return collapsed;
+            }
+        }
+        public bool IsWaterReceding => IsRunning && waterReceding;
+        public float WaterRecessionProgress { get; private set; }
+        public float WaterRecessionSeconds => Mathf.Max(1f, floodRunoffTime);
+        public float WaveEndDistance
+        {
+            get
+            {
+                CacheCityLayout();
+                return authoredWave != null ? Mathf.Max(authoredWave.StartDistance, Mathf.Min(authoredWave.EndDistance, cityBounds.max.z)) : cityBounds.max.z;
+            }
+        }
         public float WaveSpeed => authoredWave != null ? authoredWave.MovementSpeed : Mathf.Max(1f, waveSpeed);
         public bool IsWaveCameraActive => authoredWave != null && IsRunning && cameraFocusStarted;
         public float TestDuration => Mathf.Max(seaMonster != null ? seaMonster.RiseDuration : 0f, WaveReleaseDelay + WaveDuration);
@@ -145,10 +184,11 @@ namespace CivilGameJam.Disasters
         private float FloodCrestLevel => MaximumFloodWaterLevel;
         private float WaveReleaseDelay => seaMonster != null ? seaMonster.WaveReleaseDelay : 0f;
         private float WaveDuration => Mathf.Max(ShoreArrivalTime + Mathf.Max(0.3f, floodPulseDuration) + Mathf.Max(1f, floodRunoffTime),
-            authoredWave != null ? RouteEndTime + .35f : 0f);
+            authoredWave != null ? Mathf.Max(RouteEndTime + Mathf.Max(.2f, fadeOutTime), RecessionStartTime + WaterRecessionSeconds) : 0f);
+        private float RecessionStartTime => Mathf.Max(RouteEndTime, ShoreArrivalTime + Mathf.Max(.3f, floodPulseDuration));
         private float RouteEndTime => routeEndElapsed >= 0f ? routeEndElapsed :
-            IsRunning ? elapsed + Mathf.Max(0f, authoredWave.EndDistance - front) / WaveSpeed :
-            Mathf.Max(0f, authoredWave.EndDistance - authoredWave.StartDistance) / WaveSpeed;
+            IsRunning ? elapsed + Mathf.Max(0f, WaveEndDistance - front) / WaveSpeed :
+            Mathf.Max(0f, WaveEndDistance - authoredWave.StartDistance) / WaveSpeed;
         private float ShoreArrivalTime => shoreArrivalElapsed >= 0f ? shoreArrivalElapsed :
             IsRunning ? elapsed + Mathf.Max(0f, shorelineDistance - front) / WaveSpeed :
             Mathf.Max(.0001f, (shorelineDistance - startDistance) / WaveSpeed);
@@ -181,8 +221,9 @@ namespace CivilGameJam.Disasters
         public void StartTsunami() => BeginTsunami(false);
 
         public void StartSequenceTsunami() => BeginTsunami(true);
+        public void StartSequenceTsunami(Object cameraOwner) => BeginTsunami(true, cameraOwner);
 
-        private void BeginTsunami(bool useSequenceCamera)
+        private void BeginTsunami(bool useSequenceCamera, Object cameraOwner = null)
         {
             if (!Application.isPlaying || !isActiveAndEnabled || IsRunning) return;
             if (waterMaterial == null)
@@ -191,6 +232,7 @@ namespace CivilGameJam.Disasters
                 return;
             }
 
+            CityLayoutEvents.PrepareForDisaster();
             if (fire != null) fire.StopFire();
             if (earthquake != null) earthquake.StopEarthquake();
             if (authoredWave != null) startDistance = authoredWave.StartDistance;
@@ -208,7 +250,12 @@ namespace CivilGameJam.Disasters
             sequenceElapsed = 0f;
             shoreArrivalElapsed = -1f;
             routeEndElapsed = -1f;
+            HasReachedCityEnd = false;
+            waterReceding = false;
+            WaterRecessionProgress = 0f;
+            sequenceRecessionStart = -1f;
             sequenceOwnsCamera = useSequenceCamera;
+            sequenceCameraOwner = useSequenceCamera ? cameraOwner : null;
             monsterReleasedToWalk = false;
             if (seaMonster != null) seaMonster.ResetEmergence();
             sprayRemainder = 0f;
@@ -260,10 +307,12 @@ namespace CivilGameJam.Disasters
                 }
                 var previousFront = front;
                 front += waveStep * WaveSpeed;
+                if (authoredWave != null) front = Mathf.Min(front, WaveEndDistance);
+                if (front >= WaveEndDistance) HasReachedCityEnd = true;
                 if (shoreArrivalElapsed < 0f && front >= shorelineDistance)
                     shoreArrivalElapsed = previousWaveTime + Mathf.Max(0f, shorelineDistance - previousFront) / WaveSpeed;
-                if (authoredWave != null && routeEndElapsed < 0f && front >= authoredWave.EndDistance)
-                    routeEndElapsed = previousWaveTime + Mathf.Max(0f, authoredWave.EndDistance - previousFront) / WaveSpeed;
+                if (authoredWave != null && routeEndElapsed < 0f && front >= WaveEndDistance)
+                    routeEndElapsed = previousWaveTime + Mathf.Max(0f, WaveEndDistance - previousFront) / WaveSpeed;
                 growth = Mathf.SmoothStep(0f, 1f, elapsed / Mathf.Max(0.1f, buildupTime));
                 var impactAge = elapsed - ShoreArrivalTime;
                 drain = 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.35f, Mathf.Max(0.6f, fadeOutTime), impactAge));
@@ -272,7 +321,17 @@ namespace CivilGameJam.Disasters
                 var transmission = breakwater != null ? breakwater.Transmission : 1f;
                 var inlet = groundLevel + (FloodWaterLevel - groundLevel +
                     (FloodCrestLevel - FloodWaterLevel) * pulse) * Mathf.SmoothStep(0f, 1f, impactAge / 0.12f) * tail * transmission;
-                flood.Advance(waveStep, inlet);
+                if (authoredWave != null && (sequenceRecessionStart >= 0f || HasReachedCityEnd && elapsed >= RecessionStartTime))
+                {
+                    if (!waterReceding) { waterReceding = true; flood.BeginRecession(); }
+                    var progress = Mathf.Clamp01((elapsed - RecessionStartTime) / WaterRecessionSeconds);
+                    if (sequenceRecessionStart >= 0f)
+                        progress = Mathf.Max(progress, Mathf.Lerp(sequenceRecessionFrom, 1f,
+                            Mathf.Clamp01((elapsed - sequenceRecessionStart) / sequenceRecessionSeconds)));
+                    WaterRecessionProgress = Mathf.Max(WaterRecessionProgress, progress);
+                    flood.Recede(waveStep, WaterRecessionProgress);
+                }
+                else flood.Advance(waveStep, inlet);
                 if (drain > 0.01f) EmitCrestSpray(waveStep);
                 EmitBreakwaterSplashes(waveStep);
                 EmitBuildingSplashes();
@@ -280,11 +339,19 @@ namespace CivilGameJam.Disasters
             if (seaMonster != null && !monsterReleasedToWalk)
                 seaMonster.SetEmergenceTime(sequenceElapsed, Mathf.InverseLerp(startDistance, shorelineDistance, front));
             if (authoredWave != null)
-                authoredWave.SetWave(front, seaLevel, 1f, elapsed > .00001f ? 1f : 0f);
+            {
+                // Start softening near the back of the city, then dissipate in place before the mountains.
+                var lead = Mathf.Min(1f, Mathf.Max(0f, WaveEndDistance - shorelineDistance) / WaveSpeed * .25f);
+                var strength = 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(-lead, Mathf.Max(.2f, fadeOutTime), elapsed - RouteEndTime));
+                if (sequenceRecessionStart >= 0f)
+                    strength *= 1f - Mathf.SmoothStep(0f, 1f, (elapsed - sequenceRecessionStart) / sequenceRecessionSeconds);
+                authoredWave.SetWave(front, seaLevel, 1f, elapsed > .00001f ? strength : 0f);
+            }
             UpdateEventCamera();
             UpdateSurface();
             SetWaterProperties(Mathf.SmoothStep(0f, 1f, elapsed / 0.15f) * drain);
-            var runoffFade = 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(WaveDuration - 0.35f, WaveDuration, elapsed));
+            var runoffFade = 1f - Mathf.SmoothStep(0f, 1f, authoredWave != null ? WaterRecessionProgress :
+                Mathf.InverseLerp(ShoreArrivalTime + Mathf.Max(.3f, floodPulseDuration), WaveDuration, elapsed));
             flood.UpdateMesh(FloodWaterLevel - groundLevel, runoffFade);
             transmittedFlow.Update(breakwater, flood, front, elapsed, WaveSpeed, floodPulseDuration, runoffFade);
             if (progressFeedback != null) progressFeedback.SetProgress(sequenceElapsed / TestDuration, true);
@@ -306,7 +373,8 @@ namespace CivilGameJam.Disasters
                 // Keep the player's normal viewing distance and hold on the city as the wave crosses it.
                 // Start immediately so a sequence's initial framing cannot widen the view first.
                 if (!cameraFocusStarted)
-                    cameraFocusStarted = navigation.BeginEventFocus(this, transform.TransformPoint(cityBounds.center), 1f, cameraLeadSeconds);
+                    cameraFocusStarted = navigation.BeginEventFocus(sequenceCameraOwner != null ? sequenceCameraOwner : this,
+                        transform.TransformPoint(cityBounds.center), 1f, cameraLeadSeconds);
                 return;
             }
             if (sequenceOwnsCamera) return;
@@ -542,6 +610,7 @@ namespace CivilGameJam.Disasters
             floodReferenceBounds = new Bounds();
             foreach (Transform building in buildingsRoot)
             {
+                if (!building.gameObject.activeInHierarchy) continue;
                 var renderers = building.GetComponentsInChildren<MeshRenderer>();
                 var bounds = new Bounds();
                 var footprint = new Bounds();
@@ -585,6 +654,13 @@ namespace CivilGameJam.Disasters
             // The incoming edge and grid always meet, including when the city is repositioned.
             shorelineDistance = cityBounds.min.z;
             layoutCached = true;
+        }
+
+        public void RefreshCityLayout()
+        {
+            layoutCached = false;
+            CacheCityLayout();
+            RefreshFloodObstacles();
         }
 
         private void IncludeFloodReference(Bounds bounds)
@@ -719,6 +795,20 @@ namespace CivilGameJam.Disasters
             if (Application.isPlaying) ResetTest(false);
         }
 
+        public void FinishPresentation()
+        {
+            if (Application.isPlaying && IsRunning) ResetTest(true);
+        }
+
+        public void BeginSequenceRecession(float seconds)
+        {
+            if (!IsRunning || !HasSequenceCameraOwner || sequenceRecessionStart >= 0f) return;
+            sequenceRecessionStart = elapsed;
+            sequenceRecessionSeconds = Mathf.Max(.001f, seconds);
+            sequenceRecessionFrom = WaterRecessionProgress;
+            if (!waterReceding && flood != null) { waterReceding = true; flood.BeginRecession(); }
+        }
+
         private void OnDisable()
         {
             HouseColumnUpgrade.GeometryChanged -= OnHouseGeometryChanged;
@@ -728,6 +818,8 @@ namespace CivilGameJam.Disasters
         private void ResetTest(bool completed)
         {
             IsRunning = false;
+            sequenceRecessionStart = -1f;
+            if (!completed) { HasReachedCityEnd = false; waterReceding = false; WaterRecessionProgress = 0f; }
             shoreArrivalElapsed = -1f;
             routeEndElapsed = -1f;
             if (authoredWave != null) authoredWave.Hide();
@@ -735,7 +827,7 @@ namespace CivilGameJam.Disasters
                 foreach (var site in impactSites) if (site.Collapse != null) site.Collapse.ResetCollapse();
             if (navigation != null)
             {
-                if (cameraFocusStarted) navigation.EndEventFocus(this, cameraReturnSeconds);
+                if (cameraFocusStarted && sequenceCameraOwner == null) navigation.EndEventFocus(this, cameraReturnSeconds);
                 navigation.ReleaseEventInputLock(this);
             }
             cameraFocusStarted = cameraFollowFinished = false;

@@ -35,7 +35,7 @@ public sealed partial class CardGamePlayModeTests
         for (var number = 1; number <= 3; number++)
         {
             rig.Sequence.SelectSequence(number); rig.Sequence.StartSelectedSequence();
-            rig.Until(() => rig.Sequence.Stage == MonsterSequenceStage.WalkingToFirstPoint);
+            rig.Until(() => rig.Sequence.Stage == (number == 1 ? MonsterSequenceStage.Earthquake : MonsterSequenceStage.WalkingToFirstPoint));
             Assert.That(result.IsVisible, Is.False, "Running disasters cannot show a result early.");
             rig.Until(() => !rig.Sequence.IsRunning);
             Assert.That(result.IsVisible, Is.True);
@@ -51,10 +51,12 @@ public sealed partial class CardGamePlayModeTests
                     var collapse = link.Building.GetComponent<ApartmentTsunamiCollapse>();
                     if (!collapse.HasCollapsed) continue;
                     InvokeCity(collapse, "AdvanceCollapse", collapse.Duration + 2.1f);
-                    Assert.That(collapse.HasDisappeared, Is.True);
+                    Assert.That(collapse.HasCollapsed && !collapse.IsPlaying, Is.True);
+                    Assert.That(link.Building.GetComponentsInChildren<MeshRenderer>(true).Any(renderer => renderer.forceRenderingOff), Is.False,
+                        "Collapsed houses remain visible behind the report until Retry.");
                 }
                 result.Show();
-                Assert.That(result.DestroyedHouseCount, Is.EqualTo(expectedDestroyed), "Disappearing houses remain in the destroyed-house total.");
+                Assert.That(result.DestroyedHouseCount, Is.EqualTo(expectedDestroyed), "Visible ruins remain in the destroyed-house total.");
             }
             Assert.That(ap.text, Is.EqualTo("DISASTER REPORT"), "Standalone debug sequences do not award gameplay AP.");
             Assert.That(ap.font, Is.SameAs(game.GetComponentInChildren<TextMeshProUGUI>(true).font));
@@ -78,9 +80,8 @@ public sealed partial class CardGamePlayModeTests
             });
             rig.Sequence.SelectSequence(number == 3 ? 1 : 3);
             var selected = rig.Sequence.SelectedSequence;
-            var position = rig.Monster.Model.position;
-            var destroyed = links.Select(link => link.Building.GetComponent<ApartmentEarthquakeAnimation>().HasCollapsed ||
-                link.Building.GetComponent<ApartmentTsunamiCollapse>().HasCollapsed).ToArray();
+            Assert.That(links.Any(link => link.Building.GetComponent<ApartmentEarthquakeAnimation>().HasCollapsed ||
+                link.Building.GetComponent<ApartmentTsunamiCollapse>().HasCollapsed || rig.Fire.WasHouseBurnt(link.Building)), Is.True);
             retry.onClick.Invoke();
             Assert.That(result.IsVisible, Is.False);
             rig.For(.2f);
@@ -88,9 +89,9 @@ public sealed partial class CardGamePlayModeTests
             Assert.That(rig.Sequence.ActiveSequence, Is.EqualTo(number));
             Assert.That(rig.Sequence.SelectedSequence, Is.EqualTo(selected));
             Assert.That(rig.Sequence.Stage, Is.EqualTo(MonsterSequenceStage.Complete));
-            Assert.That(rig.Monster.Model.position, Is.EqualTo(position));
-            Assert.That(links.Select(link => link.Building.GetComponent<ApartmentEarthquakeAnimation>().HasCollapsed ||
-                link.Building.GetComponent<ApartmentTsunamiCollapse>().HasCollapsed), Is.EqualTo(destroyed), "Closing the panel cannot restore destroyed houses.");
+            Assert.That(links.Any(link => link.Building.GetComponent<ApartmentEarthquakeAnimation>().HasCollapsed ||
+                link.Building.GetComponent<ApartmentTsunamiCollapse>().HasCollapsed || rig.Fire.WasHouseBurnt(link.Building)), Is.False,
+                "Closing the report restores houses for the next attempt.");
             rig.Sequence.StopSequence(); InvokeCity(rig.Navigation, "AdvanceNavigation", 2f);
             Assert.That(result.IsVisible, Is.False);
             Assert.That(SequenceUIIds(), Is.EqualTo(ids), "All result UI is saved before Play Mode and reused for every attempt.");
@@ -147,7 +148,7 @@ public sealed partial class CardGamePlayModeTests
         Assert.That(ControlField<TMP_Text>(result, "destroyedCountLabel").text, Is.EqualTo("2 / 4"));
         result.Retry();
         Assert.That(result.IsVisible || rig.Sequence.IsRunning, Is.False);
-        Assert.That(rig.Fire.WasHouseBurnt(links[2].Building), Is.True, "Closing the result cannot reset burnt houses.");
+        Assert.That(rig.Fire.WasHouseBurnt(links[2].Building), Is.False, "Closing the result restores the burnt houses.");
         rig.Sequence.SelectSequence(1); rig.Sequence.StartSelectedSequence();
         Assert.That(links.Any(link => rig.Fire.WasHouseBurnt(link.Building)), Is.False, "A new test clears the previous fire damage.");
         rig.Until(() => !rig.Sequence.IsRunning);

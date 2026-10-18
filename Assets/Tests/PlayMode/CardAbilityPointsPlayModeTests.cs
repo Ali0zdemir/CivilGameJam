@@ -204,12 +204,18 @@ public sealed partial class CardAbilityPointsPlayModeTests
         round.AdvanceRound(Mathf.Max(0f, round.NextTurnAfterCollapseSeconds - elapsedSinceFirstCollapse - .01f));
         Assert.That(round.RoundNumber, Is.EqualTo(1)); Assert.That(bank.CurrentPoints, Is.Zero);
         round.AdvanceRound(.02f);
+        Assert.That(round.RoundNumber, Is.EqualTo(1), "Wait for the remaining animation even after the minimum collapse delay.");
+        Until(() => round.RoundNumber == 2);
         Assert.That(round.Phase, Is.EqualTo(EarthquakeRoundPhase.NextRoundPreparation));
         Assert.That(round.RoundNumber, Is.EqualTo(2)); Assert.That(round.SequenceNumber, Is.EqualTo(1));
         Assert.That(round.LastRoundSurvived, Is.False); Assert.That(bank.CurrentPoints, Is.EqualTo(16));
         Assert.That(round.LastProtectedHouseCount, Is.EqualTo(2)); Assert.That(round.LastSurvivalReward, Is.EqualTo(6));
         AssertFreshPeople(oldPeople);
-        Assert.That(houses.Any(house => house.House.IsDestroyed), Is.False, "The next attempt rebuilds the damaged city.");
+        Assert.That(houses.Count(house => house.House.IsDestroyed), Is.EqualTo(2));
+        Assert.That(houses.Count(house => house.House.GetInstalled(UpgradeKind.RailSystem) != null), Is.EqualTo(2), "Keep the completed city's appearance behind its report.");
+        Assert.That(round.CanReady, Is.False);
+        sequence.Results.Retry();
+        Assert.That(houses.Any(house => house.House.IsDestroyed), Is.False, "Closing the report rebuilds the next attempt.");
         Assert.That(oldRails.Any(card => game.Cards.Contains(card)), Is.False, "Installed and loose Rail System products are consumed on a failed earthquake turn.");
         Assert.That(game.Cards.Any(card => card.Kind == CardKind.Upgrade && card.UpgradeType == UpgradeKind.RailSystem), Is.False);
         Assert.That(houses.All(house => house.House.GetInstalled(UpgradeKind.RailSystem) == null), Is.True);
@@ -234,10 +240,12 @@ public sealed partial class CardAbilityPointsPlayModeTests
         bank.AddPoints(4); PrepareSeismic(2); Assert.That(bank.CurrentPoints, Is.Zero);
         var installed = houses.Select(house => house.House.GetInstalled(UpgradeKind.RailSystem)).ToArray();
         yield return new WaitForSecondsRealtime(1.6f); round.Ready();
-        Until(() => round.Phase == EarthquakeRoundPhase.NextRoundPreparation);
+        Until(() => round.SequenceNumber == 2);
         Assert.That(round.LastRoundSurvived, Is.True); Assert.That(round.SequenceNumber, Is.EqualTo(2));
         Assert.That(sequence.SelectedSequence, Is.EqualTo(2));
         Assert.That(round.LastProtectedHouseCount, Is.EqualTo(4)); Assert.That(round.LastSurvivalReward, Is.EqualTo(12));
+        Assert.That(sequence.IsRunning && bank.ActionsLocked, Is.True, "Water follows the protected earthquake without another READY.");
+        sequence.StopSequence(); round.AdvanceRound(0f); Invoke(navigation, "AdvanceNavigation", 2f);
         Assert.That(bank.CurrentPoints, Is.EqualTo(18)); Assert.That(round.CanReady, Is.True);
         Assert.That(round.LastRoundGrant, Is.EqualTo(6), "The first Tsunami preparation already uses the smaller bonus.");
         for (int i = 0; i < houses.Length; i++)
@@ -272,6 +280,8 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(round.LastProtectedHouseCount, Is.Zero); Assert.That(bank.CurrentPoints, Is.EqualTo(20));
         Assert.That(round.LastRoundGrant, Is.EqualTo(10), "Earthquake retries keep their original bonus until the stage is cleared.");
         Assert.That(round.SequenceNumber, Is.EqualTo(1)); Assert.That(round.RoundNumber, Is.EqualTo(2));
+        Assert.That(houses.All(house => house.House.IsDestroyed), Is.True);
+        sequence.Results.Retry();
         Assert.That(houses.Any(house => house.House.IsDestroyed || house.Building.GetComponent<EarthquakeHouseDamage>().IsDestroyed), Is.False);
         Assert.That(game.NormalPeopleCount, Is.EqualTo(4)); Assert.That(game.EducatedPeopleCount, Is.Zero);
         Assert.That(game.Cards.Where(card => card.IsPerson).All(card => card.CanStartWork), Is.True);
@@ -335,6 +345,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
     {
         PrepareSeismic(1); yield return new WaitForSecondsRealtime(1.6f);
         round.Ready(); Until(() => round.RoundNumber == 2); Until(() => !navigation.IsEventCameraActive);
+        sequence.Results.Retry();
         Assert.That(game.Cards.Any(card => card.Kind == CardKind.Blueprint), Is.False);
         var plan = Research(Person());
         for (int batch = 0; batch < 2; batch++)
@@ -427,16 +438,19 @@ public sealed partial class CardAbilityPointsPlayModeTests
         bank.AddPoints(4); PrepareSeismic(2);
         yield return new WaitForSecondsRealtime(1.6f);
         round.Ready(); Until(() => round.RoundNumber == 2);
-        Assert.That(round.SequenceNumber, Is.EqualTo(2)); round.Ready();
+        Assert.That(round.SequenceNumber, Is.EqualTo(2));
         Assert.That(sequence.ActiveSequence, Is.EqualTo(2));
         Until(() => houses.Any(house => house.House.IsDestroyed));
         round.AdvanceRound(round.NextTurnAfterCollapseSeconds + .01f);
+        Until(() => round.RoundNumber == 3);
         Assert.That(round.RoundNumber, Is.EqualTo(3)); Assert.That(round.SequenceNumber, Is.EqualTo(2));
         Assert.That(round.LastRoundSurvived, Is.False);
         Assert.That(round.LastProtectedHouseCount, Is.Zero);
         Assert.That(round.LastSurvivalReward, Is.Zero, "Seismic cards alone do not earn a water survival reward.");
         Assert.That(bank.CurrentPoints, Is.EqualTo(24));
         Assert.That(houses.All(house => house.House.GetInstalled(UpgradeKind.RailSystem) != null), Is.True);
+        Assert.That(houses.All(house => house.Building.GetComponent<ApartmentTsunamiCollapse>().HasCollapsed), Is.True);
+        sequence.Results.Retry();
         Assert.That(houses.All(house => !house.House.IsDestroyed && !house.Building.GetComponent<ApartmentTsunamiCollapse>().HasCollapsed), Is.True);
         AssertFreshPeople(Array.Empty<DraggableCard>());
     }
@@ -500,6 +514,8 @@ public sealed partial class CardAbilityPointsPlayModeTests
     }
     private void Step(float seconds)
     {
+        var roar = Field<AudioSource>(sequence, "earthquakeRoar");
+        var advanceRoar = roar != null && roar.isPlaying;
         if (earthquake.IsRunning) Invoke(earthquake, "AdvanceShake", seconds);
         var water = Field<TsunamiTestController>(round, "tsunami");
         if (water.IsRunning) Invoke(water, "AdvanceTsunami", seconds);
@@ -507,9 +523,23 @@ public sealed partial class CardAbilityPointsPlayModeTests
         if (flames.IsRunning) Invoke(flames, "AdvanceFire", seconds);
         var walk = Object.FindFirstObjectByType<SeaMonsterWalk>();
         if (walk.IsWalkingAfterEvent) Invoke(walk, "AdvanceAfterEventWalk", seconds);
+        // Manual scene time must also advance the independent audio clock.
+        if (advanceRoar && roar.isPlaying)
+        {
+            var nextTime = roar.time + seconds * roar.pitch;
+            if (nextTime >= roar.clip.length) roar.Stop(); else roar.time = nextTime;
+        }
         Invoke(sequence, "AdvanceSequence", seconds); Invoke(sequence, "LateUpdate");
         Invoke(navigation, "AdvanceNavigation", seconds);
-        foreach (var house in houses) Invoke(house.Building.GetComponent<EarthquakeHouseDamage>(), "AdvanceCollapse", seconds);
+        foreach (var house in houses)
+        {
+            Invoke(house.Building.GetComponent<EarthquakeHouseDamage>(), "AdvanceCollapse", seconds);
+            Invoke(house.Building.GetComponent<ApartmentTsunamiCollapse>(), "AdvanceCollapse", seconds);
+            var feedback = house.Building.GetComponent<BuildingCollapseFeedback>();
+            Invoke(feedback, "AdvanceFeedback", seconds);
+            var puffs = Field<ParticleSystem[]>(feedback, "dust");
+            if (puffs != null) foreach (var puff in puffs) puff.Simulate(seconds, true, false, false);
+        }
         round.AdvanceRound(seconds); Invoke(round, "LateUpdate");
     }
     private void CaptureWorld(string name)

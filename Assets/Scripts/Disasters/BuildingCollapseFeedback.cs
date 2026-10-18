@@ -16,9 +16,12 @@ namespace CivilGameJam.Disasters
         private Bounds[] foundations;
         private float dustElapsed;
         private bool prepared;
+        private const float DustLifetime = 1.2f;
 
         public bool Reported { get; private set; }
         public bool IsDustEmitting { get; private set; }
+        public bool IsPlaying => IsDustEmitting || DustParticleCount > 0;
+        public float MaximumDustLifetime => constructionDustMaterial != null ? DustLifetime * 1.15f : 0f;
         public int DustParticleCount
         {
             get { var count = 0; if (dust != null) foreach (var puff in dust) if (puff != null) count += puff.particleCount; return count; }
@@ -60,7 +63,7 @@ namespace CivilGameJam.Disasters
         {
             if (dust != null)
                 for (var i = 0; i < dust.Length; i++)
-                    ConstructionDustPuff.Emit(dust[i], effects.transform, foundations[i], amount, .26f, 1.2f, random, Vector3.zero, clearExisting: clearExisting);
+                    ConstructionDustPuff.Emit(dust[i], effects.transform, foundations[i], amount, .26f, DustLifetime, random, Vector3.zero, clearExisting: clearExisting);
         }
 
         private void EnsureEffects()

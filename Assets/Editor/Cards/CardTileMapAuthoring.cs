@@ -14,7 +14,6 @@ namespace CivilGameJam.Cards.Editor
     {
         public const string TileAsset = "Assets/EfeArts/Map(Guncel1).fbx";
         private const string Work = "Library/TileMapWork";
-        private const string FoliageFolder = "Assets/Art/Buildings/TileFoliage";
 
         [MenuItem("Tools/Card Game/Save Current 4x2 Map")]
         public static void SaveForBatch()
@@ -44,8 +43,6 @@ namespace CivilGameJam.Cards.Editor
             var orderedColumns = groups.Select(group => Mathf.RoundToInt(group.localPosition.x * 1000f)).Distinct().OrderBy(x => x).ToArray();
             if (orderedColumns.Length != 4 || groups.Length > cells.Length) throw new InvalidOperationException("The saved buildings must fit the four-column map.");
             var frontRow = groups.Min(group => group.localPosition.z);
-            var foliage = new Dictionary<Mesh, Mesh>();
-            if (!AssetDatabase.IsValidFolder(FoliageFolder)) AssetDatabase.CreateFolder("Assets/Art/Buildings", "TileFoliage");
 
             var mapObject = scene.GetRootGameObjects().SingleOrDefault(root =>
                 PrefabUtility.GetPrefabAssetPathOfNearestInstanceRoot(root) == TileAsset);
@@ -86,7 +83,7 @@ namespace CivilGameJam.Cards.Editor
             }
             foreach (var stale in markers.Cast<Transform>().Where(marker => marker.name.StartsWith("Tile_R3_", StringComparison.Ordinal)).ToArray())
                 Object.DestroyImmediate(stale.gameObject);
-            var removedPads = 0;
+            var restoredPads = 0;
             foreach (var group in groups)
             {
                 var column = Array.IndexOf(orderedColumns, Mathf.RoundToInt(group.localPosition.x * 1000f));
@@ -95,17 +92,9 @@ namespace CivilGameJam.Cards.Editor
                 position.y = group.localPosition.y;
                 group.localPosition = position;
                 PrefabUtility.RecordPrefabInstancePropertyModifications(group);
-                // Remove only the old flat pads; retain the original trees and their materials.
-                foreach (var filter in group.GetComponentsInChildren<MeshFilter>())
-                {
-                    if (filter.sharedMesh == null || filter.name.IndexOf("Ground", StringComparison.OrdinalIgnoreCase) < 0) continue;
-                    var original = filter.sharedMesh;
-                    if (AssetDatabase.GetAssetPath(original).StartsWith(FoliageFolder + "/", StringComparison.Ordinal)) { removedPads++; continue; }
-                    if (!foliage.TryGetValue(original, out var replacement)) foliage.Add(original, replacement = WithoutGroundPad(original));
-                    filter.sharedMesh = replacement; PrefabUtility.RecordPrefabInstancePropertyModifications(filter); removedPads++;
-                }
+                restoredPads += CardBuildingGroundAuthoring.RestoreGroup(group, ground);
             }
-            if (removedPads < groups.Length) throw new InvalidOperationException("Every building must have its original ground pad replaced.");
+            if (restoredPads < groups.Length) throw new InvalidOperationException("Every building must retain its original travelling ground.");
             var island = previousGround.parent.Find("Island_Base");
             if (island != null) island.GetComponent<MeshRenderer>().enabled = false;
             var bounds = TransformBounds(tsunami.transform.worldToLocalMatrix * ground.localToWorldMatrix, sourceMesh.sharedMesh.bounds);
@@ -133,7 +122,7 @@ namespace CivilGameJam.Cards.Editor
             EditorSceneManager.MarkSceneDirty(scene);
             if (!EditorSceneManager.SaveScene(scene)) throw new InvalidOperationException("Could not save the tile map.");
             Directory.CreateDirectory(Work);
-            File.WriteAllText(Work + "/layout.txt", TileAsset + "\n4 columns x 2 rows\nBuilding roots: " + groups.Length + "\nReplaced pads: " + removedPads + "\nBounds: " + bounds + "\n");
+            File.WriteAllText(Work + "/layout.txt", TileAsset + "\n4 columns x 2 rows\nBuilding roots: " + groups.Length + "\nRestored building grounds: " + restoredPads + "\nBounds: " + bounds + "\n");
             Debug.Log("Saved the active Map(Guncel1) model as the main map with its own ground and scenery linked to the existing game systems.");
         }
 
@@ -159,44 +148,6 @@ namespace CivilGameJam.Cards.Editor
                 bounds.Encapsulate(vertices[index]); components[key] = bounds;
             }
             return components.Values.OrderBy(bounds => Mathf.RoundToInt(bounds.center.z * 1000f)).ThenBy(bounds => bounds.center.x).ToArray();
-        }
-
-        private static Mesh WithoutGroundPad(Mesh source)
-        {
-            var vertices = source.vertices; var levels = new Dictionary<int, float>();
-            for (var sub = 0; sub < source.subMeshCount; sub++)
-            {
-                var triangles = source.GetTriangles(sub);
-                for (var i = 0; i < triangles.Length; i += 3)
-                {
-                    var a = vertices[triangles[i]]; var b = vertices[triangles[i + 1]]; var c = vertices[triangles[i + 2]];
-                    if (Mathf.Max(a.y, b.y, c.y) - Mathf.Min(a.y, b.y, c.y) > .0001f) continue;
-                    var key = Mathf.RoundToInt((a.y + b.y + c.y) / 3f * 10000f);
-                    var area = Vector3.Cross(b - a, c - a).magnitude * .5f;
-                    levels[key] = (levels.TryGetValue(key, out var sum) ? sum : 0f) + area;
-                }
-            }
-            if (levels.Count == 0) throw new InvalidOperationException("No flat ground pad on " + source.name);
-            var largestArea = levels.Values.Max();
-            var groundY = levels.Where(pair => pair.Value >= largestArea * .9f).Max(pair => pair.Key) / 10000f;
-            var mesh = Object.Instantiate(source); mesh.name = source.name + "_Foliage";
-            var used = new List<int>();
-            for (var sub = 0; sub < source.subMeshCount; sub++)
-            {
-                var original = source.GetTriangles(sub); var keep = new List<int>();
-                for (var i = 0; i < original.Length; i += 3)
-                    if (Mathf.Max(vertices[original[i]].y, vertices[original[i + 1]].y, vertices[original[i + 2]].y) > groundY + .0001f)
-                    { keep.Add(original[i]); keep.Add(original[i + 1]); keep.Add(original[i + 2]); }
-                mesh.SetTriangles(keep, sub, false); used.AddRange(keep);
-            }
-            if (used.Count == 0 || used.Count == source.triangles.Length) throw new InvalidOperationException("Could not separate trees from the ground on " + source.name);
-            var remaining = new Bounds(vertices[used[0]], Vector3.zero); foreach (var index in used) remaining.Encapsulate(vertices[index]); mesh.bounds = remaining;
-            var file = Path.GetFileNameWithoutExtension(AssetDatabase.GetAssetPath(source)) + "_" + source.name + "_Foliage";
-            file = new string(file.Select(character => char.IsLetterOrDigit(character) ? character : '_').ToArray());
-            var path = FoliageFolder + "/" + file + ".asset";
-            var saved = AssetDatabase.LoadAssetAtPath<Mesh>(path);
-            if (saved == null) { AssetDatabase.CreateAsset(mesh, path); return mesh; }
-            EditorUtility.CopySerialized(mesh, saved); EditorUtility.SetDirty(saved); Object.DestroyImmediate(mesh); return saved;
         }
 
         [Serializable] private sealed class Report

@@ -244,7 +244,7 @@ public sealed class CardSceneEditModeTests
         }
         if (card.IsPerson)
         {
-            string artName = card.Kind == CardKind.Person ? "People Card Small" : "Educated People Card Small";
+            string artName = card.Kind == CardKind.Person ? "People Card Small Revised" : "Educated People Card Small";
             var sprite = FindArtwork(artName);
             var artwork = prefab.transform.Find("Artwork").GetComponent<Image>();
             Assert.That(artwork.sprite, Is.SameAs(sprite));

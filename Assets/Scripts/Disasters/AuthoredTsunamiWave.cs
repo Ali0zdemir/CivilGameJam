@@ -20,6 +20,8 @@ namespace CivilGameJam.Disasters
         private MaterialPropertyBlock[] properties;
         private Material[] originalMaterials;
         private Material[] runtimeMaterials;
+        private Vector3 fullScale, fullPosition;
+        private bool poseSaved;
         private static readonly int BaseColor = Shader.PropertyToID("_BaseColor");
 
         public MeshRenderer Surface => surface;
@@ -28,12 +30,14 @@ namespace CivilGameJam.Disasters
         public Vector3 EndPosition => endPosition;
         public float StartDistance => FrontAt(startPosition);
         public float EndDistance => FrontAt(endPosition);
-        public float FrontDistance => FrontAt(transform.localPosition);
+        public float FrontDistance => FrontAt(poseSaved ? fullPosition : transform.localPosition);
         public bool IsVisible => gameObject.activeSelf;
+        public float Strength { get; private set; }
 
         public void SetWave(float front, float seaLevel, float emergence, float fade)
         {
             if (surface == null) return;
+            if (!poseSaved) { fullScale = transform.localScale; poseSaved = true; }
             if (colors == null)
             {
                 var materials = surface.sharedMaterials;
@@ -58,16 +62,33 @@ namespace CivilGameJam.Disasters
                     properties[i] = new MaterialPropertyBlock();
                 }
             }
-            transform.localPosition = Vector3.Lerp(startPosition, endPosition,
+            fullPosition = Vector3.Lerp(startPosition, endPosition,
                 Mathf.InverseLerp(StartDistance, EndDistance, front));
+            transform.localPosition = fullPosition;
+            transform.localScale = fullScale;
+            Strength = Mathf.Clamp01(fade);
+            if (Strength > .001f && Strength < 1f)
+            {
+                // Let the crest settle into the water without changing its width or travel bounds.
+                transform.localScale = new Vector3(fullScale.x, fullScale.y * Strength, fullScale.z);
+                var position = simulationFrame != null ? simulationFrame.InverseTransformPoint(transform.position) : fullPosition;
+                position.y = Mathf.Lerp(seaLevel, position.y, Strength);
+                if (simulationFrame != null) transform.position = simulationFrame.TransformPoint(position);
+                else transform.localPosition = position;
+            }
             for (var i = 0; i < colors.Length; i++)
             {
                 properties[i].SetColor(BaseColor, colors[i]); surface.SetPropertyBlock(properties[i], i);
             }
-            gameObject.SetActive(fade > .001f);
+            if (Strength <= .001f) Hide(); else gameObject.SetActive(true);
         }
 
-        public void Hide() => gameObject.SetActive(false);
+        public void Hide()
+        {
+            Strength = 0f;
+            if (poseSaved) { transform.localPosition = fullPosition; transform.localScale = fullScale; }
+            gameObject.SetActive(false);
+        }
 
         private float FrontAt(Vector3 position)
         {
@@ -77,7 +98,7 @@ namespace CivilGameJam.Disasters
             var surfaceOffset = surface.transform == transform ? Matrix4x4.identity :
                 transform.worldToLocalMatrix * surface.transform.localToWorldMatrix;
             var matrix = simulationFrame.worldToLocalMatrix * parentMatrix *
-                Matrix4x4.TRS(position, transform.localRotation, transform.localScale) * surfaceOffset;
+                Matrix4x4.TRS(position, transform.localRotation, poseSaved ? fullScale : transform.localScale) * surfaceOffset;
             var bounds = surface.localBounds;
             var front = float.NegativeInfinity;
             for (var corner = 0; corner < 8; corner++)

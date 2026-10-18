@@ -11,16 +11,12 @@ namespace CivilGameJam.Cards
         {
             public UpgradeKind kind;
             public RectTransform row;
+            public TextMeshProUGUI description;
+            [TextArea(2, 3)] public string installedDescription;
         }
 
         [SerializeField] private HouseUpgrades house;
-        [SerializeField] private RectTransform details;
-        [SerializeField] private TextMeshProUGUI defaultTitle;
-        [SerializeField] private TextMeshProUGUI defaultDescription;
         [SerializeField] private UpgradeEntry[] entries;
-        [SerializeField, Min(1f)] private float emptyHeight = 128f;
-        [SerializeField, Min(1f)] private float entryHeight = 112f;
-        [SerializeField, Min(1f)] private float entrySpacing = 96f;
 
         private void OnEnable()
         {
@@ -38,20 +34,14 @@ namespace CivilGameJam.Cards
 
         private void RefreshView()
         {
-            int visible = 0;
             if (entries != null)
                 foreach (var entry in entries)
                 {
-                    if (entry.row == null) continue;
                     bool installed = house != null && house.GetInstalled(entry.kind) != null;
-                    entry.row.gameObject.SetActive(installed);
-                    if (installed) entry.row.anchoredPosition = new Vector2(0f, -entrySpacing * visible++);
+                    if (entry.description != null)
+                        entry.description.text = installed ? entry.installedDescription : string.Empty;
+                    if (entry.row != null) entry.row.gameObject.SetActive(installed);
                 }
-            if (defaultTitle != null) defaultTitle.gameObject.SetActive(visible == 0);
-            if (defaultDescription != null) defaultDescription.gameObject.SetActive(visible == 0);
-            if (details != null)
-                details.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical,
-                    visible == 0 ? emptyHeight : entryHeight + entrySpacing * (visible - 1));
         }
     }
 }

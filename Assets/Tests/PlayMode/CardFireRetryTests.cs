@@ -31,6 +31,28 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(round.LastProtectedHouseCount, Is.EqualTo(1));
         Assert.That(round.LastSurvivalReward, Is.EqualTo(10));
         Assert.That(bank.CurrentPoints, Is.EqualTo(26), "10 carried + 10 survival + 6 turn bonus.");
+        var fire = Field<CivilGameJam.Disasters.FireTestController>(round, "fire");
+        Assert.That(sequence.Results.IsVisible, Is.True);
+        Assert.That(houses.Count(house => fire.WasHouseBurnt(house.Building)), Is.EqualTo(3));
+        Assert.That(houses[0].House.GetInstalled(UpgradeKind.Fire), Is.SameAs(items[0]));
+        var renderer = houses[1].Building.GetComponentsInChildren<MeshRenderer>().First(surface =>
+        {
+            var properties = new MaterialPropertyBlock(); surface.GetPropertyBlock(properties, 0);
+            return properties.GetColor("_BaseColor") == Field<Color>(fire, "burntBuildingColor");
+        });
+        var tint = new MaterialPropertyBlock(); renderer.GetPropertyBlock(tint, 0);
+        Assert.That(Vector4.Distance(tint.GetColor("_BaseColor"), Field<Color>(fire, "burntBuildingColor")), Is.LessThan(.0001f));
+        Step(4f);
+        yield return null;
+        Assert.That(fire.WasHouseBurnt(houses[1].Building), Is.True, "Keep the burnt city throughout the report.");
+        renderer.GetPropertyBlock(tint, 0);
+        Assert.That(Vector4.Distance(tint.GetColor("_BaseColor"), Field<Color>(fire, "burntBuildingColor")), Is.LessThan(.0001f));
+        CaptureWorld("held-fire-damage-behind-report.png");
+        sequence.Results.Retry();
+        Assert.That(houses.Any(house => fire.WasHouseBurnt(house.Building)), Is.False);
+        renderer.GetPropertyBlock(tint, 0);
+        Assert.That(Vector4.Distance(tint.GetColor("_BaseColor"), Field<Color>(fire, "burntBuildingColor")), Is.GreaterThan(.01f));
+        CaptureWorld("held-fire-rebuilt-after-close.png");
         Assert.That(game.Cards.Any(card => card.Kind == CardKind.Upgrade && card.UpgradeType == UpgradeKind.Fire), Is.False);
         for (int i = 0; i < houses.Length; i++)
         {

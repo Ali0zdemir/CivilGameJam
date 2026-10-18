@@ -77,12 +77,30 @@ public sealed partial class CardGamePlayModeTests
                 ControlField<Button[]>(sequence, "sequenceButtons")[number - 1].onClick.Invoke();
                 ControlField<Button>(sequence, "startButton").onClick.Invoke();
                 Assert.That(sequence.ActiveSequence, Is.EqualTo(number));
-                Assert.That(sequence.Stage, Is.EqualTo(MonsterSequenceStage.Emerging));
+                Assert.That(sequence.Stage, Is.EqualTo(number == 1 ? MonsterSequenceStage.Earthquake : MonsterSequenceStage.Emerging));
                 Assert.That(rig.Monster.EmergenceProgress, Is.Zero);
                 Assert.That(rig.Tsunami.IsRunning, Is.EqualTo(number >= 2));
-                Assert.That(rig.Quake.IsRunning || rig.Fire.IsRunning, Is.False);
+                Assert.That(rig.Quake.IsRunning, Is.EqualTo(number == 1));
+                Assert.That(rig.Fire.IsRunning, Is.False);
                 sequence.SelectSequence(number == 3 ? 1 : 3);
                 Assert.That(sequence.SelectedSequence, Is.EqualTo(number), "An active route cannot change mid-event.");
+                if (number == 1)
+                {
+                    Assert.That(ControlField<AudioSource>(sequence, "earthquakeRoar").isPlaying, Is.False);
+                    rig.For(2.01f);
+                    Assert.That(ControlField<AudioSource>(sequence, "earthquakeRoar").isPlaying, Is.True);
+                    Assert.That(model.gameObject.activeSelf || rig.Walk.IsWalkingAfterEvent || rig.Tsunami.IsRunning, Is.False);
+                    Assert.That(rig.Quake.IsRunning, Is.True);
+                    rig.Until(() => !sequence.IsRunning);
+                    Assert.That(sequence.Stage, Is.EqualTo(MonsterSequenceStage.Complete));
+                    Assert.That(ControlField<AudioSource>(sequence, "earthquakeRoar").isPlaying, Is.False);
+                    Assert.That(model.gameObject.activeSelf, Is.False);
+                    Assert.That(rig.Navigation.InputBlocked, Is.True);
+                    InvokeCity(rig.Navigation, "AdvanceNavigation", 2f);
+                    Assert.That(rig.Navigation.InputBlocked, Is.False);
+                    Assert.That(SequenceUIIds(), Is.EqualTo(uiIds));
+                    continue;
+                }
                 rig.For(rig.Monster.WaveReleaseDelay + 0.15f);
                 Assert.That(rig.Monster.EmergenceProgress, Is.InRange(0.1f, 0.99f));
                 Assert.That(rig.Quake.IsRunning, Is.False);
@@ -99,6 +117,19 @@ public sealed partial class CardGamePlayModeTests
                     var position = model.position;
                     InvokeCity(rig.Tsunami, "AdvanceTsunami", rig.Tsunami.TestDuration);
                     Assert.That(model.position, Is.EqualTo(position), "Wave updates and completion cannot move a walking monster back to the sea.");
+                }
+                if (number == 2)
+                {
+                    rig.Until(() => !sequence.IsRunning);
+                    Assert.That(sequence.Stage, Is.EqualTo(MonsterSequenceStage.Complete));
+                    Assert.That(sequence.Results.IsVisible, Is.True, "The tsunami report follows the final collapse rather than the boss departure route.");
+                    Assert.That(model.gameObject.activeSelf || rig.Walk.IsWalkingAfterEvent || rig.Tsunami.IsRunning || rig.Quake.IsRunning, Is.False);
+                    Assert.That(rig.Navigation.InputBlocked && rig.Navigation.IsEventCameraActive, Is.True);
+                    InvokeCity(rig.Navigation, "AdvanceNavigation", 2f);
+                    Assert.That(rig.Navigation.InputBlocked, Is.False);
+                    Assert.That(model.GetInstanceID(), Is.EqualTo(identity));
+                    Assert.That(SequenceUIIds(), Is.EqualTo(uiIds));
+                    continue;
                 }
                 if (number == 3)
                 {
@@ -196,7 +227,8 @@ public sealed partial class CardGamePlayModeTests
         rig.Sequence.SelectSequence(1);
         rig.Sequence.StartSelectedSequence();
         rig.Until(() => !rig.Sequence.IsRunning);
-        Assert.That(Vector3.Distance(rig.Monster.Model.position, rig.Walk.AfterEventPoint.position), Is.LessThan(0.0001f));
+        Assert.That(rig.Monster.Model.gameObject.activeSelf || rig.Walk.IsWalkingAfterEvent, Is.False,
+            "The first route replays its offscreen roar and earthquake without bringing the boss out.");
         yield return null;
     }
 
@@ -229,10 +261,25 @@ public sealed partial class CardGamePlayModeTests
 
         private void Advance(float step)
         {
+            var roar = ControlField<AudioSource>(Sequence, "earthquakeRoar");
+            var advanceRoar = roar != null && roar.isPlaying;
             if (Tsunami.IsRunning) InvokeCity(Tsunami, "AdvanceTsunami", step);
             if (Quake.IsRunning) InvokeCity(Quake, "AdvanceShake", step);
             if (Fire.IsRunning) InvokeCity(Fire, "AdvanceFire", step);
             if (Walk.IsWalkingAfterEvent) InvokeCity(Walk, "AdvanceAfterEventWalk", step);
+            foreach (var collapse in Tsunami.BuildingsRoot.GetComponentsInChildren<ApartmentTsunamiCollapse>(true))
+                InvokeCity(collapse, "AdvanceCollapse", step);
+            foreach (var feedback in Tsunami.BuildingsRoot.GetComponentsInChildren<BuildingCollapseFeedback>(true))
+            {
+                InvokeCity(feedback, "AdvanceFeedback", step);
+                var puffs = ControlField<ParticleSystem[]>(feedback, "dust");
+                if (puffs != null) foreach (var puff in puffs) puff.Simulate(step, true, false, false);
+            }
+            if (advanceRoar && roar.isPlaying)
+            {
+                var nextTime = roar.time + step * roar.pitch;
+                if (nextTime >= roar.clip.length) roar.Stop(); else roar.time = nextTime;
+            }
             InvokeCity(Sequence, "AdvanceSequence", step);
             InvokeCity(Sequence, "LateUpdate");
             InvokeCity(Navigation, "AdvanceNavigation", step);

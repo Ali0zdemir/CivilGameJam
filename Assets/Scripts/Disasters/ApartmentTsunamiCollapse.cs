@@ -38,13 +38,9 @@ namespace CivilGameJam.Disasters
         [SerializeField] private AnimationClip collapseAnimation;
         [SerializeField] private BuildingCollapseFeedback collapseFeedback;
         [SerializeField] private Part[] parts = Array.Empty<Part>();
-        private const float FinalPoseHoldSeconds = 2f;
         private float elapsed;
         private bool captured;
-        private Renderer[] hiddenRenderers;
-        private bool[] originalRenderingOff;
         public bool HasCollapsed { get; private set; }
-        public bool HasDisappeared { get; private set; }
         public bool IsPlaying => HasCollapsed && elapsed < Duration;
         public float Duration => collapseAnimation != null ? collapseAnimation.length : 0f;
         public float Progress => HasCollapsed ? Mathf.Clamp01(elapsed / Mathf.Max(.001f, Duration)) : 0f;
@@ -94,15 +90,15 @@ namespace CivilGameJam.Disasters
 
         private void AdvanceCollapse(float seconds)
         {
-            if (!HasCollapsed || HasDisappeared) return;
-            elapsed = Mathf.Min(Duration + FinalPoseHoldSeconds, elapsed + Mathf.Max(0f, seconds));
+            if (!IsPlaying) return;
+            elapsed = Mathf.Min(Duration, elapsed + Mathf.Max(0f, seconds));
             SamplePose();
-            if (elapsed >= Duration + FinalPoseHoldSeconds) HideCollapsedModel();
+            // Keep the final ruins visible until the report is dismissed and the city resets.
         }
 
         private void LateUpdate()
         {
-            if (HasCollapsed && !HasDisappeared) FollowAttachments();
+            if (HasCollapsed) FollowAttachments();
         }
 
         private void SamplePose()
@@ -136,24 +132,8 @@ namespace CivilGameJam.Disasters
             }
         }
 
-        private void HideCollapsedModel()
-        {
-            hiddenRenderers = animationRoot.GetComponentsInChildren<Renderer>(true);
-            originalRenderingOff = new bool[hiddenRenderers.Length];
-            for (var i = 0; i < hiddenRenderers.Length; i++)
-            {
-                originalRenderingOff[i] = hiddenRenderers[i].forceRenderingOff;
-                hiddenRenderers[i].forceRenderingOff = true;
-            }
-            HasDisappeared = true;
-        }
-
         public void ResetCollapse()
         {
-            if (hiddenRenderers != null)
-                for (var i = 0; i < hiddenRenderers.Length; i++)
-                    if (hiddenRenderers[i] != null) hiddenRenderers[i].forceRenderingOff = originalRenderingOff[i];
-            hiddenRenderers = null; originalRenderingOff = null;
             if (captured && collapseFeedback != null) collapseFeedback.ResetFeedback();
             if (captured)
                 foreach (var part in parts)
@@ -161,7 +141,7 @@ namespace CivilGameJam.Disasters
                     part.bodyRest.Restore(part.body);
                     for (int i = 0; i < part.attachments.Length; i++) part.attachmentRest[i].Restore(part.attachments[i]);
                 }
-            captured = false; HasCollapsed = HasDisappeared = false; elapsed = 0f;
+            captured = false; HasCollapsed = false; elapsed = 0f;
         }
 
         private void OnDisable() => ResetCollapse();
