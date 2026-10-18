@@ -80,6 +80,7 @@ namespace CivilGameJam.Disasters
             if (!Application.isPlaying || !isActiveAndEnabled || IsRunning) return;
             if (monster == null || walk == null || walk.WalkPoint == null || walk.AfterEventPoint == null ||
                 tsunami == null || earthquake == null || fire == null) return;
+            CityLayoutEvents.PrepareForDisaster();
             if (results != null) results.Hide();
             fire.StopFire();
             earthquake.StopEarthquake();

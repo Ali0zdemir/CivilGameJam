@@ -191,6 +191,7 @@ namespace CivilGameJam.Disasters
                 return;
             }
 
+            CityLayoutEvents.PrepareForDisaster();
             if (fire != null) fire.StopFire();
             if (earthquake != null) earthquake.StopEarthquake();
             if (authoredWave != null) startDistance = authoredWave.StartDistance;
@@ -542,6 +543,7 @@ namespace CivilGameJam.Disasters
             floodReferenceBounds = new Bounds();
             foreach (Transform building in buildingsRoot)
             {
+                if (!building.gameObject.activeInHierarchy) continue;
                 var renderers = building.GetComponentsInChildren<MeshRenderer>();
                 var bounds = new Bounds();
                 var footprint = new Bounds();
@@ -585,6 +587,13 @@ namespace CivilGameJam.Disasters
             // The incoming edge and grid always meet, including when the city is repositioned.
             shorelineDistance = cityBounds.min.z;
             layoutCached = true;
+        }
+
+        public void RefreshCityLayout()
+        {
+            layoutCached = false;
+            CacheCityLayout();
+            RefreshFloodObstacles();
         }
 
         private void IncludeFloodReference(Bounds bounds)

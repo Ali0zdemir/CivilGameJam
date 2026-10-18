@@ -94,6 +94,7 @@ namespace CivilGameJam.Disasters
         {
             if (!Application.isPlaying || !isActiveAndEnabled || IsRunning || cameraTransform == null) return;
             if (cameraTransform.GetComponent<Camera>() == null) return;
+            CityLayoutEvents.PrepareForDisaster();
             if (fire != null) fire.StopFire();
             cameraPosition = cameraTransform.localPosition;
             cameraRotation = cameraTransform.localRotation;

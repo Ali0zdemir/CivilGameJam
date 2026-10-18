@@ -151,6 +151,7 @@ namespace CivilGameJam.Disasters
                 Debug.LogWarning("Assign the buildings root and the fire, smoke, street and gas materials before starting the test.", this);
                 return;
             }
+            CityLayoutEvents.PrepareForDisaster();
             if (tsunami != null && tsunami.IsRunning) tsunami.StopTsunami();
             if (earthquake != null) earthquake.FinishForFire();
             CacheBurnSites();

@@ -19,6 +19,10 @@ namespace CivilGameJam.Cards
         [Min(0f)] [SerializeField] private float swapArc = 28f;
         private readonly List<SlotMove> moves = new List<SlotMove>();
 
+        public event System.Action<bool> LayoutChanged;
+        public event System.Func<bool> PlacementLockRequested;
+        public event System.Func<bool> LayoutAnimationRequested;
+
         private sealed class SlotMove
         {
             public DraggableCard card;
@@ -28,7 +32,15 @@ namespace CivilGameJam.Cards
             public float elapsed;
         }
 
-        public bool IsAnimating => moves.Count > 0;
+        public bool IsAnimating => moves.Count > 0 || Any(LayoutAnimationRequested);
+        public bool IsPlacementLocked => Any(PlacementLockRequested);
+
+        private static bool Any(System.Func<bool> checks)
+        {
+            if (checks == null) return false;
+            foreach (System.Func<bool> check in checks.GetInvocationList()) if (check()) return true;
+            return false;
+        }
 
         public int IndexOf(DraggableCard card)
         {
@@ -87,17 +99,26 @@ namespace CivilGameJam.Cards
             return closest;
         }
 
-        public bool TryPlace(DraggableCard card, int index)
+        public bool TryPlace(DraggableCard card, int index) => Place(card, index, false);
+
+        private bool Place(DraggableCard card, int index, bool animate)
         {
             if (card == null || !card.IsBuilding || index < 0 || index >= CellCount ||
                 (occupants[index] != null && occupants[index] != card)) return false;
+            var previous = IndexOf(card);
+            if (previous != index && IsPlacementLocked) return false;
             StopMoving(card);
             for (int i = 0; i < occupants.Length; i++)
                 if (occupants[i] == card) occupants[i] = null;
             occupants[index] = card;
-            if (cells[index] != null) card.Rect.SetParent(cells[index], true);
-            card.Rect.position = GetCellWorldPosition(index);
+            if (animate && previous >= 0 && previous != index) BeginMove(card, index);
+            else
+            {
+                if (cells[index] != null) card.Rect.SetParent(cells[index], true);
+                card.Rect.position = GetCellWorldPosition(index);
+            }
             SetPreview(-1);
+            if (previous != index) LayoutChanged?.Invoke(animate);
             return true;
         }
 
@@ -105,9 +126,9 @@ namespace CivilGameJam.Cards
         {
             if (card == null || !card.IsBuilding || index < 0 || index >= CellCount) return false;
             var other = occupants[index];
-            if (other == null || other == card) return TryPlace(card, index);
+            if (other == null || other == card) return Place(card, index, true);
             int source = IndexOf(card);
-            if (source < 0 || other.IsDragging || !other.isActiveAndEnabled) return false;
+            if (source < 0 || IsPlacementLocked || other.IsDragging || !other.isActiveAndEnabled) return false;
 
             // Reserve both destinations together. Workers, products and city links stay with their card.
             card.GetComponent<CardHover>()?.CancelHover();
@@ -119,6 +140,7 @@ namespace CivilGameJam.Cards
             BeginMove(other, source);
             BeginMove(card, index);
             SetPreview(-1);
+            LayoutChanged?.Invoke(true);
             return true;
         }
 
@@ -171,11 +193,17 @@ namespace CivilGameJam.Cards
                 if (move.card != null && !move.card.IsDragging)
                     move.card.Rect.position = GetCellWorldPosition(move.cell);
             moves.Clear();
+            LayoutChanged?.Invoke(false);
             base.OnDisable();
         }
 
         public void SnapToNearest(DraggableCard card)
         {
+            if (IsPlacementLocked && IndexOf(card) >= 0)
+            {
+                TryPlace(card, IndexOf(card));
+                return;
+            }
             TryPlace(card, FindNearestAvailable(card, card.Rect.position));
         }
 
@@ -189,6 +217,7 @@ namespace CivilGameJam.Cards
 
         public void SetPreview(int index)
         {
+            if (index >= 0 && IsPlacementLocked) index = -1;
             if (previewIndex == index) return;
             previewIndex = index;
             SetVerticesDirty();

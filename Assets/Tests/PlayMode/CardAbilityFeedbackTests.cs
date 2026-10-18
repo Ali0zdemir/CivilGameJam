@@ -56,7 +56,7 @@ public sealed partial class CardAbilityPointsPlayModeTests
         Assert.That(hud.IsFlashing, Is.False);
         Assert.That(Vector2.Distance(counter.anchoredPosition, position), Is.LessThan(.001f));
         Assert.That(counter.localScale, Is.EqualTo(scale));
-        Assert.That(label.color, Is.EqualTo(color));
+        Assert.That(Vector4.Distance(label.color, color), Is.LessThan(.000001f), "The original counter color must return within float precision.");
         Assert.That(bank.TrySpend(0), Is.True);
         bank.AddPoints(4);
         Assert.That(hud.IsFlashing, Is.False, "Zero-cost assignments and refunds must not display a spending notification.");

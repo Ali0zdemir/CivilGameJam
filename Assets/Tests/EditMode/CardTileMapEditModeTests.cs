@@ -40,22 +40,31 @@ public sealed class CardTileMapEditModeTests
                 Assert.That(Mathf.Abs(seated.x), Is.LessThanOrEqualTo(tileWidth * .5f + .02f), building.name + " foundation X");
                 Assert.That(Mathf.Abs(seated.z), Is.LessThanOrEqualTo(tileWidth * .5f + .02f), building.name + " foundation Z");
             }
-            foreach (var filter in building.GetComponentsInChildren<MeshFilter>().Where(filter => filter.name.Contains("Ground")))
+            var apartment = building.GetComponent<CivilGameJam.Upgrades.ApartmentUpgradeModel>();
+            var grounds = building.GetComponentsInChildren<MeshFilter>(true).Where(filter => filter.name.Contains("Ground") &&
+                (apartment == null || apartment.MotionRoot == null || !filter.transform.IsChildOf(apartment.MotionRoot))).ToArray();
+            Assert.That(grounds, Is.Not.Empty, building.name + " must retain its travelling ground.");
+            foreach (var filter in grounds)
             {
-                Assert.That(AssetDatabase.GetAssetPath(filter.sharedMesh), Does.StartWith("Assets/Art/Buildings/TileFoliage/"));
                 var original = PrefabUtility.GetCorrespondingObjectFromSource(filter).sharedMesh;
-                Assert.That(filter.sharedMesh.vertices, Is.EqualTo(original.vertices), "Retain authored foliage positions.");
-                Assert.That(filter.sharedMesh.triangles.Length, Is.LessThan(original.triangles.Length));
+                Assert.That(filter.sharedMesh, Is.SameAs(original), "Each building retains the complete original ground and foliage mesh.");
+                Assert.That(filter.transform.IsChildOf(building), Is.True, "The ground must travel with its own building.");
+                var renderer = filter.GetComponent<MeshRenderer>();
+                Assert.That(renderer.enabled && filter.gameObject.activeInHierarchy, Is.True);
+                Assert.That(renderer.sharedMaterials.Length, Is.GreaterThanOrEqualTo(filter.sharedMesh.subMeshCount));
+                var hasVisibleGroundPad = false;
                 var vertices = filter.sharedMesh.vertices; var triangles = filter.sharedMesh.triangles;
                 for (var i = 0; i < triangles.Length; i += 3)
                 {
                     var a = filter.transform.TransformPoint(vertices[triangles[i]]);
                     var b = filter.transform.TransformPoint(vertices[triangles[i + 1]]);
                     var c = filter.transform.TransformPoint(vertices[triangles[i + 2]]);
+                    var heightAboveMap = (a.y + b.y + c.y) / 3f - ground.GetComponent<MeshRenderer>().bounds.max.y;
                     if (Mathf.Max(a.y, b.y, c.y) - Mathf.Min(a.y, b.y, c.y) < .0002f &&
-                        Mathf.Abs((a.y + b.y + c.y) / 3f - ground.GetComponent<MeshRenderer>().bounds.max.y) < .002f)
-                        Assert.That(Vector3.Cross(b - a, c - a).magnitude * .5f, Is.LessThan(.1f), "The old large flat ground pads must be gone.");
+                        heightAboveMap > .001f && heightAboveMap < .03f && Vector3.Cross(b - a, c - a).magnitude * .5f > .1f)
+                        hasVisibleGroundPad = true;
                 }
+                Assert.That(hasVisibleGroundPad, Is.True, "The full ground surface must remain visible above the map tile.");
             }
         }
         Assert.That(Object.FindObjectsByType<HouseCityUpgradeLink>(FindObjectsSortMode.None).Length, Is.EqualTo(4));
